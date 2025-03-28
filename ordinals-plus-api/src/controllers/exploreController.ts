@@ -1,7 +1,7 @@
 import { fetchInscriptions } from '../services/ordinalsService';
-import { extractDidsFromInscriptions } from '../services/didService';
-import { extractLinkedResourcesFromInscriptions } from '../services/linkedResourcesService';
-import type { ExplorerApiResponse } from '../types';
+import { createDidFromInscription, isValidDid } from '../services/didService';
+import { processInscriptionsForLinkedResources } from '../services/linkedResourcesService';
+import type { ExplorerApiResponse, DID } from '../types';
 
 // Simple cache to avoid refetching on every request
 let cachedResponse: ExplorerApiResponse | null = null;
@@ -49,13 +49,39 @@ export const exploreDidsOrd = async (page = 0, itemsPerPage = 50): Promise<Explo
     // Process all inscriptions
     const inscriptions = inscriptionsResponse.results;
     
-    // Extract DIDs
-    const dids = extractDidsFromInscriptions(inscriptions);
-    console.log(`Successfully extracted ${dids.length} valid DIDs.`);
+    // Create a map to store potential DID references for resources
+    const didReferences = new Map<string, string>();
     
-    // Treat all inscriptions as potential linked resources
-    const linkedResources = extractLinkedResourcesFromInscriptions(inscriptions);
-    console.log(`Successfully extracted ${linkedResources.length} resources.`);
+    // Extract DIDs using the new translation function
+    const dids: DID[] = [];
+    for (const inscription of inscriptions) {
+      // First check if this inscription contains DID-format content
+      if (
+        inscription.content && 
+        typeof inscription.content === 'object' &&
+        inscription.content !== null
+      ) {
+        const content = inscription.content as Record<string, unknown>;
+        if (
+          content.id && 
+          typeof content.id === 'string' &&
+          isValidDid(content.id)
+        ) {
+          // This is a proper DID inscription, create a full DID object
+          const did = createDidFromInscription(inscription);
+          dids.push(did);
+          
+          // Store the DID-to-inscription mapping for resource linking
+          didReferences.set(inscription.id, did.id);
+        }
+      }
+    }
+    
+    console.log(`Successfully created ${dids.length} valid DIDs.`);
+    
+    // Process linked resources using the new function
+    const linkedResources = processInscriptionsForLinkedResources(inscriptions, didReferences);
+    console.log(`Successfully created ${linkedResources.length} linked resources.`);
     
     // Prepare response
     const response = {

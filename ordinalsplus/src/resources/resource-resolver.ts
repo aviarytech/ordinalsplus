@@ -7,8 +7,7 @@ import {
   ResourceContent,
   ResourceMetadata,
   ResourceCollectionPage,
-  ResourceResolutionOptions,
-  ResourceError
+  ResourceResolutionOptions
 } from '../types';
 
 /**

@@ -27,11 +27,7 @@
     "vite": "^6.2.2"
   },
   "scripts": {
-    "dev": "vite dev",
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "dev": "vite dev"
   },
   "eslintConfig": {
     "extends": [

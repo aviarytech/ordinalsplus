@@ -25,16 +25,28 @@ export function formatDid(didString: string): string {
 }
 
 /**
- * Formats a resource ID for display
- * @param resourceId - The resource ID (can be a DID or resource ID)
- * @returns Formatted resource ID for display
+ * Formats a resource ID for display, ensuring the DID format is preserved
+ * and properly formatted.
  */
-export function formatResourceId(resourceId: string): string {
-  if (!resourceId) return '';
+export const formatResourceId = (id: string | undefined): string => {
+  if (!id) return 'Unknown';
   
-  // Return the full resource ID without truncation
-  return resourceId;
-}
+  // Handle DIDs in the format did:btco:<sat number>/<index>
+  if (id.startsWith('did:btco:')) {
+    // Preserve the entire DID format as is
+    return id;
+  }
+  
+  // For inscription IDs that are not in DID format yet
+  // Check if it's a valid hex string that could be a transaction ID
+  if (/^[a-fA-F0-9]{64}(i\d+)?$/.test(id)) {
+    // It's likely a transaction ID or inscription ID
+    // We could format as did:btco:<sat number>/<index> if we had the sat info
+    return id;
+  }
+  
+  return id;
+};
 
 /**
  * Formats a date string to a readable format

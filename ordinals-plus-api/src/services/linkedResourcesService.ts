@@ -1,5 +1,5 @@
 import type { LinkedResource, Inscription } from '../types';
-import { isValidDid } from './didService';
+import { isValidDid, createLinkedResourceFromInscription } from './didService';
 
 // Common prefixes and identifiers for linked resources
 const LINKED_RESOURCE_TYPES = [
@@ -64,8 +64,7 @@ const generateDidFromInscription = (inscription: Inscription): string => {
     return `did:btco:${inscription.sat}/${index}`;
   }
   
-  // Fallback to using the inscription ID directly
-  return `did:btco:${inscription.id}`;
+  throw new Error('No sat data found in inscription');
 };
 
 /**
@@ -284,4 +283,45 @@ export const extractLinkedResourcesFromInscriptions = (inscriptions: Inscription
  */
 export const buildLinkedResourceSearchQuery = (): string => {
   return '';
-}; 
+};
+
+/**
+ * Process a list of inscriptions to extract linked resources
+ * @param inscriptions The list of inscriptions to process
+ * @param didReferences Optional map of DID references to link resources to
+ * @returns List of linked resources
+ */
+export function processInscriptionsForLinkedResources(
+  inscriptions: Inscription[],
+  didReferences?: Map<string, string>
+): LinkedResource[] {
+  const linkedResources: LinkedResource[] = [];
+  
+  for (const inscription of inscriptions) {
+    // Skip inscriptions without content
+    if (!inscription.content) continue;
+    
+    // Determine the content type for resource categorization
+    const contentType = inscription.content_type || 'application/json';
+    
+    // Get the appropriate resource type based on content type
+    const resourceType = getResourceTypeFromContentType(contentType);
+    
+    // Find a DID reference for this resource if available
+    let didReference: string | undefined;
+    if (didReferences && didReferences.has(inscription.id)) {
+      didReference = didReferences.get(inscription.id);
+    }
+    
+    // Create a properly formatted linked resource using our utility function
+    const linkedResource = createLinkedResourceFromInscription(
+      inscription,
+      resourceType,
+      didReference
+    );
+    
+    linkedResources.push(linkedResource);
+  }
+  
+  return linkedResources;
+} 

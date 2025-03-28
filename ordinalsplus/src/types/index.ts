@@ -171,4 +171,78 @@ export interface ApiOptions {
   endpoint?: string;
   fetch?: Fetch;
   timeout?: number;
+  apiKey?: string;
+}
+
+/**
+ * Enhanced Inscription type with all possible fields for use across implementations
+ */
+export interface InscriptionBase {
+  id?: string;
+  inscriptionId?: string;
+  number?: number | string;
+  content_type?: string;
+  contentType?: string;
+  content?: unknown;
+  genesis_address?: string;
+  genesis_fee?: number;
+  genesis_height?: number;
+  genesis_transaction?: string;
+  timestamp?: string;
+  value?: number;
+}
+
+export interface SatInscription extends InscriptionBase {
+  sat: string | number;
+}
+
+export interface SatOrdinalInscription extends InscriptionBase {
+  sat_ordinal?: string;
+}
+
+export type Inscription = SatInscription | SatOrdinalInscription;
+
+/**
+ * Response for inscription queries with pagination
+ */
+export interface InscriptionResponse {
+  limit: number;
+  offset: number;
+  total: number;
+  results: Inscription[];
+}
+
+/**
+ * DID object with metadata
+ */
+export interface DID {
+  id: string;
+  inscriptionId: string;
+  contentType: string;
+  content: Record<string, unknown>;
+}
+
+/**
+ * Linked Resource object
+ */
+export interface LinkedResource {
+  id: string;
+  type: string;
+  inscriptionId: string;
+  didReference?: string;
+  contentType: string;
+  content: Record<string, unknown>;
+  sat: string;
+}
+
+/**
+ * Explorer API Response for consistent API responses
+ */
+export interface ExplorerApiResponse {
+  dids: DID[];
+  linkedResources: LinkedResource[];
+  page?: number;
+  totalItems?: number;
+  itemsPerPage?: number;
+  error?: string;
 } 

@@ -35,35 +35,32 @@ describe('Validators', () => {
   describe('isValidResourceId', () => {
     it('should return true for valid resource IDs', () => {
       expect(isValidResourceId('did:btco:1234567890/0')).toBe(true);
-      expect(isValidResourceId('did:btco:1234567890/999')).toBe(true);
+      expect(isValidResourceId('did:btco:1234567890/123')).toBe(true);
+      expect(isValidResourceId('did:btco:1234567890')).toBe(true); // DIDs without index are also valid resource IDs
     });
 
     it('should return false for invalid resource IDs', () => {
       expect(isValidResourceId('did:wrong:1234567890/0')).toBe(false);
-      expect(isValidResourceId('did:btco:1234567890')).toBe(false); // Missing index
-      expect(isValidResourceId('did:btco:1234567890/')).toBe(false); // Missing index
+      expect(isValidResourceId('did:btco:1234567890/')).toBe(false); // Missing index value
       expect(isValidResourceId('did:btco:1234567890/abc')).toBe(false); // Non-numeric index
+      expect(isValidResourceId('did:btco:1234567890/0/0')).toBe(false); // Old format with extra segment
     });
   });
 
   describe('parseResourceId', () => {
     it('should correctly parse valid resource IDs', () => {
       expect(parseResourceId('did:btco:1234567890/0')).toEqual({
-        did: 'did:btco:1234567890',
-        index: '0',
-        suffix: undefined
+        did: 'did:btco:1234567890/0'
       });
       
-      expect(parseResourceId('did:btco:1234567890/123/info')).toEqual({
-        did: 'did:btco:1234567890',
-        index: '123',
-        suffix: 'info'
+      expect(parseResourceId('did:btco:1234567890')).toEqual({
+        did: 'did:btco:1234567890'
       });
     });
 
     it('should return null for invalid resource IDs', () => {
       expect(parseResourceId('did:wrong:1234567890/0')).toBeNull();
-      expect(parseResourceId('did:btco:1234567890')).toBeNull();
+      expect(parseResourceId('did:btco:1234567890/0/0')).toBeNull(); // Old format
       expect(parseResourceId('notaresourceid')).toBeNull();
     });
   });

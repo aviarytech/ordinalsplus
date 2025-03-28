@@ -1,0 +1,524 @@
+§ BTCO DID Linked Resources
+ Specification Status: EDITORS DRAFT
+
+ Current Specification: v0.2.0
+
+ Specification Version: v0.2.0 (see Changelog)
+
+ Source of Latest Draft:
+https://github.com/decentralized-identity/labs-ordinals-plus
+
+ Information Site:
+https://ordinals.plus/
+
+  Editors:  Brian Richter  Participate:  GitHub repo  File a bug  Commit history    
+
+§ Abstract
+ The BTCO DID Linked Resources extension provides a standardized framework for associating immutable DID Linked Resources with Decentralized Identifiers (DIDs) anchored in the Bitcoin (BTC) blockchain through Ordinal Theory and Inscriptions. This specification introduces mechanisms for creating, managing, and referencing resources, enabling organizations and individuals to attach verifiable credential schemas, governance frameworks, logos, status lists, and other resource types to their DIDs. The extension ensures the authenticity, integrity, and traceability of resources while maintaining compatibility with W3C DID Core standards and interoperability with existing resources on BTC. The specification addresses key challenges such as Resource Resolution, resource discovery, and version management, providing a robust foundation for secure and enduring applications in decentralized identity ecosystems.
+
+ 
+
+§ Overview
+ The BTCO DID Linked Resources extension provides a standardized mechanism for creating, managing, and resolving DID Linked Resources that are cryptographically linked to BTCO DIDs. This specification builds upon the core BTCO DID Method to enable robust resource management capabilities directly on the BTC network through Ordinal Theory and Inscriptions.
+
+ 
+
+§ Purpose
+ The primary purpose of this extension is to establish a reliable and standardized way to:
+
+  • Associate various types of resources (schemas, frameworks, images) with DIDs
+ • Ensure cryptographic verification of resource authenticity
+ • Enable versioning and management of linked resources
+ • Provide consistent Resource Resolution methods for accessing resources
+  All of this is achieved on Bitcoin (BTC), the most secure and widely adopted blockchain network, leveraging its inherent properties of immutability and decentralization.
+
+ 
+
+§ Resource Management
+ Resources are managed through Inscriptions that will result in:
+
+  • A unique resource identifier
+ • Resource details (content type, content length, timestamp)
+ • The resource content itself
+ • Optional resource metadata
+  Each resource is uniquely identified using:
+
+  • Collection ID (the associated DID)
+ • Resource Index (the inscription’s position on the sat)
+  
+
+§ Key Features
+  • Immutable Storage: Resources are permanently stored using Inscriptions
+ • Cryptographic Verification: Resources include metadata that can be signed using DID verification methods
+ • Versioning Support: Resources can be versioned with clear links between versions
+ • Flexible Resource Types: Support for various resource types including:
+
+Credential Schemas
+Status Lists
+Visual Representations
+Governance Frameworks
+Configuration Documents
+  
+
+§ Resource Resolution
+ Resources can be resolved through:
+
+  • DID-relative resource identifiers
+ • Alternative resource collection URI references
+  
+
+§ Implementation Considerations
+ When implementing this specification, developers should consider:
+
+  • BTC network inscription size limitations (~190 KB max)
+ • Proper cryptographic validation of resources
+ • Version management strategies
+ • Resource type standardization
+  This extension aims to provide a robust foundation for managing DID-linked resources while maintaining the security and immutability guarantees of the BTC network.
+
+ 
+
+§ Specification
+ This section defines the technical specifications for creating, managing and resolving DID Linked Resources using Inscriptions. Resources are identified by their Resource Identifier which is a sat number using Ordinal Theory combined with the index of the Inscription on the sat. Every BTC Inscription can be accessed as a DID Linked Resource. This means the nearly 100 million inscriptions as of writing this document can already be accessed as DID Linked Resources.
+
+ 
+
+§ Resource Identification
+ A resource can be identified by the DID and the index of the inscription on the sat.
+
+ did:btco:1954913028215432/0
+
+ All resources have information associated with them which can be accessed as application/json by appending /info to the resource identifier.
+
+ did:btco:1954913028215432/0/info
+
+ Some resources might have metadata associated with them which can be accessed by appending /meta to the resource identifier. If the metadata is a valid Verifiable Credential (VC) or Verifiable Presentation (VP), it will be returned as application/vc or application/vp respectively. If verification fails, it will fallback to application/json.
+
+ did:btco:1923519999999999/0/meta
+
+ 
+
+§ Resource Collections
+ There are multiple ways to reference a collection of resources.
+
+ 
+
+§ DID Collections
+ A DID Collection links multiple resources to a specific satoshi through reinscriptions. The collection is identified by the DID, with individual resources referenced by their inscription index on that sat.
+
+ did:btco:539864085599956
+
+ Resources are referenced by the Resource Identifier of the resource.
+
+ did:btco:539864085599956/4
+
+ 
+
+§ Heritage Collection
+ A Heritage Collection or “parent/child” relationship links child resources to parent resources by inclusion in the new resources inscription transaction. The collection identifier of this format is the DID of the parent resource combined with /heritage.
+
+ did:btco:1869283761600463/heritage
+
+ Child resources can be referenced by their index on the parent resource with the /child suffix.
+
+ did:btco:1869283761600463/child/0
+
+ A child resource can have multiple parent resources. To reference a specific parent, append /parent followed by the parent’s index number to the child’s DID. For example, /parent/0 refers to the first parent resource.
+
+ did:btco:1929458825916894/parent/0
+
+ TODO TODO: do child inscriptions link to a resource identifier (e.g. did:btco:1929458825916894/0/child/0) or a collection identifier (e.g. did:btco:1929458825916894/child/0)?
+
+  
+
+§ Controller Collection
+ A Controller Collection links resources through the wallet address currently holding the resource. This collection is mutable, meaning that the resources can be added or removed from the collection by the controller.The collection identifier of this format is the DID of a resource combined with /controller.
+
+ did:btco:539864085599956/controller
+
+ WARNING The controller collection is not yet implementable using recursive endpoints, which means resources cannot directly resolve these collections.
+
+  
+
+§ Curated Collection
+ A Curated Collection links resources through a Verifiable Credential (VC) that includes a list of resources in a collection. This VC is written to the blockchain as metadata to a DID Linked Resource. The collection identifier of this format is the DID of this resource combined with /meta.
+
+ did:btco:539864085599956/0/meta
+
+ The Verifiable Credential (VC) MUST be a valid VC that can be verified by a third party.
+
+ § Curated Collection Credential Schema  The Verifiable Credential for a curated collection MUST conform to the following schema:
+
+ {
+"@context": [
+"https://www.w3.org/ns/credentials/v2",
+"https://ordinals.plus/v1"
+],
+"type": ["VerifiableCredential", "CuratedCollectionCredential"],
+"issuer": {
+"id": "did:btco:539864085599956/0"
+},
+"validFrom": "2024-02-21T12:00:00Z",
+"credentialSubject": {
+"id": "did:btco:539864085599956/0",
+"type": "CuratedCollection",
+"name": "My Art Collection",
+"description": "A curated collection of digital art pieces",
+"resources": [
+"did:btco:1954913028215432/0",
+"did:btco:1923519999999991/0",
+"did:btco:1923519999999992/0",
+"did:btco:1923519999999993/0",
+"did:btco:1923519999999999/0"
+]
+},
+"proof": {
+"type": "DataIntegrityProof",
+"cryptosuite": "eddsa-jcs-2022",
+"created": "2024-02-21T12:00:00Z",
+"verificationMethod": "did:btco:539864085599956/0#key-1",
+"proofPurpose": "assertionMethod",
+"proofValue": "zQeVbY4oey5q2M3X..."
+}
+}
+
+ The credential MUST include:
+
+  • Standard W3C Verifiable Credentials context
+ • Ordinals Plus collection context
+ • CuratedCollectionCredential type
+ • Issuer DID (the resource containing this VC)
+ • Valid from date
+ • Collection details in credentialSubject
+ • At least one resource in the resources array
+ • Valid proof section with signature
+  Optional fields include:
+
+  • Collection name and description
+  
+
+§ Resource Resolution
+ Resources can be resolved using the recursive endpoints provided by the Ordinals protocol. These endpoints return JSON-formatted responses and can be used to resolve resources, their metadata, and their relationships.
+
+ 
+
+§ Resource Content Resolution
+ To resolve resource content, using the sat number and index:
+
+ did:btco:1954913028215432/0
+
+   Pseudocode  JavaScript    FUNCTION resolveResourceRelative(resourceId):
+1. Parse DID and index from resourceId
+2. Validate DID format
+3. Get sat number from DID
+4. Query ordinal indexer for inscriptions on sat
+5. Return inscription at specified index
+
+   const resolveResourceRelative = (didUrl) => {
+const [_, satNumber, index] = didUrl.match(/^did:btco:(\d+)\/(\d+)$/);
+return fetch(`/r/sat/${satNumber}/at/${index}`)
+.then(r => r.json())
+.then(({ id }) => fetch(`/content/${id}`).then(r => r.blob()));
+};
+
+   
+
+§ Resource Details Resolution
+ To resolve resource details, using either resource identifier format:
+
+   Pseudocode  JavaScript    FUNCTION resolveResourceDetails(resourceId):
+1. Parse resource identifier components
+2. Validate resource identifier format
+3. Query ordinal indexer for inscription details
+4. Return details if found, error if not
+
+   const resolveResourceDetails = didUrl => {
+const [_, satNumber, identifier] = didUrl.match(/^did:btco:(\d+)\/([a-f0-9]+i\d+|\d+)\/inscription$/);
+
+const getInscriptionId = identifier.match(/^\d+$/) ?
+fetch(`/r/sat/${satNumber}/at/${identifier}`).then(r => r.json()).then(data => data.inscription_id) :
+Promise.resolve(identifier);
+
+return getInscriptionId.then(inscriptionId => 
+Promise.all([
+fetch(`/r/inscription/${inscriptionId}`).then(r => r.json()),
+fetch(`/r/sat/${satNumber}`).then(r => r.json())
+]).then(([details, satInfo]) => 
+satInfo.inscriptions.some(i => i.inscription_id === details.inscription_id) ? 
+details : Promise.reject('Invalid Resource')
+)
+);
+};
+
+   
+
+§ Metadata Resolution
+ To resolve resource metadata, using either resource identifier format:
+
+   Pseudocode  JavaScript    FUNCTION resolveResourceMetadata(resourceId):
+1. Parse resource identifier components
+2. Validate metadata request format
+3. Query ordinal indexer for metadata
+4. Decode and validate metadata format
+5. Return metadata if found, error if not
+
+   const resolveResourceMetadata = didUrl => {
+const [_, satNumber, identifier] = didUrl.match(/^did:btco:(\d+)\/([a-f0-9]+i\d+|\d+)\/metadata$/);
+
+const getInscriptionId = identifier.match(/^\d+$/) ?
+fetch(`/r/sat/${satNumber}/at/${identifier}`).then(r => r.json()).then(data => data.inscription_id) :
+Promise.resolve(identifier);
+
+return getInscriptionId.then(inscriptionId => 
+Promise.all([
+fetch(`/r/metadata/${inscriptionId}`).then(r => r.json()),
+fetch(`/r/sat/${satNumber}`).then(r => r.json())
+]).then(([metadata, satInfo]) => 
+satInfo.inscriptions.some(i => i.inscription_id === inscriptionId) ? 
+metadata : Promise.reject('Invalid Resource')
+)
+);
+};
+
+   
+
+§ Collection Resolution
+ Collections can be resolved in two ways:
+
+  • Parent/Child Collections
+    Pseudocode  JavaScript    FUNCTION resolveChildCollection(collectionId):
+1. Parse collection identifier components
+2. Validate collection format
+3. Query ordinal indexer for child inscriptions
+4. Filter and sort child resources
+5. Return collection if found, error if not
+
+   const resolveChildCollectionPage = (inscriptionId, page = 0) => 
+fetch(`/r/children/${inscriptionId}/inscriptions/${page}`).then(r => r.json());
+
+const resolveChildCollection = didUrl => {
+const [_, satNumber] = didUrl.match(/^did:btco:(\d+)\/children$/);
+return fetch(`/r/sat/${satNumber}/at/0`)
+.then(r => r.json())
+.then(({ id }) => {
+let all = [], page = 0;
+const getNext = () => resolveChildCollectionPage(id, page++)
+.then(({ children: pageInscriptions, more }) => {
+all.push(...pageInscriptions);
+return more ? getNext() : all;
+});
+return getNext().then(inscriptions => 
+inscriptions.map(({ sat, id }) => 
+`did:btco:${sat}/${id}`));
+});
+};
+
+const resolveChildAtIndex = didUrl => {
+const [_, satNumber, index] = didUrl.match(/^did:btco:(\d+)\/children\/(\d+)$/);
+
+return fetch(`/r/sat/${satNumber}`).then(r => r.json())
+.then(satInfo => {
+if (index >= satInfo.ids.length) {
+return Promise.reject('Invalid Resource');
+}
+const inscriptionId = satInfo.ids[index];
+return resolveResourceFullyQualified(`did:btco:${satNumber}/${inscriptionId}`);
+});
+};
+
+    • Reinscription Collections
+    Pseudocode  JavaScript    FUNCTION resolveReinscriptionCollection(collectionId):
+1. Parse collection identifier components
+2. Validate collection format
+3. Query ordinal indexer for sat inscriptions
+4. Sort inscriptions by timestamp
+5. Return collection if found, error if not
+
+   const resolveSatCollectionPage = (satNumber, page = 0) => 
+fetch(`/r/sat/${satNumber}/${page}`).then(r => r.json());
+
+const resolveReinscriptionCollection = didUrl => 
+fetch(`/r/sat/${didUrl.match(/^did:btco:(\d+)\/inscriptions$/)[1]}/0`)
+.then(r => r.json())
+.then(({ inscriptions: firstPage, more }) => {
+let all = [...firstPage], page = 1;
+const getNext = () => more ? resolveSatCollectionPage(didUrl.match(/^did:btco:(\d+)\/inscriptions$/)[1], page++)
+.then(({ inscriptions: pageInscriptions, more: hasMore }) => {
+all.push(...pageInscriptions);
+more = hasMore;
+return getNext();
+}) : all;
+return getNext().then(inscriptions => 
+inscriptions.map(({ inscription_id }) => 
+`did:btco:${didUrl.match(/^did:btco:(\d+)\/inscriptions$/)[1]}/${inscription_id}`));
+});
+
+   
+
+§ Resource Parameters
+ 
+
+§ Inscription Parameters
+ When creating a resource through Inscription, the following parameters are derived from the inscription itself:
+
+    Parameter  Type  Description  Example      resourceUri  String  The DID URL for the resource  did:btco:1954913028215432/1    resourceCollectionId  String  The DID that identifies the collection  did:btco:1954913028215432    resourceId  String  The Resource Identifier that uniquely identifies the resource  did:btco:1954913028215432/1    resourceName  String  The inscription ID of the resource  412c9fa7c3cfee496c3afd6c1b3aa89951eb0f24d42486141d255f8bb2d8a751i0    mediaType  String  The media type of the resource  text/plain;charset=utf-8 , application/json , image/png    created  String  The timestamp of the inscription, as XML date-time  2024-03-14T12:00:00Z    previousVersionId  String  For reinscriptions, the previous resource identifier (if any)  did:btco:1954913028215432/0    nextVersionId  String  For reinscriptions, the next resource identifier (if any)  did:btco:1954913028215432/2    alsoKnownAs  String[]  Alternative URIs  did:btco:1954913028215432/0/child/0     
+
+§ Resource Parameters
+ When resolving a resource, implementations MUST return the following parameters:
+
+    Parameter  Description  Example      resourceType  The content type of the resource  text/plain;charset=utf-8 , application/json , image/png     Example response:
+
+ {
+"resourceUri": "did:btco:1954913028215432/0",
+"resourceCollectionId": "did:btco:1954913028215432",
+"resourceId": "did:btco:1954913028215432/0",
+"resourceName": "412c9fa7c3cfee496c3afd6c1b3aa89951eb0f24d42486141d255f8bb2d8a751i0",
+"mediaType": "image/png",
+"created": "2024-03-14T12:00:00Z",
+"resourceType": "image/png",
+"alsoKnownAs": ["did:btco:1954913028215432/0/child/0", "did:btco:1954913028215432/0/controller/0"],
+"previousVersionId": "did:btco:1954913028215432/0",
+"nextVersionId": "did:btco:1954913028215432/0"
+}
+
+ 
+
+§ Content Types and Resolution
+ Resource content types are determined by the content type of the inscription. As of the drafting of this document, the following content types are the most common:
+
+    Content Type  Count      text/plain;charset=utf-8  43,899,040    text/plain  27,974,656    image/png  1,471,939    text/html;charset=utf-8  1,045,547    application/json  723,811    model/gltf-binary  665,722    image/webp  482,627    image/svg+xml  304,825    image/jpeg  248,928    text/html  221,676     When resolving a resource, implementations MUST:
+
+  • Return the content with the exact content-type specified in the inscription
+ • Not attempt to transform or negotiate the content type
+ • Include appropriate content-type headers in HTTP responses
+  For /meta, /info and collection endpoints that return structured data about resources (rather than the resource content itself), implementations MUST return application/json with standard JSON responses.
+
+ 
+
+§ Pagination
+ Collection endpoints may return paginated results. The specific pagination implementation details will be defined in a future version of this specification.
+
+ 
+
+§ Collection Pagination
+ Collection endpoints MUST support pagination using:
+
+ {
+"resources": [
+"did:btco:123/0",
+"did:btco:456/1"
+],
+"pagination": {
+"next": "did:btco:789/0",
+"prev": "did:btco:111/0",
+"limit": 10,
+"total": 45
+}
+}
+
+ Query parameters:
+
+  • limit: Maximum resources per page (default 10, max 100)
+ • cursor: Opaque cursor for pagination
+ • order: Sort order (“asc” or “desc”, default “desc”)
+  
+
+§ Canonicalization
+ When cryptographic proofs or comparisons are required, implementations MUST use JSON Canonicalization Scheme (JCS) as defined in RFC 8785 for consistent serialization of JSON data structures.
+
+ 
+
+§ Security Considerations
+ Implementations MUST:
+
+  • Use HTTPS for all resource endpoint communications
+ • Validate resource integrity using cryptographic proofs when available
+ • Verify the relationship between DIDs and their linked resources
+ • Implement rate limiting and other API security best practices
+  
+
+§ Privacy Considerations
+ Implementations SHOULD:
+
+  • Minimize collection and storage of personally identifiable information
+ • Support encryption of sensitive resource data
+ • Consider privacy implications of resources and their metadata
+  
+
+§ Error Handling
+ Resolution errors MUST return a JSON response with:
+
+ {
+"error": "<ErrorCode>",
+"message": "Human readable message",
+"details": {
+// Additional context
+}
+}
+
+ Standard error codes:
+
+  • ResourceNotFound: Resource does not exist
+ • InvalidIdentifier: Malformed resource identifier
+ • ContentTypeUnsupported: Unsupported content type
+ • MetadataInvalid: Invalid or malformed metadata
+ • CollectionEmpty: Collection contains no resources
+ • ResolutionTimeout: Resolution exceeded time limit
+  
+
+§ Caching Guidelines
+ Implementations SHOULD:
+
+  • Cache resource content with appropriate cache headers
+ • Use ETags for cache validation
+ • Include Last-Modified timestamps
+ • Implement cache invalidation on updates
+ • Support conditional requests (If-None-Match, If-Modified-Since)
+  Example cache headers:
+
+ Cache-Control: public, max-age=3600
+ETag: "abc123"
+Last-Modified: Wed, 21 Feb 2024 12:00:00 GMT
+
+ Cache invalidation events:
+
+  • New inscription on resource satoshi
+ • Block reorganization affecting inscriptions
+ • Controller change (UTXO spent)
+  
+
+§ Security and Privacy Considerations
+ This section outlines the basic security and privacy considerations for implementing DID linked resources using BTC Ordinal inscriptions.
+
+ 
+
+§ Security Considerations
+ 
+
+§ Data Integrity
+  • Resources MUST maintain their original content without modification
+ • Any altered resources MUST be treated as invalid
+  Additional security requirements will be formally specified in future versions of this specification.
+
+ 
+
+§ Privacy Considerations
+ 
+
+§ Data Minimization
+  • Resources SHOULD NOT contain personally identifiable information (PII)
+ • If PII is necessary, it SHOULD be stored off-chain with references
+ • Implement data retention policies for cached resources
+  
+
+§ Transaction Privacy
+  • Avoid linking multiple resources to the same address unless necessary
+  Additional privacy requirements will be formally specified in future versions of this specification.
+
+ 
+
+§ Terminology
+  Bitcoin (BTC) :  The original and most widely adopted blockchain network, known for its decentralized and immutable nature.  Controller Collection :  A collection of resources linked through the wallet address currently holding the resource.  Curated Collection :  A collection of resources linked through a Verifiable Credential (VC) that includes a list of resources in a collection.  Decentralized Identifiers (DIDs) :  A decentralized identifier is a type of globally unique identifier that enables an entity to be identified in a manner that is verifiable, persistent, and does not require the use of a centralized registry.  DID Linked Resource :  A digital resource that is cryptographically linked to a DID through a BTC Ordinal inscription.  Heritage Collection :  A collection type that establishes parent/child relationships between resources through ordinal inscriptions.  Inscription :  Arbitrary content added to BTC satoshis (sats) to create BTC-native digital artifacts.  Ordinal Theory :  A theory that assigns unique identities and numismatic value to individual bitcoin satoshis (sats), enabling them to be tracked, transferred, and inscribed with additional data.  Resource Identifier :  A unique identifier that combines a DID with the index of the inscription to reference a specific resource.  Resource Resolution :  The process of retrieving and validating a resource using its identifier.  Sat Collection :  A collection of resources linked to a specific satoshi, allowing for resource versioning through reinscriptions.  Verifiable Credential (VC) :  A digital credential that can be verified by a third party.  Verifiable Presentation (VP) :  A digital presentation of Verifiable Credentials (VCs) that can be verified by a third party.   
+
+§ test mnemonic
+ equal hill check resource there vague empower mesh index swift muffin caution

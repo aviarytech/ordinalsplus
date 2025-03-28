@@ -138,4 +138,78 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [BTCO DID Method Specification](https://identity.foundation/labs-ordinals-plus/btco-did-method)
 - [BTCO DID Linked Resources Specification](https://identity.foundation/labs-ordinals-plus/btco-did-linked-resources)
 - [BTCO Verifiable Metadata Specification](https://identity.foundation/labs-ordinals-plus/btco-vm)
-- [Bitcoin Ordinals](https://ordinals.com/) 
+- [Bitcoin Ordinals](https://ordinals.com/)
+
+## Blockchain Providers
+
+The `ordinalsplus` library now includes built-in support for connecting to different Bitcoin Ordinals providers. This allows you to easily fetch inscriptions and work with DIDs without implementing your own blockchain integration.
+
+### Using the Ordinals Provider
+
+```typescript
+import { getOrdinalsProvider } from 'ordinalsplus';
+
+// Initialize a provider with an API key
+const provider = getOrdinalsProvider('ordiscan', 'YOUR_API_KEY');
+
+// Fetch inscriptions with pagination
+const inscriptions = await provider.fetchInscriptions(0, 10);
+console.log(`Found ${inscriptions.total} inscriptions`);
+
+// Fetch a specific inscription by ID
+const inscription = await provider.fetchInscriptionById('abc123');
+if (inscription) {
+  console.log(`Found inscription: ${inscription.id}`);
+}
+
+// Fetch the content of an inscription
+const content = await provider.fetchInscriptionContent('abc123', 'application/json');
+console.log('Content:', content);
+```
+
+### Supported Providers
+
+- **Ordiscan**: Connect to the Ordiscan API for inscription data
+- **OrdNode**: (Coming soon) Connect to a local Ord node
+- **Mock**: (Coming soon) Use mock data for testing
+
+### Using the OrdinalsService
+
+For more advanced usage, you can use the `OrdinalsService` directly:
+
+```typescript
+import { OrdinalsService } from 'ordinalsplus';
+
+// Get the singleton instance of the service
+const service = OrdinalsService.getInstance();
+
+// Initialize a provider with options
+const provider = service.initProvider('ordiscan', {
+  apiKey: 'YOUR_API_KEY',
+  endpoint: 'https://api.ordiscan.com/v1'
+});
+
+// Use the provider
+const inscriptions = await provider.fetchInscriptions();
+```
+
+### Implementing Custom Providers
+
+You can implement your own providers by implementing the `IOrdinalsProvider` interface:
+
+```typescript
+import { IOrdinalsProvider, BaseOrdinalsProvider } from 'ordinalsplus';
+
+// Extend the base provider class
+class MyCustomProvider extends BaseOrdinalsProvider {
+  // Implement the required methods
+  async fetchInscriptions() {
+    // Your implementation
+  }
+  
+  // ... other methods
+}
+
+// Register your provider with the service
+OrdinalsService.getInstance().registerProvider('custom', () => new MyCustomProvider());
+``` 

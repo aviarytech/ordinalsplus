@@ -1,7 +1,14 @@
 import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
-import { exploreDidsBtco } from './controllers/exploreController';
-import { createLinkedResource, getResourceByDid } from './controllers/linkedResourcesController';
+import { exploreDidsOrd } from './controllers/exploreController';
+import { createLinkedResource } from './controllers/linkedResourcesController';
+import { 
+  getAllResources, 
+  getResourceById, 
+  getResourcesByDid 
+} from './controllers/resourcesController';
+import { getOrdNodeStatus } from './services/ordNodeProxyService';
+import { getOrdiscanStatus } from './services/ordiscanProxyService';
 
 const port = process.env.PORT || 3000;
 
@@ -14,17 +21,70 @@ const app = new Elysia()
   }))
   .get('/', () => {
     return { 
-      message: 'BTCO DID Explorer API',
+      message: 'Ordinals Plus Explorer API',
       status: 'running',
       endpoints: [
         '/api/explore', 
         '/api/explore/:page',
         '/api/resources',
-        '/api/resources/:didId'
+        '/api/resources/:id',
+        '/api/resources/did/:didId',
+        '/api/ord/status',
+        '/api/ordiscan/status',
+        '/status'
       ],
       version: '1.0.0'
     }
   })
+  // Add a status endpoint for health checks
+  .get('/status', () => {
+    return { 
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      message: 'API is running correctly'
+    }
+  })
+  // Add Ord node status endpoint
+  .get('/api/ord/status', async () => {
+    console.log('Received request to GET /api/ord/status');
+    
+    try {
+      const status = await getOrdNodeStatus();
+      return status;
+    } catch (error) {
+      console.error('Error checking Ord node status:', error);
+      return { 
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  })
+  .get('/api/:server/status', async ({ params }) => {
+    try {
+      if (params.server === 'ord') {
+        const status = await getOrdNodeStatus();
+        return status;
+      } else if (params.server === 'ordiscan') {
+        const status = await getOrdiscanStatus();
+        return status;
+      } else {
+        return {
+          status: 'error',
+          message: 'Invalid server parameter',
+          error: 'Invalid server parameter. Must be "ord" or "ordiscan".'
+        };
+      }
+    } catch (error) {
+      console.error('Error checking Ord node status:', error);
+      return { 
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  })
+  // Legacy API endpoint (will be deprecated in favor of /resources)
   .get('/api/explore', async ({ query }) => {
     console.log('Received request to /api/explore');
     
@@ -70,7 +130,7 @@ const app = new Elysia()
     }
     
     try {
-      const result = await exploreDidsBtco(page, itemsPerPage);
+      const result = await exploreDidsOrd(page, itemsPerPage);
       
       if (result.error) {
         console.error('Error in explore operation:', result.error);
@@ -100,7 +160,202 @@ const app = new Elysia()
       };
     }
   })
-  // Add new endpoint to create a linked resource
+  // New resources API endpoints
+  .get('/api/resources', async ({ query }) => {
+    console.log('Received request to GET /api/resources');
+    
+    // Parse pagination parameters
+    const page = Number(query?.page || 0);
+    const limit = Number(query?.limit || 50);
+    
+    // Validate pagination parameters
+    if (isNaN(page) || page < 0) {
+      return {
+        status: 'error',
+        message: 'Invalid page parameter',
+        data: {
+          error: 'Invalid page parameter. Must be a non-negative number.'
+        }
+      };
+    }
+    
+    if (isNaN(limit) || limit < 1 || limit > 300) {
+      return {
+        status: 'error',
+        message: 'Invalid limit parameter',
+        data: {
+          error: 'Invalid limit parameter. Must be a number between 1 and 300.'
+        }
+      };
+    }
+    
+    try {
+      // Get all resources using the resources controller
+      const result = await getAllResources(page, limit);
+      
+      if (result.error) {
+        return {
+          status: 'error',
+          message: result.error,
+          data: result
+        };
+      }
+      
+      return {
+        status: 'success',
+        message: 'Resources retrieved successfully',
+        data: result
+      };
+    } catch (error) {
+      console.error('Error retrieving resources:', error);
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        data: {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      };
+    }
+  })
+  // IMPORTANT: More specific routes must come before generic routes with params
+  // Get resources associated with a specific DID
+  .get('/api/resources/did/:didId', async ({ params }) => {
+    console.log(`Received request to GET /api/resources/did/${params.didId}`);
+    
+    try {
+      // Get resources by DID
+      const result = await getResourcesByDid(params.didId);
+      
+      if (result.error) {
+        return {
+          status: 'error',
+          message: result.error,
+          data: result
+        };
+      }
+      
+      return {
+        status: 'success',
+        message: 'DID resources retrieved successfully',
+        data: result
+      };
+    } catch (error) {
+      console.error(`Error retrieving resources for DID ${params.didId}:`, error);
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        data: {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      };
+    }
+  })
+  // Get direct content from a resource
+  .get('/api/resources/:id/content', async ({ params }) => {
+    console.log(`Received request to GET /api/resources/${params.id}/content`);
+    
+    try {
+      // Get the resource by ID
+      const result = await getResourceById(params.id);
+      
+      if (result.error || !result.linkedResources || result.linkedResources.length === 0) {
+        return new Response('Resource not found', { status: 404 });
+      }
+      
+      // Get the first resource
+      const resource = result.linkedResources[0];
+      
+      // Ensure resource exists and has necessary properties
+      if (!resource) {
+        return new Response('Resource content not found', { status: 404 });
+      }
+      
+      // Handle content based on its type
+      if (resource.contentType && (
+          resource.contentType.startsWith('image/') || 
+          resource.contentType.startsWith('video/') ||
+          resource.contentType.startsWith('audio/'))) {
+        // Ensure we have an inscription ID
+        if (!resource.inscriptionId) {
+          return new Response('Resource inscription ID not found', { status: 404 });
+        }
+        
+        // For binary content, fetch from the original source
+        const contentUrl = `https://ordiscan.com/content/${resource.inscriptionId}`;
+        
+        try {
+          const response = await fetch(contentUrl);
+          
+          if (!response.ok) {
+            return new Response('Failed to fetch content', { status: response.status });
+          }
+          
+          // Stream the content with the appropriate content type
+          const contentBuffer = await response.arrayBuffer();
+          return new Response(contentBuffer, {
+            headers: {
+              'Content-Type': resource.contentType,
+              'Cache-Control': 'public, max-age=86400' // Cache for 24 hours
+            }
+          });
+        } catch (error) {
+          return new Response('Failed to fetch content', { status: 500 });
+        }
+      } else if (resource.content && typeof resource.content === 'object') {
+        // For JSON content, return it directly
+        return new Response(JSON.stringify(resource.content), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
+          }
+        });
+      } else {
+        // For other content, return as text
+        return new Response(String(resource.content || ''), {
+          headers: {
+            'Content-Type': resource.contentType || 'text/plain',
+            'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
+          }
+        });
+      }
+    } catch (error) {
+      console.error(`Error retrieving content for resource ${params.id}:`, error);
+      return new Response('Error retrieving content', { status: 500 });
+    }
+  })
+  // Get a specific resource by ID (could be a DID or inscription ID)
+  .get('/api/resources/:id', async ({ params }) => {
+    console.log(`Received request to GET /api/resources/${params.id}`);
+    
+    try {
+      // Get the resource by ID
+      const result = await getResourceById(params.id);
+      
+      if (result.error) {
+        return {
+          status: 'error',
+          message: result.error,
+          data: result
+        };
+      }
+      
+      return {
+        status: 'success',
+        message: 'Resource retrieved successfully',
+        data: result
+      };
+    } catch (error) {
+      console.error(`Error retrieving resource by ID ${params.id}:`, error);
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        data: {
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      };
+    }
+  })
+  // Legacy endpoint to create a linked resource (will be updated to use the ordinalsplus package)
   .post('/api/resources', async ({ body }) => {
     console.log('Received request to create a linked resource');
     
@@ -138,41 +393,36 @@ const app = new Elysia()
       };
     }
   })
-  // Add new endpoint to get a resource by DID
-  .get('/api/resources/:didId', async ({ params }) => {
-    console.log(`Received request to get resource for DID: ${params.didId}`);
-    
-    try {
-      const resource = await getResourceByDid(params.didId);
-      
-      if (!resource) {
-        return {
-          status: 'error',
-          message: `Resource not found for DID: ${params.didId}`,
-          data: {
-            error: `Resource not found for DID: ${params.didId}`
-          }
-        };
+  // Add network configuration endpoint
+  .get('/api/networks', () => {
+    const networks = [
+      {
+        id: 'mainnet',
+        name: 'Bitcoin Mainnet',
+        enabled: process.env.ORD_NODE_URL?.includes('mainnet') ?? false,
+        description: 'The main Bitcoin network'
+      },
+      {
+        id: 'testnet',
+        name: 'Bitcoin Testnet',
+        enabled: process.env.ORD_NODE_URL?.includes('testnet') ?? false,
+        description: 'The Bitcoin test network'
+      },
+      {
+        id: 'signet',
+        name: 'Bitcoin Signet',
+        enabled: process.env.ORD_NODE_URL?.includes('signet') ?? false,
+        description: 'The Bitcoin signet network'
       }
-      
-      return {
-        status: 'success',
-        message: 'Resource retrieved successfully',
-        data: resource
-      };
-    } catch (error) {
-      console.error(`Error retrieving resource for DID ${params.didId}:`, error);
-      return {
-        status: 'error',
-        message: error instanceof Error ? error.message : 'Unknown error occurred',
-        data: {
-          error: error instanceof Error ? error.message : 'Unknown error occurred'
-        }
-      };
-    }
+    ].filter(network => network.enabled);
+
+    return {
+      networks,
+      defaultNetwork: networks[0]?.id || 'mainnet'
+    };
   })
   .listen(port);
 
-console.log(`🦊 BTCO DID Explorer API is running at http://localhost:${port}`);
+console.log(`⊕ Ordinals Plus Explorer API is running at http://localhost:${port}`);
 
 export type App = typeof app; 

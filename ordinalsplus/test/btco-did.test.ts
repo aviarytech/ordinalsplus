@@ -1,17 +1,21 @@
-import { describe, expect, it, beforeEach, afterEach, spyOn, mock } from 'bun:test';
-import { BtcoDid } from '../src/did/btco-did';
-import { ApiClient } from '../src/utils/api-client';
+import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';
+import { BtcoDid } from '../src/did/btco-did.js';
+import { ApiClient } from '../src/utils/api-client.js';
+import { DidResolutionResult } from '../src/types/index.js';
 
 // Mock the ApiClient class
 const originalApiClient = ApiClient;
-let getMock: ReturnType<typeof spyOn>;
+let getMock: ReturnType<typeof mock>;
 
 // Setup mock before tests
 beforeEach(() => {
+  // Create a new mock function
+  getMock = mock(async () => ({}));
+  
   // Reset the ApiClient to restore the class
   (globalThis as any).ApiClient = function() {
     return {
-      get: getMock = mock(async () => ({})),
+      get: getMock,
       post: mock(async () => ({}))
     };
   };
@@ -50,11 +54,20 @@ describe('BtcoDid', () => {
 
   describe('resolve', () => {
     it('should resolve a DID document', async () => {
-      const mockDidDoc = {
-        '@context': 'https://www.w3.org/ns/did/v1',
-        id: validDid,
-        verificationMethod: [],
-        service: []
+      const mockDidDoc: DidResolutionResult = {
+        '@context': ['https://www.w3.org/ns/did/v1'],
+        didDocument: {
+          '@context': 'https://www.w3.org/ns/did/v1',
+          id: 'did:btco:1234567890',
+          verificationMethod: [],
+          service: []
+        },
+        didResolutionMetadata: {
+          contentType: 'application/did+json'
+        },
+        didDocumentMetadata: {
+          created: new Date().toISOString()
+        }
       };
       
       // Setup the mock response

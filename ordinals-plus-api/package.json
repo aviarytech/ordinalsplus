@@ -1,8 +1,11 @@
 {
   "name": "ordinals-plus-api",
-  "module": "index.ts",
+  "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -11,6 +14,8 @@
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
-    "elysia": "^1.2.25"
+    "axios": "^1.8.4",
+    "elysia": "^1.2.25",
+    "ordinalsplus": "file:../ordinalsplus"
   }
 }

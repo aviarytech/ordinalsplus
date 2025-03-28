@@ -1,4 +1,4 @@
-# BTCO DID Explorer Guidelines
+# Ordinals Plus Explorer Guidelines
 
 ## Project Overview
 A comprehensive solution for exploring Bitcoin Ordinals DIDs (Decentralized Identifiers) and linked resources, allowing users to browse and filter inscriptions on the Bitcoin blockchain. The project consists of three main components:
@@ -47,3 +47,9 @@ A comprehensive solution for exploring Bitcoin Ordinals DIDs (Decentralized Iden
 - `/src/services/`: API and blockchain integration
 - `/src/types/`: TypeScript interfaces
 - `/src/utils/`: Helper functions
+
+## Development Process
+- Never suggest running development servers - they are always running in watch mode
+- Focus on code changes rather than server restarts
+- Assume all changes to code are automatically applied via watch mode
+- The backend and frontend servers are always running during development

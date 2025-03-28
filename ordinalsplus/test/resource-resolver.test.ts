@@ -1,17 +1,20 @@
-import { describe, expect, it, beforeEach, afterEach, spyOn, mock } from 'bun:test';
-import { ResourceResolver } from '../src/resources/resource-resolver';
-import { ApiClient } from '../src/utils/api-client';
+import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';
+import { ResourceResolver } from '../src/resources/resource-resolver.js';
+import { ApiClient } from '../src/utils/api-client.js';
 
 // Mock the ApiClient class
 const originalApiClient = ApiClient;
-let getMock: ReturnType<typeof spyOn>;
+let getMock: ReturnType<typeof mock>;
 
 // Setup mock before tests
 beforeEach(() => {
+  // Create a new mock function
+  getMock = mock(async () => ({}));
+  
   // Reset the ApiClient to restore the class
   (globalThis as any).ApiClient = function() {
     return {
-      get: getMock = mock(async () => ({})),
+      get: getMock,
       post: mock(async () => ({}))
     };
   };
@@ -82,7 +85,13 @@ describe('ResourceResolver', () => {
         id: validResourceId,
         created: '2023-01-01T00:00:00Z',
         updated: '2023-01-02T00:00:00Z',
-        contentType: 'application/json'
+        contentType: 'application/json',
+        resourceUri: validResourceId,
+        resourceCollectionId: validResourceId,
+        resourceId: validResourceId,
+        resourceName: validResourceId,
+        resourceType: validResourceId,
+        mediaType: 'application/json'
       };
       
       // Setup the mock response
@@ -101,7 +110,13 @@ describe('ResourceResolver', () => {
       const mockCollection = {
         items: [],
         total: 0,
-        nextCursor: null
+        nextCursor: null,
+        resources: [],
+        pagination: {
+          nextCursor: null,
+          total: 0,
+          limit: 10
+        }
       };
       
       // Setup the mock response
@@ -118,7 +133,13 @@ describe('ResourceResolver', () => {
       const mockCollection = {
         items: [],
         total: 100,
-        nextCursor: 'next-page-token'
+        nextCursor: 'next-page-token',
+        resources: [],
+        pagination: {
+          nextCursor: 'next-page-token',
+          total: 100,
+          limit: 10
+        }
       };
       
       // Setup the mock response

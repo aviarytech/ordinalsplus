@@ -1,0 +1,369 @@
+§ BTCO DID Method
+ Specification Status: EDITORS DRAFT
+
+ Specification Version: v0.2.0 (see Changelog)
+
+ Source of Latest Draft:
+https://github.com/decentralized-identity/labs-ordinals-plus
+
+ Information Site:
+https://ordinals.plus/
+
+  Editors:  Brian Richter  Participate:  GitHub repo  File a bug  Commit history    
+
+§ Abstract
+ The BTCO DID Method specification defines a decentralized identifier method that leverages Bitcoin (BTC) Ordinal Theory and Inscriptions to create, resolve, update and deactivate Decentralized Identifiers (DIDs). This method provides a robust foundation for digital identity management directly on the Bitcoin blockchain by using ordinal numbers to uniquely identify satoshis. The specification details the syntax, operations, and security considerations for implementing BTCO DIDs, enabling organizations and individuals to establish verifiable digital identities that are as decentralized, durable, and secure as Bitcoin itself.
+
+ 
+
+§ Overview
+ The BTCO DID Method provides decentralized identifiers using Bitcoin’s blockchain and ordinal theory. It leverages Bitcoin’s security and network effects while maintaining full compliance with the W3C DID Core Specification.
+
+ 
+
+§ How It Works
+ The method assigns DIDs to specific satoshis using their ordinal numbers. The DID Document and related data are stored as inscriptions on these satoshis, enabling:
+
+  • Creation: Register a DID by inscribing it on an unused satoshi
+ • Resolution: Retrieve the DID Document by reading the inscription
+ • Updates: Modify the DID Document through reinscriptions
+ • Deactivation: Mark a DID as inactive using a special reinscription
+  
+
+§ Key Features
+  • Zero counterparty risk through direct Bitcoin blockchain usage
+ • Standard DID operations via ordinal inscriptions
+ • Flexible cryptographic key management
+ • Integration with BTCO DID Linked Resources
+ • Support for verifiable credentials and digital identity management
+  
+
+§ Purpose
+ The primary purpose of this method is to:
+
+  • Provide a secure and decentralized identity solution without relying on additional networks
+ • Enable verifiable credential issuance and verification
+ • Support digital identity management directly on Bitcoin
+ • Leverage Bitcoin’s immutability for identity persistence
+  
+
+§ Specification
+ This section defines the technical specifications for creating, resolving, updating and deactivating BTCO DIDs using Inscriptions.
+
+ 
+
+§ Method Syntax and Structure
+ The syntax for the BTCO DID method follows the generic DID scheme with the satoshi ordinal number as the method specific identifier:
+
+ did:btco:<sat-number>
+
+ Where:
+
+  • did: The standard DID prefix
+ • btco: The BTCO method identifier
+ • <sat-number>: The ordinal number of the satoshi (must be a positive integer between 0 and 2099999997689999)
+  Example:
+
+ did:btco:1066296127976657
+
+ NOTE Previous versions of this specification described support for name-based and decimal identifiers. Numerical ordinal format is now the only supported format for better interoperability with the Ordinals protocol.
+
+  
+
+§ DID Document Format
+ The DID Document MUST be a valid JSON-LD document following this structure:
+
+ {
+"@context": [
+"https://www.w3.org/ns/did/v1",
+"https://w3id.org/security/multikey/v1"
+],
+"id": "did:btco:1066296127976657",
+"verificationMethod": [
+{
+"id": "did:btco:1066296127976657#0",
+"type": "Multikey",
+"controller": "did:btco:1066296127976657",
+"publicKeyMultibase": "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+}
+],
+"authentication": ["did:btco:1066296127976657#0"],
+"assertionMethod": ["did:btco:1066296127976657#0"]
+}
+
+ This example shows a basic DID Document. Additional properties defined in the DID Core specification MAY be included, such as:
+
+  • service endpoints
+ • keyAgreement for encryption
+ • capabilityInvocation for authorization
+ • capabilityDelegation for delegation
+ • Additional verification methods and relationships
+  Key components of this example:
+
+  • The required JSON-LD contexts that provide the vocabulary for DID and cryptographic features
+ • A primary verification method using the Multikey type for flexible key representation
+ • Basic verification relationships (authentication and assertionMethod) referencing the verification method
+  NOTE Since the DID Document is stored as metadata in the inscription, it can be accessed as a DID Linked Resource using the /meta suffix. For example: did:btco:1066296127976657/0/meta will return the DID Document for the first inscription on the satoshi. See the DID Linked Resources specification for more details about accessing inscription content and metadata.
+
+  NOTE The Multikey context (https://w3id.org/security/multikey/v1) provides a modern verification method type that supports multiple key formats through multibase encoding. This allows for flexible key representation while maintaining compatibility with different cryptographic algorithms.
+
+  
+
+§ DID Operations
+ 
+
+§ Create (Register)
+ To create a BTCO DID:
+
+  • Select a satoshi by its ordinal number (e.g., 1066296127976657)
+
+MUST be a positive integer
+MUST be less than or equal to 2099999997689999 (total number of satoshis)
+MUST NOT already have a valid DID inscription
+ • Generate cryptographic key pair(s)
+ • Create a DID Document following the specified format
+ • Create an inscription with any valid content
+ • Include the DID Document as metadata in CBOR format
+ • Register the inscription on the Bitcoin network
+  
+
+§ Read (Resolve)
+ Resolution process:
+
+  • Parse the DID components
+
+MUST be a valid BTCO DID format
+MUST contain a valid satoshi number
+ • Locate the inscription on the specified satoshi using ord
+
+Query the satoshi’s inscription history
+Find the most recent inscription with metadata
+ • Decode and validate the CBOR metadata
+
+MUST contain a valid DID Document
+Document id MUST match the requested DID
+ • Return the resolved DID Document
+  Possible errors:
+
+  • invalidDidSyntax: DID string does not match required format
+ • satoshiNotFound: Specified satoshi number does not exist
+ • noInscription: No inscription found on the satoshi
+ • invalidMetadata: Inscription metadata is not valid CBOR
+ • invalidDidDocument: Metadata does not contain valid DID Document
+ • deactivated: DID has been deactivated
+  Success response format:
+
+ {
+"didDocument": {
+// The resolved DID Document
+},
+"metadata": {
+"created": "<timestamp>",
+"updated": "<timestamp>",
+"deactivated": false,
+"nextVersionId": "<DID Linked Resource Identifier>",
+"versionId": "<DID Linked Resource Identifier>",
+"equivalentId": ["<alternative DID URLs>"]
+}
+}
+
+ NOTE The versionId and nextVersionId fields use DID Linked Resource identifiers (e.g., did:btco:1066296127976657/0) to reference specific versions of the DID Document. This format allows direct access to historical DID Document versions through the DID Linked Resources specification.
+
+  Error response format:
+
+ {
+"error": "<error code>",
+"message": "<human readable message>",
+"details": {
+// Additional error context
+}
+}
+
+ 
+
+§ Update
+ To update a BTCO DID:
+
+  • Create new DID Document
+ • Sign the update using an authorized verification method
+ • Create an inscription with any valid content
+ • Include updated DID Document as CBOR metadata
+ • Register as a reinscription on the target satoshi
+  
+
+§ Deactivate
+ To deactivate a BTCO DID:
+
+  • Create a minimal DID Document containing:
+  {
+"@context": [
+"https://www.w3.org/ns/did/v1",
+"https://w3id.org/did-resolution/v1"
+],
+"id": "did:btco:1066296127976657",
+"deactivated": true
+}
+
+  • Include this document as CBOR metadata in the inscription
+ • Register as a reinscription on the target satoshi
+ • The inscription content can be any valid data
+  NOTE The deactivated state is defined in the DID Resolution specification and will be recognized by standard DID resolvers.
+
+  
+
+§ Cryptographic Operations
+ 
+
+§ Control and Key Management
+ The BTCO DID method ties DID control directly to Bitcoin UTXO ownership:
+
+  • The Bitcoin private key controlling the satoshi’s UTXO is the ultimate controller of the DID
+ • Only the current UTXO owner can update or deactivate the DID by creating new inscriptions
+ • Control of the DID transfers automatically when the satoshi moves to a new UTXO
+ • Loss of the Bitcoin private key controlling the UTXO means loss of DID control
+  The DID Document itself can contain multiple verification methods as defined in the DID Core specification. These keys:
+
+  • Are independent from the Bitcoin key controlling the DID
+ • Can be updated by the UTXO owner through a new DID Document
+ • Can be rotated or revoked if compromised (as long as UTXO control is maintained)
+  NOTE While Bitcoin UTXO recovery mechanisms are outside the scope of this specification, DID Document keys can be recovered through a DID Document update by the UTXO owner.
+
+  
+
+§ Supported Algorithms
+ The method supports multiple cryptographic suites through the Multikey verification method type:
+
+  • Ed25519 for digital signatures (z6Mk prefix)
+ • X25519 for key agreement (z6LS prefix)
+ • secp256k1 for Bitcoin compatibility (z6MW prefix)
+  The Data Integrity proof suite MUST be used for all cryptographic operations. This provides:
+
+  • Standardized proof format
+ • Cryptographic agility
+ • Future-proof verification methods
+  
+
+§ Key Management
+ Implementations MUST:
+
+  • Generate secure random keys
+ • Support key rotation
+ • Implement secure key storage
+ • Enable key recovery mechanisms
+ • Use appropriate key types for different operations (signing vs encryption)
+  
+
+§ Security Considerations
+ Additional security requirements:
+
+  • Validate all cryptographic proofs
+ • Verify inscription ownership and order
+ • Implement proper key management
+ • Follow Bitcoin network security practices
+ • Monitor for blockchain reorganizations
+ • Validate DID Document format
+  
+
+§ Privacy Considerations
+ Enhanced privacy measures:
+
+  • Prohibit on-chain personal data
+ • Use separate Bitcoin addresses for DID operations
+ • Consider the permanent nature of blockchain data
+ • Implement appropriate data protection measures
+ • Support privacy-preserving cryptosuites
+ • Enable selective disclosure capabilities
+  
+
+§ Inscription Content
+ BTCO DID inscriptions can contain any valid data in their content. The DID operations (create, update, deactivate) are controlled through the inscription metadata, while the content remains unrestricted for application-specific uses.
+
+ 
+
+§ Inscription Requirements
+ This DID method relies on the Ordinals protocol and the ord client for inscription handling:
+
+ NOTE All inscription creation, validation, and ordering follows the Ordinals protocol as implemented by the reference ord client. This specification does not modify or extend the underlying inscription mechanisms.
+
+  
+
+§ DID Document Storage
+  • The DID Document MUST be stored in the inscription metadata using CBOR encoding
+ • The inscription content MAY contain any valid data as defined by the Ordinals protocol
+ • Multiple inscriptions on the same satoshi are handled according to Ordinals protocol rules
+ • Size limitations and other technical constraints are inherited from the Ordinals protocol
+  
+
+§ Inscription Order
+ When resolving a DID:
+
+  • The most recent valid inscription containing DID metadata is authoritative
+ • Inscription order is determined by the Ordinals protocol
+ • Earlier inscriptions are considered historical versions of the DID Document
+  For detailed information about inscription mechanics, refer to the Ordinals protocol documentation.
+
+ 
+
+§ Terminology
+  Bitcoin (BTC) :  The original and most widely adopted blockchain network, known for its decentralized and immutable nature.  Decentralized Identifiers (DIDs) :  A type of globally unique identifier that enables verifiable, decentralized digital identity, as defined by the W3C DID Core specification.  DID Document :  A document containing information related to a DID, such as verification methods and service endpoints.  Inscription :  Arbitrary content added to BTC satoshis (sats) to create BTC-native digital artifacts.  Ordinal Number :  A unique integer between 0 and 2099999997689999 that identifies a specific satoshi based on the order in which it was mined.  Ordinal Theory :  A numbering scheme for satoshis that allows for individual satoshis to be tracked and inscribed with data.  Verification Method :  A mechanism that can be used to verify a proof, such as a digital signature or encryption.  Service Endpoint :  A network address at which services can be accessed using a DID.  Controller :  The entity that has the capability to make changes to a DID Document.   
+
+§ Version Changelog
+ 
+
+§ v0.2.0 (Current)
+ 
+
+§ Breaking Changes
+  • Identifier Format: The method-specific identifier now only accepts ordinal numbers. Name-based identifiers (e.g., “bwtowpglzpd”) and decimal formats (e.g., “53585.3880634312”) are no longer supported. This change ensures consistent identifier resolution and improved interoperability.
+ • Migration: DIDs created using name-based or decimal identifiers in v0.1.0 should be migrated to numerical ordinal format. The migration process involves:
+
+Creating a new DID using the ordinal number format
+Transferring control to the new DID
+Deactivating the old DID
+ • Deactivation Method: Changed from using inscription content (“🔥”) to using metadata for deactivation status. This provides better consistency with other operations and allows inscription content to be used for application-specific purposes.
+  
+
+§ v0.1.0
+  • Initial specification release
+ • Supported multiple identifier formats (ordinal numbers, names, and decimals)
+ • Basic DID operations and verification methods
+  
+
+§ Test Vectors
+ 
+
+§ Valid DIDs
+ did:btco:0
+did:btco:2099999997689999
+did:btco:1066296127976657
+
+ 
+
+§ Invalid DIDs
+ did:btco:bwtowpglzpd              # Invalid: Uses name format (v0.1.0)
+did:btco:53585.3880634312         # Invalid: Uses decimal format (v0.1.0)
+did:btco:-1                       # Invalid: Negative number
+did:btco:2099999997690000        # Invalid: Exceeds maximum satoshi number
+did:btco:1.5                     # Invalid: Not an integer
+did:btco:abc123                  # Invalid: Not a number
+
+ 
+
+§ Example DID Document
+ {
+"@context": [
+"https://www.w3.org/ns/did/v1",
+"https://w3id.org/security/data-integrity/v2"
+],
+"id": "did:btco:1066296127976657",
+"verificationMethod": [
+{
+"id": "did:btco:1066296127976657#0",
+"type": "Multikey",
+"controller": "did:btco:1066296127976657",
+"publicKeyMultibase": "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+}
+],
+"authentication": ["did:btco:1066296127976657#0"],
+"assertionMethod": ["did:btco:1066296127976657#0"]
+}

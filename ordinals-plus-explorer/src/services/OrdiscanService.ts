@@ -1,9 +1,9 @@
-import { ApiResponse } from '../types';
+import { DID, LinkedResource, ApiResponse } from '../types';
 import { mapApiResponse } from '../adapters/mapApiData';
 
 interface OrdiscanConfig {
   baseUrl: string;
-  apiKey?: string; // Will be ignored - API key is managed by backend
+  apiKey?: string; // No longer needed as API keys are managed by the backend
 }
 
 interface OrdiscanInscription {
@@ -26,6 +26,7 @@ interface RawDID {
   content?: unknown;
   resourceType?: string;  // Added for resources
   didReference?: string;  // Added for resources
+  sat?: string;           // Added for sat number
 }
 
 // Match the expected input format for mapApiResponse
@@ -47,12 +48,16 @@ interface OrdiscanAddressResponse {
 }
 
 class OrdiscanService {
-  private apiServerUrl: string;
-  private apiKey?: string;
+  private baseUrl: string;
+  private apiProxyUrl: string;
   
   constructor(config: OrdiscanConfig) {
-    this.apiServerUrl = 'http://localhost:3000'; // Backend API server
-    this.apiKey = config.apiKey;
+    this.baseUrl = config.baseUrl.endsWith('/') 
+      ? config.baseUrl.slice(0, -1) 
+      : config.baseUrl;
+      
+    // Use the baseUrl from config for all Ordiscan API requests
+    this.apiProxyUrl = `${this.baseUrl}/api/ordiscan`;
   }
 
   /**
@@ -63,29 +68,79 @@ class OrdiscanService {
    */
   async fetchInscriptionsByAddress(address: string, page = 1, limit = 20): Promise<ApiResponse> {
     try {
-      // Use backend proxy to handle the API key securely
-      const response = await fetch(
-        `${this.apiServerUrl}/api/ordiscan/address/${address}?page=${page}&limit=${limit}`
-      );
+      let endpoint = '';
       
-      const data = await response.json() as OrdiscanAddressResponse;
+      if (address) {
+        // Use the address/inscriptions endpoint
+        endpoint = `/address/${address}/inscriptions`;
+      } else {
+        // If no address provided, fetch all inscriptions
+        endpoint = '/inscriptions';
+      }
       
-      // Transform Ordiscan API response to our expected format
+      // Make the API request through our backend proxy
+      const url = `${this.apiProxyUrl}${endpoint}?page=${page}&limit=${limit}`;
+      console.log(`Fetching from Ordiscan via proxy: ${url}`);
+      
+      const response = await fetch(url);
+      
+      // Enhanced error handling
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Ordiscan API error (${response.status}):`, errorText);
+        throw new Error(`Ordiscan API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const responseBody = await response.json() as any;
+      console.log('Ordiscan API response data format:', Object.keys(responseBody));
+      
+      if (responseBody.error) {
+        throw new Error(`Ordiscan API error: ${responseBody.error}`);
+      }
+      
+      // Handle various possible response formats
+      let inscriptions: OrdiscanInscription[] = [];
+      
+      // The Ordiscan API response structure might have a 'data' property containing the inscriptions
+      if (responseBody.data && Array.isArray(responseBody.data)) {
+        console.log(`Found inscriptions array in 'data' property, length: ${responseBody.data.length}`);
+        inscriptions = responseBody.data;
+      } else if (Array.isArray(responseBody)) {
+        // If the API returns an array directly
+        inscriptions = responseBody;
+      } else if (responseBody.inscriptions && Array.isArray(responseBody.inscriptions)) {
+        // Standard format with inscriptions array
+        inscriptions = responseBody.inscriptions;
+      } else if (responseBody.results && Array.isArray(responseBody.results)) {
+        // Alternative format with results array
+        inscriptions = responseBody.results;
+      } else {
+        console.warn('Unexpected Ordiscan API response format:', responseBody);
+        throw new Error('Unexpected response format from Ordiscan API');
+      }
+      
+      console.log(`Received ${inscriptions.length} inscriptions from Ordiscan API`);
+      
+      // Transform inscriptions to our format
+      const linkedResources = this.convertInscriptionsToResources(inscriptions);
+      
+      // Find DID documents among inscriptions
+      const dids = inscriptions
+        .filter(inscription => 
+          typeof inscription.content === 'object' && 
+          inscription.content !== null && 
+          typeof (inscription.content as any).id === 'string' && 
+          (inscription.content as any).id.startsWith('did:')
+        )
+        .map(inscription => this.convertToRawDID(inscription.content));
+      
+      // Map to our standard format
       const transformedData = {
-        linkedResources: data.inscriptions?.map((inscription: OrdiscanInscription) => ({
-          id: inscription.id || '',
-          inscriptionId: inscription.id || '',
-          type: this.inferResourceTypeFromInscription(inscription),
-          didReference: this.extractDidReferenceFromInscription(inscription),
-          timestamp: inscription.timestamp || new Date().toISOString(),
-          contentType: inscription.content_type || 'application/json',
-          content: inscription.content || {}
-        })) || [],
-        // Convert unknown[] to RawDID[] to match the type expected by mapApiResponse
-        dids: data.dids?.map(did => this.convertToRawDID(did)) || [],
-        page: data.page || page,
-        totalItems: data.total || data.inscriptions?.length || 0,
-        itemsPerPage: data.limit || limit,
+        linkedResources,
+        dids,
+        page: responseBody.page || page,
+        totalItems: responseBody.total || inscriptions.length || 0,
+        itemsPerPage: responseBody.limit || limit,
         error: undefined
       };
       
@@ -104,6 +159,91 @@ class OrdiscanService {
   }
   
   /**
+   * Converts API inscriptions to LinkedResources
+   * @param inscriptions Inscriptions from the API
+   * @returns Array of LinkedResources
+   */
+  private convertInscriptionsToResources(inscriptions: OrdiscanInscription[]): LinkedResource[] {
+    return inscriptions.map(inscription => {
+      // Extract sat number from different possible fields
+      const satNumber = 
+        inscription.sat_number?.toString() || 
+        inscription.sat?.toString() || 
+        (inscription.sat_ordinal && String(inscription.sat_ordinal).match(/(\d+)/) 
+          ? String(inscription.sat_ordinal).match(/(\d+)/)![1] 
+          : undefined);
+          
+      // Create the resource ID
+      const resourceId = this.createResourceIdForInscription(inscription);
+      
+      // Infer resource type from content type
+      const resourceType = this.inferResourceTypeFromInscription(inscription);
+      
+      // Get content type or default to application/json
+      const contentType = inscription.content_type || 'application/json';
+      
+      // Extract possible DID reference
+      const didReference = this.extractDidReferenceFromInscription(inscription);
+      
+      // Create the LinkedResource object
+      return {
+        id: resourceId,
+        resourceId,
+        type: resourceType,
+        resourceType,
+        didReference,
+        did: didReference || resourceId, // Use didReference if available or resourceId as fallback
+        inscriptionId: (inscription.id || inscription.inscription_id || '').toString(),
+        contentType,
+        content: inscription.content || {},
+        createdAt: inscription.timestamp || new Date().toISOString(),
+        sat: satNumber // Add the satoshi number as string
+      };
+    });
+  }
+  
+  /**
+   * Creates a resource ID for an inscription
+   * @param inscription The inscription to create a resource ID for
+   * @returns A properly formatted resource ID
+   */
+  private createResourceIdForInscription(inscription: OrdiscanInscription): string {
+    // Extract sat number from sat_number or sat or sat_ordinal field
+    if (inscription.sat_number || inscription.sat || inscription.sat_ordinal) {
+      const satNumber = 
+        inscription.sat_number || 
+        inscription.sat || 
+        (inscription.sat_ordinal && String(inscription.sat_ordinal).match(/(\d+)/) 
+          ? String(inscription.sat_ordinal).match(/(\d+)/)![1] 
+          : null);
+          
+      if (!satNumber) {
+        console.warn('Could not extract sat number from inscription:', inscription.id);
+        return (inscription.id || inscription.inscription_id || '').toString();
+      }
+      
+      // Extract output index from inscription ID
+      let outputIndex = 0;
+      const idToUse = inscription.id || inscription.inscription_id;
+      
+      if (idToUse) {
+        const match = idToUse.toString().match(/^[0-9a-f]+i(\d+)$/);
+        if (match && match[1]) {
+          outputIndex = parseInt(match[1], 10);
+        }
+      }
+      
+      return `did:btco:${satNumber}/${outputIndex}`;
+    }
+    
+    // For backwards compatibility only - log warning
+    console.warn('Inscription missing sat number, cannot create proper DID format:', 
+      inscription.id || inscription.inscription_id);
+    // This should eventually be removed once all inscriptions have sat numbers
+    return (inscription.id || inscription.inscription_id || '').toString();
+  }
+  
+  /**
    * Converts an unknown object to a RawDID
    * @param did The unknown object to convert
    * @returns A RawDID object
@@ -118,17 +258,16 @@ class OrdiscanService {
         contentType: typeof didObj.contentType === 'string' ? didObj.contentType : 'application/json',
         content: didObj.content || {},
         resourceType: typeof didObj.resourceType === 'string' ? didObj.resourceType : undefined,
-        didReference: typeof didObj.didReference === 'string' ? didObj.didReference : undefined
+        didReference: typeof didObj.didReference === 'string' ? didObj.didReference : undefined,
+        sat: typeof didObj.sat === 'string' ? didObj.sat : undefined
       };
     }
-    // Default DID structure if conversion fails
+    
     return {
       id: '',
       inscriptionId: '',
       contentType: 'application/json',
-      content: {},
-      resourceType: undefined,
-      didReference: undefined
+      content: {}
     };
   }
   
@@ -140,12 +279,16 @@ class OrdiscanService {
     try {
       // Use backend proxy to handle the API key securely
       const response = await fetch(
-        `${this.apiServerUrl}/api/ordiscan/inscription/${inscriptionId}`
+        `${this.apiProxyUrl}/inscription/${inscriptionId}`
       );
       
-      return response.json() as Promise<OrdiscanInscription>;
+      if (!response.ok) {
+        throw new Error(`Ordiscan API error: ${response.status} ${response.statusText}`);
+      }
+      
+      return await response.json() as OrdiscanInscription;
     } catch (error) {
-      console.error('Error fetching inscription:', error);
+      console.error('Error fetching inscription from Ordiscan:', error);
       throw error;
     }
   }
@@ -155,15 +298,51 @@ class OrdiscanService {
    * @param inscription The inscription to infer type from
    */
   private inferResourceTypeFromInscription(inscription: OrdiscanInscription): string {
-    // Try to infer from content type
-    const contentType = inscription.content_type || '';
+    // Try to infer from content type (handle different field names)
+    const contentTypeValue = inscription.content_type || 
+      (inscription.contentType as string | undefined) || '';
+    
+    // Ensure contentType is always a string
+    const contentType = typeof contentTypeValue === 'string' ? contentTypeValue : '';
     
     if (contentType.includes('image')) return 'image';
     if (contentType.includes('video')) return 'video';
     if (contentType.includes('audio')) return 'audio';
     
+    // For text content, we need to look at the actual content
+    if (contentType.includes('text/plain') || contentType.includes('text/html')) {
+      // If it's a text content, we should check if it's a DID document or contains JSON
+      if (typeof inscription.content === 'string') {
+        // Check if the text content appears to be JSON
+        try {
+          if (inscription.content.trim().startsWith('{') && inscription.content.trim().endsWith('}')) {
+            // Try to parse it as JSON
+            const jsonContent = JSON.parse(inscription.content);
+            
+            // Check for DID document
+            if (jsonContent.id && typeof jsonContent.id === 'string' && jsonContent.id.startsWith('did:btco:')) {
+              return 'identity';
+            }
+            
+            // Check for credential
+            if (jsonContent.credentialSubject) return 'credential';
+            
+            // It's structured data but not a specific known type
+            return 'data';
+          }
+          
+          // Check if it's a DID reference in plain text
+          if (inscription.content.includes('did:btco:')) {
+            return 'identity-reference';
+          }
+        } catch (e) {
+          // Not valid JSON, continue with other checks
+        }
+      }
+    }
+    
     // Try to infer from content if it's a JSON
-    if (contentType.includes('json') && typeof inscription.content === 'object') {
+    if ((contentType.includes('json') || contentType === '') && typeof inscription.content === 'object') {
       const content = inscription.content as Record<string, unknown>;
       
       // Look for type field in the content
@@ -177,6 +356,11 @@ class OrdiscanService {
       
       // Check for credential
       if (content.credentialSubject) return 'credential';
+    }
+    
+    // For text content that didn't match any specific type
+    if (contentType.includes('text/')) {
+      return 'text';
     }
     
     return 'unknown';
@@ -219,10 +403,13 @@ class OrdiscanService {
    */
   async checkApiStatus(): Promise<boolean> {
     try {
-      // Use backend to check API status
-      const response = await fetch(`${this.apiServerUrl}/api/config`);
-      const data = await response.json();
-      return data?.providers?.ordiscan?.available || false;
+      // Check API status through our backend proxy
+      const response = await fetch(`${this.apiProxyUrl}/status`, {
+        // Set a timeout to avoid waiting too long
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      return response.ok;
     } catch (error) {
       console.error('Ordiscan API status check failed:', error);
       return false;
@@ -233,88 +420,9 @@ class OrdiscanService {
    * Fetches all inscriptions regardless of address
    */
   async fetchAllInscriptions(page = 1, limit = 20): Promise<ApiResponse> {
-    try {
-      const url = `${this.apiServerUrl}/api/ordiscan/inscriptions?page=${page}&limit=${limit}`;
-      
-      const response = await fetch(url);
-      const data = await response.json() as OrdiscanAddressResponse;
-      
-      if (data.error) {
-        return {
-          dids: [],
-          linkedResources: [],
-          page: page,
-          totalItems: 0,
-          itemsPerPage: limit,
-          error: data.error
-        };
-      }
-      
-      if (!data.inscriptions || !Array.isArray(data.inscriptions)) {
-        return {
-          dids: [],
-          linkedResources: [],
-          page: page,
-          totalItems: 0,
-          itemsPerPage: limit,
-          error: 'Invalid response format from Ordiscan API'
-        };
-      }
-      
-      // Process inscriptions to find DIDs and LinkedResources
-      const linkedResources: RawDID[] = [];
-      const dids: RawDID[] = [];
-      
-      for (const inscription of data.inscriptions) {
-        // Check if this is a DID inscription
-        if (
-          typeof inscription.content === 'object' &&
-          inscription.content !== null &&
-          typeof (inscription.content as any).id === 'string' &&
-          (inscription.content as any).id.startsWith('did:')
-        ) {
-          // This is a DID document
-          dids.push({
-            id: (inscription.content as any).id,
-            inscriptionId: inscription.id,
-            contentType: inscription.content_type,
-            content: inscription.content
-          });
-        }
-        
-        // All inscriptions are also considered linked resources
-        const resourceType = this.inferResourceTypeFromInscription(inscription);
-        const didReference = this.extractDidReferenceFromInscription(inscription);
-        
-        linkedResources.push({
-          id: inscription.id || '',
-          inscriptionId: inscription.id || '',
-          contentType: inscription.content_type || 'application/json',
-          content: inscription.content || {},
-          resourceType,
-          didReference
-        });
-      }
-      
-      // Map to API response format using the adapter
-      return mapApiResponse({
-        dids,
-        linkedResources: linkedResources,
-        page: page,
-        totalItems: data.total || 0,
-        itemsPerPage: limit
-      });
-    } catch (error) {
-      console.error('Error fetching all inscriptions:', error);
-      return {
-        dids: [],
-        linkedResources: [],
-        page: page,
-        totalItems: 0,
-        itemsPerPage: limit,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      };
-    }
+    // Delegate to fetchInscriptionsByAddress with empty address
+    // This ensures consistent handling of response formats
+    return this.fetchInscriptionsByAddress('', page, limit);
   }
 }
 
