@@ -1,77 +1,67 @@
-import { DID, Inscription, LinkedResource } from '../types';
-import { createDidFromInscriptionData, extractSatNumber } from '../utils/validators';
+import { BTCO_METHOD } from '../utils/constants';
+import { extractSatNumber, extractIndexFromInscription } from '../utils/validators';
+import type { Inscription, LinkedResource } from '../types';
 
 /**
- * Creates a DID object from inscription data
- * 
- * @param inscription The inscription data
- * @returns A DID object with proper DID format
+ * Wraps content based on content type
  */
-export function createDidFromInscription(inscription: Inscription): DID {
-  const inscriptionId = inscription.inscriptionId || inscription.id;
-  if (!inscriptionId) {
-    throw new Error('Inscription ID is required for DID creation');
-  }
-  
-  const didString = createDidFromInscriptionData(inscription);
-  const contentType = inscription.content_type || inscription.contentType || 'application/json';
-  
-  return {
-    id: didString,
-    inscriptionId,
-    contentType,
-    content: typeof inscription.content === 'object' && inscription.content !== null
-      ? inscription.content as Record<string, unknown>
-      : { id: didString }
-  };
+function wrapContent(content: any, contentType?: string): { value: any } {
+    if (content === undefined || content === null) {
+        return { value: null };
+    }
+    if (typeof content === 'object' && !Array.isArray(content)) {
+        if ('value' in content) {
+            return content;
+        }
+        return { value: content };
+    }
+    return { value: content };
 }
 
 /**
- * Creates a proper Linked Resource from an inscription
- * 
- * @param inscription The inscription data
- * @param type The resource type
- * @param didReference Optional DID reference
- * @returns A LinkedResource object with proper format
+ * Creates a DID from inscription data
  */
-export function createLinkedResourceFromInscription(
-  inscription: Inscription, 
-  type: string, 
-  didReference?: string
-): LinkedResource {
-  const inscriptionId = inscription.inscriptionId || inscription.id;
-  if (!inscriptionId) {
-    throw new Error('Inscription ID is required for resource creation');
-  }
-  
-  const satNumber = extractSatNumber(inscription);
-  if (!satNumber) {
-    throw new Error('Sat number is required for resource creation');
-  }
-  
-  const contentType = inscription.content_type || inscription.contentType || 'application/json';
-  
-  // Process the content based on its type
-  let processedContent: Record<string, unknown>;
-  if (typeof inscription.content === 'object' && inscription.content !== null) {
-    processedContent = inscription.content as Record<string, unknown>;
-  } else if (typeof inscription.content === 'string' && inscription.content.trim().startsWith('{')) {
-    try {
-      processedContent = JSON.parse(inscription.content);
-    } catch (e) {
-      processedContent = { value: inscription.content };
+export function createDidFromInscriptionData(inscription: Inscription): string {
+    const satNumber = extractSatNumber(inscription);
+    return `did:btco:${satNumber}`;
+}
+
+/**
+ * Creates a resource ID from inscription data
+ */
+export function createResourceIdFromInscription(inscription: Inscription): string {
+    const satNumber = extractSatNumber(inscription);
+    const index = extractIndexFromInscription(inscription);
+    return `did:btco:${satNumber}/${index}`;
+}
+
+/**
+ * Creates a linked resource from an inscription
+ */
+export function createLinkedResourceFromInscription(inscription: Inscription, resourceType: string): LinkedResource {
+    if (!inscription.id) {
+        throw new Error('Inscription ID is required');
     }
-  } else {
-    processedContent = { value: inscription.content };
-  }
-  
-  return {
-    id: createDidFromInscriptionData(inscription),
-    type,
-    inscriptionId,
-    didReference,
-    contentType,
-    content: processedContent,
-    sat: String(satNumber)
-  };
-} 
+
+    const satNumber = extractSatNumber(inscription);
+    const index = extractIndexFromInscription(inscription);
+    const resourceId = `did:btco:${satNumber}/${index}`;
+    const didReference = `did:btco:${satNumber}`;
+
+    return {
+        id: resourceId,
+        type: resourceType,
+        inscriptionId: inscription.id,
+        didReference,
+        contentType: inscription.content_type || 'application/json',
+        content: wrapContent(inscription.content, inscription.content_type),
+        sat: parseInt(satNumber, 10)
+    };
+}
+
+/**
+ * Checks if a string is a valid BTCO DID
+ */
+export function isBtcoDid(did: string): boolean {
+    return did.startsWith(`did:${BTCO_METHOD}:`);
+}

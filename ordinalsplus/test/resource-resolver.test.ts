@@ -1,160 +1,210 @@
-import { describe, expect, it, beforeEach, afterEach, mock } from 'bun:test';
-import { ResourceResolver } from '../src/resources/resource-resolver.js';
-import { ApiClient } from '../src/utils/api-client.js';
+import { describe, expect, it, beforeEach, mock } from 'bun:test';
 
-// Mock the ApiClient class
-const originalApiClient = ApiClient;
-let getMock: ReturnType<typeof mock>;
+// Mock the provider factory before importing ResourceResolver
+const mockProvider = {
+    async resolve(inscriptionId: string) {
+        if (inscriptionId !== '1234567890i0') {
+            throw new Error('Inscription not found');
+        }
+        return {
+            id: 'did:btco:1234567890/0',
+            type: 'test-type',
+            inscriptionId: '1234567890i0',
+            didReference: 'did:btco:1234567890',
+            contentType: 'application/json',
+            content: { value: { test: 'data' } },
+            sat: 1234567890
+        };
+    },
 
-// Setup mock before tests
-beforeEach(() => {
-  // Create a new mock function
-  getMock = mock(async () => ({}));
-  
-  // Reset the ApiClient to restore the class
-  (globalThis as any).ApiClient = function() {
-    return {
-      get: getMock,
-      post: mock(async () => ({}))
-    };
-  };
-});
+    async resolveInfo(inscriptionId: string) {
+        if (inscriptionId !== '1234567890i0') {
+            throw new Error('Inscription not found');
+        }
+        return {
+            id: 'did:btco:1234567890/0',
+            type: 'test-type',
+            contentType: 'application/json',
+            createdAt: '2024-01-01T00:00:00Z',
+            updatedAt: '2024-01-01T00:00:00Z'
+        };
+    },
+
+    async resolveCollection() {
+        return [{
+            id: 'did:btco:1234567890/0',
+            type: 'test-type',
+            inscriptionId: '1234567890i0',
+            didReference: 'did:btco:1234567890',
+            contentType: 'application/json',
+            content: { value: { test: 'data' } },
+            sat: 1234567890
+        }];
+    }
+};
+
+mock.module('../src/resources/providers/provider-factory', () => ({
+    ProviderFactory: {
+        createProvider: (config: { type: string }) => {
+            if (config.type === 'ordiscan' || config.type === 'ord') {
+                return mockProvider;
+            }
+            throw new Error('Unsupported provider type');
+        }
+    },
+    ProviderType: {
+        ORDISCAN: 'ordiscan',
+        ORD: 'ord'
+    }
+}));
+
+import { ResourceResolver } from '../src/resources/resource-resolver';
+import { ProviderType, ProviderConfig } from '../src/resources/providers/provider-factory';
 
 describe('ResourceResolver', () => {
-  const validResourceId = 'did:btco:1234567890/0';
-  
-  describe('constructor', () => {
-    it('should create a new ResourceResolver instance', () => {
-      const resolver = new ResourceResolver();
-      expect(resolver).toBeInstanceOf(ResourceResolver);
+    describe('Ordiscan Provider', () => {
+        const config: ProviderConfig = {
+            type: ProviderType.ORDISCAN,
+            options: {
+                apiKey: 'test-key',
+                apiEndpoint: 'https://api.ordiscan.com'
+            }
+        };
+
+        const resolver = new ResourceResolver(config);
+
+        it('should resolve a resource by ID', async () => {
+            const result = await resolver.resolve('did:btco:1234567890/0');
+            expect(result).toEqual({
+                id: 'did:btco:1234567890/0',
+                type: 'test-type',
+                inscriptionId: '1234567890i0',
+                didReference: 'did:btco:1234567890',
+                contentType: 'application/json',
+                content: { value: { test: 'data' } },
+                sat: 1234567890
+            });
+        });
+
+        it('should resolve resource info', async () => {
+            const result = await resolver.resolveInfo('did:btco:1234567890/0');
+            expect(result).toEqual({
+                id: 'did:btco:1234567890/0',
+                type: 'test-type',
+                contentType: 'application/json',
+                createdAt: '2024-01-01T00:00:00Z',
+                updatedAt: '2024-01-01T00:00:00Z'
+            });
+        });
+
+        it('should resolve a collection of resources', async () => {
+            const result = await resolver.resolveCollection();
+            expect(result).toEqual([{
+                id: 'did:btco:1234567890/0',
+                type: 'test-type',
+                inscriptionId: '1234567890i0',
+                didReference: 'did:btco:1234567890',
+                contentType: 'application/json',
+                content: { value: { test: 'data' } },
+                sat: 1234567890
+            }]);
+        });
+
+        it('should throw error for invalid resource ID', async () => {
+            await expect(resolver.resolve('invalid-id'))
+                .rejects
+                .toThrow('Invalid resource identifier');
+        });
     });
 
-    it('should accept API options', () => {
-      const resolver = new ResourceResolver({ endpoint: 'https://custom-api.example.com' });
-      expect(resolver).toBeInstanceOf(ResourceResolver);
-      // Implementation detail: we can't easily test if the options were passed to the ApiClient
-      // since we've mocked it completely, but at least we can verify it doesn't throw
-    });
-  });
+    describe('Ord Provider', () => {
+        const config: ProviderConfig = {
+            type: ProviderType.ORD,
+            options: {
+                nodeUrl: 'http://localhost:8080'
+            }
+        };
 
-  describe('resolve', () => {
-    it('should resolve a resource by ID', async () => {
-      const mockContent = { key: 'value' };
-      
-      // Setup the mock response
-      getMock.mockImplementation(async () => mockContent);
-      
-      const resolver = new ResourceResolver();
-      const result = await resolver.resolve(validResourceId);
-      
-      expect(getMock).toHaveBeenCalled();
-      expect(result).toMatchObject({
-        content: mockContent,
-        contentType: 'application/json'
-      });
-    });
+        const resolver = new ResourceResolver(config);
 
-    it('should detect content type for text content', async () => {
-      const htmlContent = '<!DOCTYPE html><html><body>Test</body></html>';
-      
-      // Setup the mock response
-      getMock.mockImplementation(async () => htmlContent);
-      
-      const resolver = new ResourceResolver();
-      const result = await resolver.resolve(validResourceId);
-      
-      expect(result).toMatchObject({
-        content: htmlContent,
-        contentType: 'text/html'
-      });
-    });
+        it('should resolve a resource by ID', async () => {
+            const result = await resolver.resolve('did:btco:1234567890/0');
+            expect(result).toEqual({
+                id: 'did:btco:1234567890/0',
+                type: 'test-type',
+                inscriptionId: '1234567890i0',
+                didReference: 'did:btco:1234567890',
+                contentType: 'application/json',
+                content: { value: { test: 'data' } },
+                sat: 1234567890
+            });
+        });
 
-    it('should throw an error for invalid resource ID', async () => {
-      const resolver = new ResourceResolver();
-      
-      await expect(resolver.resolve('invalid-id')).rejects.toMatchObject({
-        error: expect.any(String),
-        message: expect.stringContaining('Invalid resource identifier')
-      });
-    });
-  });
+        it('should resolve resource info', async () => {
+            const result = await resolver.resolveInfo('did:btco:1234567890/0');
+            expect(result).toEqual({
+                id: 'did:btco:1234567890/0',
+                type: 'test-type',
+                contentType: 'application/json',
+                createdAt: '2024-01-01T00:00:00Z',
+                updatedAt: '2024-01-01T00:00:00Z'
+            });
+        });
 
-  describe('resolveInfo', () => {
-    it('should resolve resource information', async () => {
-      const mockInfo = {
-        id: validResourceId,
-        created: '2023-01-01T00:00:00Z',
-        updated: '2023-01-02T00:00:00Z',
-        contentType: 'application/json',
-        resourceUri: validResourceId,
-        resourceCollectionId: validResourceId,
-        resourceId: validResourceId,
-        resourceName: validResourceId,
-        resourceType: validResourceId,
-        mediaType: 'application/json'
-      };
-      
-      // Setup the mock response
-      getMock.mockImplementation(async () => mockInfo);
-      
-      const resolver = new ResourceResolver();
-      const result = await resolver.resolveInfo(validResourceId);
-      
-      expect(getMock).toHaveBeenCalled();
-      expect(result).toEqual(mockInfo);
-    });
-  });
+        it('should resolve a collection of resources', async () => {
+            const result = await resolver.resolveCollection();
+            expect(result).toEqual([{
+                id: 'did:btco:1234567890/0',
+                type: 'test-type',
+                inscriptionId: '1234567890i0',
+                didReference: 'did:btco:1234567890',
+                contentType: 'application/json',
+                content: { value: { test: 'data' } },
+                sat: 1234567890
+            }]);
+        });
 
-  describe('resolveCollection', () => {
-    it('should resolve a collection with default parameters', async () => {
-      const mockCollection = {
-        items: [],
-        total: 0,
-        nextCursor: null,
-        resources: [],
-        pagination: {
-          nextCursor: null,
-          total: 0,
-          limit: 10
-        }
-      };
-      
-      // Setup the mock response
-      getMock.mockImplementation(async () => mockCollection);
-      
-      const resolver = new ResourceResolver();
-      const result = await resolver.resolveCollection(validResourceId);
-      
-      expect(getMock).toHaveBeenCalled();
-      expect(result).toEqual(mockCollection);
+        it('should throw error for invalid resource ID', async () => {
+            await expect(resolver.resolve('invalid-id'))
+                .rejects
+                .toThrow('Invalid resource identifier');
+        });
     });
 
-    it('should handle pagination parameters', async () => {
-      const mockCollection = {
-        items: [],
-        total: 100,
-        nextCursor: 'next-page-token',
-        resources: [],
-        pagination: {
-          nextCursor: 'next-page-token',
-          total: 100,
-          limit: 10
-        }
-      };
-      
-      // Setup the mock response
-      getMock.mockImplementation(async () => mockCollection);
-      
-      const resolver = new ResourceResolver();
-      const result = await resolver.resolveCollection(validResourceId, 20, 'page-token');
-      
-      expect(getMock).toHaveBeenCalled();
-      expect(result).toEqual(mockCollection);
-    });
-  });
+    describe('Provider Factory', () => {
+        it('should create an Ordiscan provider', () => {
+            const config: ProviderConfig = {
+                type: ProviderType.ORDISCAN,
+                options: {
+                    apiKey: 'test-key',
+                    apiEndpoint: 'https://api.ordiscan.com'
+                }
+            };
+            const resolver = new ResourceResolver(config);
+            expect(resolver).toBeDefined();
+        });
 
-  // Restore the original ApiClient after all tests
-  afterEach(() => {
-    (globalThis as any).ApiClient = originalApiClient;
-  });
+        it('should create an Ord provider', () => {
+            const config: ProviderConfig = {
+                type: ProviderType.ORD,
+                options: {
+                    nodeUrl: 'http://localhost:8080'
+                }
+            };
+            const resolver = new ResourceResolver(config);
+            expect(resolver).toBeDefined();
+        });
+
+        it('should throw error for unsupported provider type', () => {
+            const config = {
+                type: 'UNSUPPORTED' as ProviderType,
+                options: {
+                    apiKey: 'test-key',
+                    apiEndpoint: 'https://api.ordiscan.com'
+                }
+            };
+            expect(() => new ResourceResolver(config))
+                .toThrow('Unsupported provider type');
+        });
+    });
 }); 

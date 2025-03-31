@@ -1,4 +1,5 @@
-import type { InscriptionResponse, Inscription } from '../types';
+import type { InscriptionResponse } from '../types';
+import type { Inscription } from 'ordinalsplus';
 import OrdinalsPlus, { type IOrdinalsProvider, type OrdinalsProviderType } from 'ordinalsplus';
 
 // Initialize the provider with the API key from environment variables
@@ -87,6 +88,26 @@ export const fetchInscriptionContent = async (
     return await provider.fetchInscriptionContent(inscriptionId, contentType);
   } catch (error) {
     console.error(`Error fetching content for inscription ${inscriptionId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Fetch an inscription by its sat number
+ */
+export const fetchInscriptionBySat = async (sat: number): Promise<Inscription> => {
+  try {
+    // Get the provider and make the request
+    const provider = getProvider();
+    const result = await provider.fetchInscriptionBySat(sat);
+    
+    if (!result) {
+      throw new Error(`Inscription with sat ${sat} not found`);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error(`Error fetching inscription with sat ${sat}:`, error);
     throw error;
   }
 }; 

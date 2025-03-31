@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
-import ApiServiceProvider from '../services/ApiServiceProvider';
-import { useNetwork } from '../context/NetworkContext';
+import ApiServiceProvider, { ApiProviderType } from '../services/ApiServiceProvider';
 
 /**
- * Custom hook that provides access to the API service provider with automatic network switching
+ * Custom hook that provides access to the API service provider
  */
 export const useApiService = () => {
-  const { currentNetwork, isConnected } = useNetwork();
   const [apiProvider, setApiProvider] = useState<ApiServiceProvider>(
     ApiServiceProvider.getInstance()
   );
@@ -18,18 +16,15 @@ export const useApiService = () => {
     // Get backend URL from environment with fallback
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
     
-    console.log(`Configuring API service for network: ${currentNetwork} using backend: ${backendUrl}`);
-    
-    // ALWAYS use the backend URL for both network types
-    // The backend handles the routing to either Ordiscan or Ord node
+    // Configure the API service with the backend URL
     provider.updateConfig({
-      type: currentNetwork, // This tells the backend which data source to use
-      baseUrl: backendUrl,  // But we always connect to our backend
+      type: ApiProviderType.ORDISCAN,
+      baseUrl: backendUrl,
     });
 
     setApiProvider(provider);
 
-    // Check API status on network change
+    // Check API status
     const checkConnection = async () => {
       try {
         setConnectionStatus('checking');
@@ -42,7 +37,7 @@ export const useApiService = () => {
     };
 
     checkConnection();
-  }, [currentNetwork, isConnected]);
+  }, []);
 
   return apiProvider;
 }; 

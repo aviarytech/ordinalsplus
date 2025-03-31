@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DidService, ResourceInfo, ResourceContent } from '../services/did-service';
-import { LinkedResource } from '../types';
+import { CoreLinkedResource } from '../types';
 import { formatResourceId, formatDate, getContentTypeShortName } from '../utils/formatting';
 import { FileText, Image, Code, RefreshCw, Copy, Check } from 'lucide-react';
 import ResourceCard from './ResourceCard';
@@ -11,7 +11,7 @@ interface LinkedResourceListProps {
   didService?: DidService;
   showAllResources?: boolean;
   contentTypeFilter?: string | null;
-  onResourceSelect?: (resource: LinkedResource) => void;
+  onResourceSelect?: (resource: CoreLinkedResource) => void;
 }
 
 const LinkedResourceList: React.FC<LinkedResourceListProps> = ({ 
@@ -22,7 +22,7 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
   onResourceSelect
 }) => {
   const [resources, setResources] = useState<ResourceInfo[]>([]);
-  const [linkedResources, setLinkedResources] = useState<LinkedResource[]>([]);
+  const [linkedResources, setLinkedResources] = useState<CoreLinkedResource[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedResource, setSelectedResource] = useState<string | null>(null);
@@ -33,33 +33,8 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
   const [itemsPerPage] = useState<number>(20);
   const [copiedText, setCopiedText] = useState<string | null>(null);
   
-  // Use our custom hook to get the API service
-  const apiService = useApiService();
-  
-  // Listen for the reset event to clear inscriptions when network changes
-  useEffect(() => {
-    const handleReset = () => {
-      console.log('Resetting inscriptions due to network change');
-      setLinkedResources([]);
-      setTotalItems(0);
-      setCurrentPage(0);
-      setError(null);
-      
-      // Load new inscriptions after a small delay to ensure network change is complete
-      setTimeout(() => {
-        if (showAllResources) {
-          loadAllResources();
-        }
-      }, 100);
-    };
-    
-    // Listen for the custom reset event
-    window.addEventListener('resetInscriptions', handleReset);
-    
-    return () => {
-      window.removeEventListener('resetInscriptions', handleReset);
-    };
-  }, [showAllResources]); // Dependency array includes showAllResources
+  const apiProvider = useApiService();
+  const apiService = apiProvider.getApiService();
   
   useEffect(() => {
     if (showAllResources) {
@@ -67,7 +42,6 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
     } else if (didString) {
       loadResources();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [didString, showAllResources, currentPage]);
   
   const loadResources = async () => {
@@ -77,23 +51,22 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
     setError(null);
     
     try {
-      // Use the actual API service to fetch resources for this DID
       const response = await apiService.fetchResourcesByDid(didString);
       
       if (response && response.linkedResources) {
-        const mappedResources = response.linkedResources.map(resource => ({
+        const mappedResources = response.linkedResources.map((resource: CoreLinkedResource) => ({
           resourceUri: resource.id,
           resourceCollectionId: didString,
           resourceId: resource.id,
           resourceName: resource.type || 'Resource',
           mediaType: resource.contentType,
-          created: resource.createdAt,
-          resourceType: resource.resourceType,
+          created: resource.info?.created || new Date().toISOString(),
+          resourceType: resource.type,
           alsoKnownAs: []
         }));
         
         setResources(mappedResources);
-        setLinkedResources(response.linkedResources);
+        setLinkedResources(response.linkedResources as CoreLinkedResource[]);
       } else {
         setResources([]);
         setLinkedResources([]);
@@ -112,37 +85,43 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
     setError(null);
     
     try {
-      // Use the apiService from our hook
-      console.log(`Fetching inscriptions for page ${currentPage}, limit ${itemsPerPage}`);
-      const response = await apiService.fetchAllInscriptions(currentPage, itemsPerPage);
+      console.log('Fetching resources...');
+      const response = await apiService.fetchAllResources(currentPage, itemsPerPage);
       
       if (response.error) {
         console.error('API returned error:', response.error);
         setError(response.error);
         setLinkedResources([]);
-      } else if (response.linkedResources.length === 0) {
-        // We got a successful response but no resources
+      } else if (!response.linkedResources || response.linkedResources.length === 0) {
+        console.log('No resources found');
         if (currentPage === 0) {
-          // On first page, this means no resources found
-          setError('No resources found. The API may be experiencing issues or there may be no inscriptions available.');
+          setError('No resources found. The API may be experiencing issues or there may be no resources available.');
         } else {
-          // On later pages, we've reached the end
           setError(`No more resources available after page ${currentPage}.`);
-          // Go back to previous page that had data
           setCurrentPage(prev => Math.max(0, prev - 1));
         }
         setLinkedResources([]);
       } else {
-        // Success with data
         console.log(`Received ${response.linkedResources.length} resources`);
-        setLinkedResources(response.linkedResources);
+        // Ensure each resource has an inscriptionId
+        const resourcesWithInscriptionIds = response.linkedResources.map(resource => {
+          if (!resource.inscriptionId && resource.id) {
+            // If inscriptionId is missing but we have an id, use it
+            return {
+              ...resource,
+              inscriptionId: resource.id
+            };
+          }
+          return resource;
+        });
+        setLinkedResources(resourcesWithInscriptionIds);
         setTotalItems(response.totalItems || response.linkedResources.length);
         setError(null);
       }
     } catch (err: unknown) {
       console.error('Error in loadAllResources:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load resources';
-      setError(`${errorMessage}. Please try again or switch networks.`);
+      setError(errorMessage);
       setLinkedResources([]);
     } finally {
       setLoading(false);
@@ -259,7 +238,7 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
       });
   };
   
-  const handleResourceClick = (resource: LinkedResource) => {
+  const handleResourceClick = (resource: CoreLinkedResource) => {
     setSelectedResource(resource.id);
     onResourceSelect?.(resource);
   };
@@ -288,6 +267,28 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
               isSelected={selectedResource === resource.id}
             />
           ))}
+        </div>
+      )}
+      
+      {!loading && linkedResources.length > 0 && (
+        <div className="flex justify-center space-x-4 mt-4">
+          <button
+            onClick={handlePrevPage}
+            disabled={currentPage === 0}
+            className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="px-4 py-2 text-gray-700 dark:text-gray-300">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <button
+            onClick={handleNextPage}
+            disabled={currentPage >= totalPages - 1}
+            className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+          >
+            Next
+          </button>
         </div>
       )}
     </div>

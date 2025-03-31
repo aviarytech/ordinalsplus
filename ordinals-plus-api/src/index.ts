@@ -399,20 +399,14 @@ const app = new Elysia()
       {
         id: 'mainnet',
         name: 'Bitcoin Mainnet',
-        enabled: process.env.ORD_NODE_URL?.includes('mainnet') ?? false,
+        enabled: true, // Enable mainnet by default since we have ORDISCAN_API_KEY
         description: 'The main Bitcoin network'
       },
       {
-        id: 'testnet',
-        name: 'Bitcoin Testnet',
-        enabled: process.env.ORD_NODE_URL?.includes('testnet') ?? false,
-        description: 'The Bitcoin test network'
-      },
-      {
-        id: 'signet',
-        name: 'Bitcoin Signet',
-        enabled: process.env.ORD_NODE_URL?.includes('signet') ?? false,
-        description: 'The Bitcoin signet network'
+        id: 'ordRegTestNode',
+        name: 'Ord RegTest Node',
+        enabled: !!process.env.ORD_NODE_URL, // Enable if ORD_NODE_URL is set
+        description: 'Local Ord node for development'
       }
     ].filter(network => network.enabled);
 
@@ -420,6 +414,37 @@ const app = new Elysia()
       networks,
       defaultNetwork: networks[0]?.id || 'mainnet'
     };
+  })
+  // Add health endpoint
+  .get('/api/health', async () => {
+    try {
+      // Check Ord node status
+      const ordStatus = await getOrdNodeStatus();
+      
+      // Check Ordiscan status
+      const ordiscanStatus = await getOrdiscanStatus();
+      
+      return {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        services: {
+          ordNode: ordStatus.status === 'available',
+          ordiscan: ordiscanStatus.status === 'available'
+        },
+        version: '1.0.0'
+      };
+    } catch (error) {
+      console.error('Error checking health:', error);
+      return {
+        status: 'unhealthy',
+        timestamp: new Date().toISOString(),
+        services: {
+          ordNode: false,
+          ordiscan: false
+        },
+        version: '1.0.0'
+      };
+    }
   })
   .listen(port);
 

@@ -1,14 +1,11 @@
 import LinkedResourceCreator from '../components/LinkedResourceCreator';
 import LinkedResourceList from '../components/LinkedResourceList';
-import { NetworkSelector } from '../components/NetworkSelector';
 import { useState } from 'react';
-import { Filter, ListFilter, ImageIcon, AlertCircle, FileText } from 'lucide-react';
-import { useNetwork } from '../context/NetworkContext';
+import { Filter, ListFilter, ImageIcon, FileText } from 'lucide-react';
 
 const LinkedResourcesPage = () => {
   const [viewMode, setViewMode] = useState<'create' | 'browse'>('browse');
   const [contentTypeFilter, setContentTypeFilter] = useState<string | null>(null);
-  const { currentNetwork, setNetwork, isConnected } = useNetwork();
 
   return (
     <div className="max-w-7xl mx-auto p-5">
@@ -16,10 +13,6 @@ const LinkedResourcesPage = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">Bitcoin Ordinals DIDs</h1>
           <div className="flex space-x-2">
-            <NetworkSelector 
-              currentNetwork={currentNetwork} 
-              onNetworkChange={setNetwork} 
-            />
             <button 
               onClick={() => setViewMode('create')}
               className={`px-4 py-2 rounded-full flex items-center ${
@@ -49,22 +42,6 @@ const LinkedResourcesPage = () => {
             ? 'Create new DIDs and linked resources on Bitcoin Ordinals' 
             : 'Browse DIDs and linked resources on the Bitcoin Ordinals network'}
         </p>
-        
-        {!isConnected && (
-          <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <AlertCircle className="h-5 w-5 text-yellow-400" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-yellow-700 dark:text-yellow-200">
-                  Cannot connect to {currentNetwork === 'ORDISCAN' ? 'Ordiscan Mainnet' : 'Local Ord Node'}.
-                  Please ensure the service is running or try switching networks.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
       </header>
       
       {viewMode === 'browse' && (
