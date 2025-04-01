@@ -26,8 +26,21 @@ The `ResourceResolver` class provides methods for working with DID Linked Resour
 - Work with resource collections
 - Handle heritage relationships (parent/child)
 - Access resources controlled by the same wallet
+- Support for multiple provider types (Ordiscan, Ord)
+- Automatic conversion from resource IDs to inscription IDs
+- Comprehensive error handling for invalid IDs and network issues
 
-### 3. Utility Functions
+### 3. Provider System
+
+The library includes a flexible provider system:
+
+- Abstract provider interface for blockchain interaction
+- Factory pattern for provider creation
+- Support for Ordiscan and Ord node providers
+- Extensible design for additional providers
+- Mock provider for testing
+
+### 4. Utility Functions
 
 The library includes various utility functions for:
 
@@ -44,6 +57,10 @@ ordinalsplus/
 │   ├── did/                 # DID classes
 │   │   └── btco-did.ts      # BtcoDid implementation
 │   ├── resources/           # Resource classes
+│   │   ├── providers/       # Provider implementations
+│   │   │   ├── provider-factory.ts
+│   │   │   ├── ordiscan-provider.ts
+│   │   │   └── ord-node-provider.ts
 │   │   └── resource-resolver.ts # ResourceResolver implementation
 │   ├── types/               # TypeScript types
 │   │   └── index.ts         # Type definitions
@@ -66,7 +83,7 @@ ordinalsplus/
 ## Usage Example
 
 ```typescript
-import OrdinalsPlus, { BtcoDid, ResourceResolver } from 'ordinalsplus';
+import OrdinalsPlus, { BtcoDid, ResourceResolver, ProviderType } from 'ordinalsplus';
 
 // Working with DIDs
 const did = new BtcoDid('did:btco:1234567890');
@@ -76,9 +93,14 @@ console.log(`Sat Number: ${did.getSatNumber()}`);
 // Validate DIDs
 const isValid = OrdinalsPlus.utils.isValidBtcoDid('did:btco:1234567890');
 
-// Working with resources
-const resolver = new ResourceResolver();
-const resourceInfo = await resolver.resolveInfo('did:btco:1234567890/0');
+// Working with resources using Ordiscan provider
+const resolver = new ResourceResolver({
+    type: ProviderType.ORDISCAN,
+    options: {
+        apiKey: 'your-api-key',
+        apiEndpoint: 'https://api.ordiscan.com'
+    }
+});
 
 // Get resource content
 const resource = await resolver.resolve('did:btco:1234567890/0');
@@ -86,9 +108,16 @@ console.log(`Content Type: ${resource.contentType}`);
 console.log(`Content: ${JSON.stringify(resource.content)}`);
 
 // Working with collections
-const collectionPage = await resolver.resolveCollection('did:btco:1234567890/0');
-console.log(`Items: ${collectionPage.items.length}`);
-console.log(`Total: ${collectionPage.total}`);
+const collection = await resolver.resolveCollection();
+console.log(`Items: ${collection.length}`);
+
+// Using Ord node provider
+const ordResolver = new ResourceResolver({
+    type: ProviderType.ORD,
+    options: {
+        nodeUrl: 'http://localhost:8080'
+    }
+});
 ```
 
 ## Development
@@ -107,9 +136,23 @@ Or use the build script:
 ./build.sh
 ```
 
+## Testing
+
+The library includes comprehensive testing:
+
+- Unit tests for core functionality
+- Mock provider for testing
+- Test cases for all major features
+- Error handling verification
+- Provider type validation
+- Test coverage for ResourceResolver and Provider Factory
+
 ## Next Steps
 
 - Add more examples for different resource types
 - Implement caching for API responses
 - Add support for creating and publishing DIDs and resources
-- Create a browser-friendly build for web applications 
+- Create a browser-friendly build for web applications
+- Add more provider implementations
+- Enhance error handling and recovery
+- Add performance optimizations for large collections 

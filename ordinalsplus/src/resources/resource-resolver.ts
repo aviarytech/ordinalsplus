@@ -1,5 +1,5 @@
 import { ERROR_CODES } from '../utils/constants';
-import { LinkedResource, ResourceInfo } from '../types';
+import { Inscription, LinkedResource, ResourceInfo } from '../types';
 import { isValidResourceId, parseResourceId } from '../utils/validators';
 import { ProviderFactory, ProviderConfig } from './providers/provider-factory';
 
@@ -9,13 +9,15 @@ export interface ResourceResolverOptions {
 }
 
 export interface ResourceApiProvider {
-    resolve(inscriptionId: string): Promise<LinkedResource>;
-    resolveInfo(inscriptionId: string): Promise<ResourceInfo>;
-    resolveCollection(options: {
+    resolve(resourceId: string): Promise<LinkedResource>;
+    resolveInscription(inscriptionId: string): Promise<Inscription>;
+    resolveInfo(resourceId: string): Promise<ResourceInfo>;
+    resolveCollection(did: string, options: {
         type?: string;
         limit?: number;
         offset?: number;
     }): Promise<LinkedResource[]>;
+    getSatInfo(satNumber: string): Promise<{ inscription_ids: string[] }>;
 }
 
 export class ResourceResolver {
@@ -39,8 +41,23 @@ export class ResourceResolver {
             if (!parsed) {
                 throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: Could not parse resource identifier`);
             }
-            const inscriptionId = `${parsed.satNumber}i${parsed.index}`;
-            return await this.provider.resolve(inscriptionId);
+
+            const satInfo = await this.provider.getSatInfo(parsed.satNumber);
+            if (satInfo.inscription_ids.length === 0) {
+                throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No inscription found at index ${parsed.index}`);
+            }
+
+            const inscriptionId = satInfo.inscription_ids[parsed.index];
+            const inscription = await this.provider.resolveInscription(inscriptionId);
+            return {
+                id: resourceId,
+                type: inscription.content_type || 'Unknown',
+                inscriptionId: inscriptionId,
+                didReference: parsed.did,
+                contentType: inscription.content_type || 'Unknown',
+                content: inscription.content,
+                sat: inscription.sat
+            };
         } catch (error) {
             if (error instanceof Error) {
                 throw error;
@@ -59,7 +76,15 @@ export class ResourceResolver {
             if (!parsed) {
                 throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: Could not parse resource identifier`);
             }
-            const inscriptionId = `${parsed.satNumber}i${parsed.index}`;
+
+            // First get the sat info to get inscription IDs
+            const satInfo = await this.provider.getSatInfo(parsed.satNumber);
+            const inscriptionId = satInfo.inscription_ids[parsed.index];
+            if (!inscriptionId) {
+                throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No inscription found at index ${parsed.index}`);
+            }
+
+            // Get the resource info using the inscription ID
             return await this.provider.resolveInfo(inscriptionId);
         } catch (error) {
             if (error instanceof Error) {
@@ -69,13 +94,13 @@ export class ResourceResolver {
         }
     }
 
-    async resolveCollection(options: {
+    async resolveCollection(did: string, options: {
         type?: string;
         limit?: number;
         offset?: number;
     } = {}): Promise<LinkedResource[]> {
         try {
-            return await this.provider.resolveCollection(options);
+            return await this.provider.resolveCollection(did, options);
         } catch (error) {
             if (error instanceof Error) {
                 throw error;

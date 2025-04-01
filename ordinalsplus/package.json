@@ -34,7 +34,8 @@
     "test:bail": "bun test --bail",
     "prepare": "npm run build",
     "prepublishOnly": "npm run test && npm run lint",
-    "example": "bun examples/basic-usage.ts"
+    "example": "bun examples/basic-usage.ts",
+    "example:resolve": "bun run examples/resource-resolution.ts"
   },
   "keywords": [
     "bitcoin",
@@ -66,7 +67,8 @@
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.57.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.2.2",
+    "bun-types": "latest"
   },
   "engines": {
     "node": ">=18.0.0"
