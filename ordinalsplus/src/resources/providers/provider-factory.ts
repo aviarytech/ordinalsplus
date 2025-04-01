@@ -1,4 +1,4 @@
-import { ResourceApiProvider } from '../resource-resolver';
+import { ResourceProvider } from './types';
 import { OrdiscanProvider, OrdiscanProviderOptions } from './ordiscan-provider';
 import { OrdNodeProvider, OrdNodeProviderOptions } from './ord-node-provider';
 
@@ -13,7 +13,7 @@ export interface ProviderConfig {
 }
 
 export class ProviderFactory {
-    static createProvider(config: ProviderConfig): ResourceApiProvider {
+    static createProvider(config: ProviderConfig): ResourceProvider {
         switch (config.type) {
             case ProviderType.ORDISCAN:
                 return new OrdiscanProvider(config.options as OrdiscanProviderOptions);

@@ -1,8 +1,9 @@
-import { ResourceApiProvider } from '../resource-resolver';
 import { Inscription, LinkedResource, ResourceInfo } from '../../types';
 import { ERROR_CODES } from '../../utils/constants';
 import { extractIndexFromInscription, parseResourceId, parseBtcoDid } from '../../utils/validators';
 import { fetchWithTimeout } from '../../utils/fetch-utils';
+import { ResourceProvider, ResourceCrawlOptions, ResourceBatch } from './types';
+import { createLinkedResourceFromInscription } from '../../did/did-utils';
 
 export interface OrdNodeProviderOptions {
     nodeUrl?: string;
@@ -14,15 +15,19 @@ export interface OrdNodeApiResponse<T> {
     data: T;
 }
 
-export class OrdNodeProvider implements ResourceApiProvider {
+export class OrdNodeProvider implements ResourceProvider {
     private readonly nodeUrl: string;
     private readonly apiEndpoint: string;
     private readonly timeout: number;
+    private readonly baseUrl: string;
+    private readonly batchSize: number;
 
-    constructor(options: OrdNodeProviderOptions = {}) {
+    constructor(options: OrdNodeProviderOptions = {}, baseUrl: string = 'http://localhost:8080', batchSize: number = 100) {
         this.nodeUrl = options.nodeUrl || 'http://localhost:3000';
         this.apiEndpoint = options.apiEndpoint || this.nodeUrl;
         this.timeout = options.timeout || 5000;
+        this.baseUrl = baseUrl;
+        this.batchSize = batchSize;
     }
 
     protected async fetchApi<T>(endpoint: string): Promise<OrdNodeApiResponse<T>> {
@@ -142,6 +147,88 @@ export class OrdNodeProvider implements ResourceApiProvider {
             sat: inscription.sat,
             inscriptionId: inscription.id,
             didReference: `did:btco:${inscription.sat}`
+        };
+    }
+
+    async *getAllResources(options: ResourceCrawlOptions = {}): AsyncGenerator<LinkedResource[]> {
+        const {
+            batchSize = this.batchSize,
+            startFrom = 0,
+            maxResources,
+            filter
+        } = options;
+
+        let currentCursor = startFrom;
+        let processedCount = 0;
+
+        while (true) {
+            if (maxResources && processedCount >= maxResources) {
+                break;
+            }
+
+            const batch = await this.fetchResourceBatch(currentCursor, batchSize);
+            
+            if (!batch.resources.length) {
+                break;
+            }
+
+            const filteredResources = filter
+                ? batch.resources.filter(filter)
+                : batch.resources;
+
+            if (filteredResources.length > 0) {
+                yield filteredResources;
+                processedCount += filteredResources.length;
+            }
+
+            if (!batch.hasMore) {
+                break;
+            }
+
+            currentCursor = batch.nextCursor || currentCursor + batchSize;
+        }
+    }
+
+    private async fetchResourceBatch(cursor: number, size: number): Promise<ResourceBatch> {
+        interface InscriptionListResponse {
+            ids: string[];
+            more: boolean;
+            page_index: number;
+        }
+
+        interface InscriptionResponse {
+            inscription_id: string;
+            sat: number;
+            content_type: string;
+            content: any;
+        }
+
+        // Calculate page number (0-based) from cursor and size
+        const page = Math.floor(cursor / size);
+        
+        // Fetch list of inscription IDs for the current page
+        const listResponse = await this.fetchApi<InscriptionListResponse>(`/inscriptions/${page}`);
+
+        // Fetch details for each inscription in the batch
+        const resources = await Promise.all(
+            listResponse.data.ids.map(async (id) => {
+                const inscriptionResponse = await this.fetchApi<InscriptionResponse>(`/inscription/${id}`);
+                const inscription = inscriptionResponse.data;
+                
+                const inscriptionObj = {
+                    id: inscription.inscription_id,
+                    sat: inscription.sat,
+                    content_type: inscription.content_type,
+                    content: inscription.content
+                };
+                return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type);
+            })
+        );
+
+        return {
+            resources,
+            nextCursor: listResponse.data.more ? cursor + size : undefined,
+            hasMore: listResponse.data.more
         };
     }
 } 

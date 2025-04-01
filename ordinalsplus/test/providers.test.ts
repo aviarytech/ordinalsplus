@@ -16,7 +16,7 @@ const mockResponses = {
         satInfo: {
             data: {
                 data: {
-                    inscription_ids: ['inscription1', 'inscription2']
+                    inscription_ids: ['inscription1i0', 'inscription2i1']
                 }
             }
         },
@@ -27,15 +27,38 @@ const mockResponses = {
                     sat: parseInt(TEST_SAT_NUMBER),
                     content_type: 'application/json',
                     content: TEST_CONTENT,
-                    timestamp: TEST_TIMESTAMP
+                    timestamp: TEST_TIMESTAMP,
+                    number: 0
                 }
+            }
+        },
+        inscriptionsList: {
+            data: {
+                data: [
+                    {
+                        inscription_id: TEST_INSCRIPTION_ID,
+                        sat: parseInt(TEST_SAT_NUMBER),
+                        content_type: 'application/json',
+                        content: TEST_CONTENT,
+                        timestamp: TEST_TIMESTAMP,
+                        number: 0
+                    },
+                    {
+                        inscription_id: 'inscription2i1',
+                        sat: parseInt(TEST_SAT_NUMBER),
+                        content_type: 'text/plain',
+                        content: 'plain text',
+                        timestamp: TEST_TIMESTAMP,
+                        number: 1
+                    }
+                ]
             }
         }
     },
     ordNode: {
         satInfo: {
             data: {
-                inscription_ids: ['inscription1', 'inscription2']
+                inscription_ids: ['inscription1i0', 'inscription2i1']
             }
         },
         inscription: {
@@ -44,7 +67,15 @@ const mockResponses = {
                 sat: parseInt(TEST_SAT_NUMBER),
                 content_type: 'application/json',
                 content: TEST_CONTENT,
-                timestamp: TEST_TIMESTAMP
+                timestamp: TEST_TIMESTAMP,
+                number: 0
+            }
+        },
+        inscriptionsList: {
+            data: {
+                ids: ['inscription1i0', 'inscription2i1'],
+                more: true,
+                page_index: 0
             }
         }
     }
@@ -84,7 +115,7 @@ describe('Provider System', () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordiscan.satInfo);
 
                 const result = await provider.getSatInfo(TEST_SAT_NUMBER);
-                expect(result).toEqual({ inscription_ids: ['inscription1', 'inscription2'] });
+                expect(result).toEqual({ inscription_ids: ['inscription1i0', 'inscription2i1'] });
             });
 
             it('should handle network errors', async () => {
@@ -102,7 +133,7 @@ describe('Provider System', () => {
             it('should return inscription data for a valid inscription ID', async () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordiscan.inscription);
 
-                const result = await provider.resolveInscription('inscription1');
+                const result = await provider.resolveInscription('inscription1i0');
                 expect(result).toEqual({
                     id: TEST_INSCRIPTION_ID,
                     sat: parseInt(TEST_SAT_NUMBER),
@@ -116,7 +147,7 @@ describe('Provider System', () => {
                     new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
                 );
 
-                await expect(provider.resolveInscription('inscription1'))
+                await expect(provider.resolveInscription('inscription1i0'))
                     .rejects
                     .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
             });
@@ -126,7 +157,7 @@ describe('Provider System', () => {
             it('should return resource info for a valid inscription ID', async () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordiscan.inscription);
 
-                const result = await provider.resolveInfo('inscription1');
+                const result = await provider.resolveInfo('inscription1i0');
                 expect(result).toEqual(expectedResults.resourceInfo);
             });
 
@@ -135,7 +166,7 @@ describe('Provider System', () => {
                     new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
                 );
 
-                await expect(provider.resolveInfo('inscription1'))
+                await expect(provider.resolveInfo('inscription1i0'))
                     .rejects
                     .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
             });
@@ -188,13 +219,96 @@ describe('Provider System', () => {
                     .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
             });
         });
+
+        describe('getAllResources', () => {
+            it('should yield resource batches', async () => {
+                // Mock the inscriptions list response
+                jest.spyOn(provider as any, 'fetchApi')
+                    .mockResolvedValueOnce(mockResponses.ordiscan.inscriptionsList);
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                const result = await generator.next();
+
+                expect(result.value).toHaveLength(2);
+                expect(result.value[0].type).toBe('application/json');
+                expect(result.value[1].type).toBe('text/plain');
+                expect(result.done).toBe(false);
+            });
+
+            it('should apply filter when provided', async () => {
+                // Mock the inscriptions list response
+                jest.spyOn(provider as any, 'fetchApi')
+                    .mockResolvedValueOnce(mockResponses.ordiscan.inscriptionsList);
+
+                const generator = provider.getAllResources({
+                    batchSize: 2,
+                    filter: (resource) => resource.type === 'application/json'
+                });
+                const result = await generator.next();
+
+                expect(result.value).toHaveLength(1);
+                expect(result.value[0].type).toBe('application/json');
+            });
+
+            it('should handle network errors', async () => {
+                jest.spyOn(provider as any, 'fetchApi').mockRejectedValueOnce(
+                    new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
+                );
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                await expect(generator.next()).rejects.toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
+            });
+
+            it('should handle empty response', async () => {
+                jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce({
+                    data: {
+                        data: []
+                    }
+                });
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                const result = await generator.next();
+
+                expect(result.value).toBeUndefined();
+                expect(result.done).toBe(true);
+            });
+
+            it('should handle pagination correctly', async () => {
+                // Mock first page
+                jest.spyOn(provider as any, 'fetchApi')
+                    .mockResolvedValueOnce(mockResponses.ordiscan.inscriptionsList)
+                    // Mock second page
+                    .mockResolvedValueOnce({
+                        data: {
+                            data: [
+                                {
+                                    inscription_id: 'inscription3i2',
+                                    sat: parseInt(TEST_SAT_NUMBER),
+                                    content_type: 'application/json',
+                                    content: TEST_CONTENT,
+                                    timestamp: TEST_TIMESTAMP,
+                                    number: 2
+                                }
+                            ]
+                        }
+                    });
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                const firstBatch = await generator.next();
+                const secondBatch = await generator.next();
+
+                expect(firstBatch.value).toHaveLength(2);
+                expect(secondBatch.value).toHaveLength(1);
+                expect(secondBatch.done).toBe(false);
+            });
+        });
     });
 
     describe('OrdNodeProvider', () => {
         let provider: OrdNodeProvider;
 
         beforeEach(() => {
-            provider = new OrdNodeProvider();
+            provider = new OrdNodeProvider({ nodeUrl: 'http://localhost:8080' });
         });
 
         describe('getSatInfo', () => {
@@ -202,7 +316,7 @@ describe('Provider System', () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordNode.satInfo);
 
                 const result = await provider.getSatInfo(TEST_SAT_NUMBER);
-                expect(result).toEqual({ inscription_ids: ['inscription1', 'inscription2'] });
+                expect(result).toEqual({ inscription_ids: ['inscription1i0', 'inscription2i1'] });
             });
 
             it('should handle network errors', async () => {
@@ -220,7 +334,7 @@ describe('Provider System', () => {
             it('should return inscription data for a valid inscription ID', async () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordNode.inscription);
 
-                const result = await provider.resolveInscription('inscription1');
+                const result = await provider.resolveInscription('inscription1i0');
                 expect(result).toEqual({
                     id: TEST_INSCRIPTION_ID,
                     sat: parseInt(TEST_SAT_NUMBER),
@@ -234,7 +348,7 @@ describe('Provider System', () => {
                     new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
                 );
 
-                await expect(provider.resolveInscription('inscription1'))
+                await expect(provider.resolveInscription('inscription1i0'))
                     .rejects
                     .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
             });
@@ -244,7 +358,7 @@ describe('Provider System', () => {
             it('should return resource info for a valid inscription ID', async () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordNode.inscription);
 
-                const result = await provider.resolveInfo('inscription1');
+                const result = await provider.resolveInfo('inscription1i0');
                 expect(result).toEqual(expectedResults.resourceInfo);
             });
 
@@ -253,7 +367,7 @@ describe('Provider System', () => {
                     new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
                 );
 
-                await expect(provider.resolveInfo('inscription1'))
+                await expect(provider.resolveInfo('inscription1i0'))
                     .rejects
                     .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
             });
@@ -304,6 +418,97 @@ describe('Provider System', () => {
                 await expect(provider.resolveCollection('did:btco:1234567890'))
                     .rejects
                     .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
+            });
+        });
+
+        describe('getAllResources', () => {
+            it('should yield resource batches', async () => {
+                // Mock the inscriptions list response
+                jest.spyOn(provider as any, 'fetchApi')
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscriptionsList)
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscription)
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscription);
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                const result = await generator.next();
+
+                expect(result.value).toHaveLength(2);
+                expect(result.value[0].type).toBe('application/json');
+                expect(result.value[1].type).toBe('application/json');
+                expect(result.done).toBe(false);
+            });
+
+            it('should apply filter when provided', async () => {
+                // Mock the inscriptions list response
+                jest.spyOn(provider as any, 'fetchApi')
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscriptionsList)
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscription)
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscription);
+
+                const generator = provider.getAllResources({
+                    batchSize: 2,
+                    filter: (resource) => resource.type === 'application/json'
+                });
+                const result = await generator.next();
+
+                expect(result.value).toHaveLength(2);
+                expect(result.value[0].type).toBe('application/json');
+            });
+
+            it('should handle network errors', async () => {
+                jest.spyOn(provider as any, 'fetchApi').mockRejectedValueOnce(
+                    new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
+                );
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                await expect(generator.next()).rejects.toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
+            });
+
+            it('should handle empty response', async () => {
+                jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce({
+                    data: {
+                        ids: [],
+                        more: false,
+                        page_index: 0
+                    }
+                });
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                const result = await generator.next();
+
+                expect(result.value).toBeUndefined();
+                expect(result.done).toBe(true);
+            });
+
+            it('should handle pagination correctly', async () => {
+                // Mock first page
+                jest.spyOn(provider as any, 'fetchApi')
+                    .mockResolvedValueOnce({
+                        data: {
+                            ids: ['inscription1i0', 'inscription2i1'],
+                            more: true,
+                            page_index: 0
+                        }
+                    })
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscription)
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscription)
+                    // Mock second page
+                    .mockResolvedValueOnce({
+                        data: {
+                            ids: ['inscription3i2'],
+                            more: false,
+                            page_index: 1
+                        }
+                    })
+                    .mockResolvedValueOnce(mockResponses.ordNode.inscription);
+
+                const generator = provider.getAllResources({ batchSize: 2 });
+                const firstBatch = await generator.next();
+                const secondBatch = await generator.next();
+
+                expect(firstBatch.value).toHaveLength(2);
+                expect(secondBatch.value).toHaveLength(1);
+                expect(secondBatch.done).toBe(false);
             });
         });
     });

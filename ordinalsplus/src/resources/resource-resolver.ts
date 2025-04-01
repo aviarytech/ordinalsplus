@@ -2,28 +2,17 @@ import { ERROR_CODES } from '../utils/constants';
 import { Inscription, LinkedResource, ResourceInfo } from '../types';
 import { isValidResourceId, parseResourceId } from '../utils/validators';
 import { ProviderFactory, ProviderConfig } from './providers/provider-factory';
+import { ResourceProvider } from './providers/types';
 
 export interface ResourceResolverOptions {
     apiEndpoint?: string;
     timeout?: number;
 }
 
-export interface ResourceApiProvider {
-    resolve(resourceId: string): Promise<LinkedResource>;
-    resolveInscription(inscriptionId: string): Promise<Inscription>;
-    resolveInfo(resourceId: string): Promise<ResourceInfo>;
-    resolveCollection(did: string, options: {
-        type?: string;
-        limit?: number;
-        offset?: number;
-    }): Promise<LinkedResource[]>;
-    getSatInfo(satNumber: string): Promise<{ inscription_ids: string[] }>;
-}
-
 export class ResourceResolver {
     private readonly apiEndpoint: string;
     private readonly timeout: number;
-    private readonly provider: ResourceApiProvider;
+    private readonly provider: ResourceProvider;
 
     constructor(config: ProviderConfig, options: ResourceResolverOptions = {}) {
         this.provider = ProviderFactory.createProvider(config);

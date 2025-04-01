@@ -1,8 +1,9 @@
-import { ResourceApiProvider } from '../resource-resolver';
 import { Inscription, LinkedResource, ResourceInfo } from '../../types';
 import { ERROR_CODES } from '../../utils/constants';
 import { extractIndexFromInscription, parseResourceId, parseBtcoDid } from '../../utils/validators';
 import { fetchWithTimeout } from '../../utils/fetch-utils';
+import { ResourceProvider, ResourceCrawlOptions, ResourceBatch } from './types';
+import { createLinkedResourceFromInscription } from '../../did/did-utils';
 
 export interface OrdiscanProviderOptions {
     apiKey: string;
@@ -16,15 +17,19 @@ export interface OrdiscanApiResponse<T> {
     };
 }
 
-export class OrdiscanProvider implements ResourceApiProvider {
+export class OrdiscanProvider implements ResourceProvider {
     private readonly apiKey: string;
     private readonly apiEndpoint: string;
     private readonly timeout: number;
+    private readonly baseUrl: string;
+    private readonly batchSize: number;
 
-    constructor(options: OrdiscanProviderOptions) {
+    constructor(options: OrdiscanProviderOptions, baseUrl: string = 'https://ordiscan.com/api', batchSize: number = 100) {
         this.apiKey = options.apiKey;
         this.apiEndpoint = options.apiEndpoint || 'https://api.ordiscan.com/v1';
         this.timeout = options.timeout || 5000;
+        this.baseUrl = baseUrl;
+        this.batchSize = batchSize;
     }
 
     protected async fetchApi<T>(endpoint: string): Promise<OrdiscanApiResponse<T>> {
@@ -147,6 +152,82 @@ export class OrdiscanProvider implements ResourceApiProvider {
             sat: inscription.sat,
             inscriptionId: inscription.id,
             didReference: `did:btco:${inscription.sat}`
+        };
+    }
+
+    async *getAllResources(options: ResourceCrawlOptions = {}): AsyncGenerator<LinkedResource[]> {
+        const {
+            batchSize = this.batchSize,
+            startFrom = 0,
+            maxResources,
+            filter
+        } = options;
+
+        let currentCursor = startFrom;
+        let processedCount = 0;
+
+        while (true) {
+            if (maxResources && processedCount >= maxResources) {
+                break;
+            }
+
+            const batch = await this.fetchResourceBatch(currentCursor, batchSize);
+            
+            if (!batch.resources.length) {
+                break;
+            }
+
+            const filteredResources = filter
+                ? batch.resources.filter(filter)
+                : batch.resources;
+
+            if (filteredResources.length > 0) {
+                yield filteredResources;
+                processedCount += filteredResources.length;
+            }
+
+            if (!batch.hasMore) {
+                break;
+            }
+
+            currentCursor = batch.nextCursor || currentCursor + batchSize;
+        }
+    }
+
+    private async fetchResourceBatch(cursor: number, size: number): Promise<ResourceBatch> {
+        interface InscriptionResponse {
+            inscription_id: string;
+            inscription_number: number;
+            content_type: string;
+            owner_address: string;
+            owner_output: string;
+            genesis_address: string;
+            genesis_output: string;
+            timestamp: string;
+            sat: number;
+            content_url: string;
+        }
+
+        const response = await this.fetchApi<InscriptionResponse[]>(`/inscriptions?offset=${cursor}&limit=${size}`);
+
+        const resources = response.data.data.map(inscription => {
+            const inscriptionObj = {
+                id: inscription.inscription_id,
+                sat: inscription.sat,
+                content_type: inscription.content_type,
+                content: null // Content will be fetched on demand
+            };
+            return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type);
+        });
+
+        // Since the API doesn't return total count, we'll assume there are more if we got a full batch
+        const hasMore = resources.length === size;
+        const nextCursor = hasMore ? cursor + size : undefined;
+
+        return {
+            resources,
+            nextCursor,
+            hasMore
         };
     }
 } 
