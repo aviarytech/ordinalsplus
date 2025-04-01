@@ -21,7 +21,7 @@ export class BtcoDid {
         if (!parsed) {
             throw new Error(`${ERROR_CODES.INVALID_DID}: Could not parse sat number`);
         }
-        return parsed.satNumber;
+        return parseInt(parsed.satNumber, 10);
     }
 
     async resolve(): Promise<LinkedResource> {

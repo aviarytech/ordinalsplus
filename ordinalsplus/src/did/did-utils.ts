@@ -55,7 +55,7 @@ export function createLinkedResourceFromInscription(inscription: Inscription, re
         didReference,
         contentType: inscription.content_type || 'application/json',
         content: wrapContent(inscription.content, inscription.content_type),
-        sat: parseInt(satNumber, 10)
+        sat: satNumber
     };
 }
 

@@ -95,7 +95,7 @@ describe('createLinkedResourceFromInscription', () => {
   });
 
   it('should throw error when no sat number', () => {
-    const inscription: Inscription = {
+    const inscription: any = {
       id: '123i0',
       content: { name: 'test' },
       content_type: 'application/json'
