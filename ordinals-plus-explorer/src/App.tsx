@@ -13,15 +13,14 @@ function App() {
             <div className="font-bold text-xl">Ordinals Plus Explorer</div>
             <div className="flex space-x-4">
               <Link to="/" className="text-white hover:text-orange-200 transition-colors">Explorer</Link>
-              <Link to="/resources" className="text-white hover:text-orange-200 transition-colors">Linked Resources</Link>
               <Link to="/settings" className="text-white hover:text-orange-200 transition-colors">Settings</Link>
             </div>
           </div>
         </nav>
         
         <Routes>
-          <Route path="/" element={<ExplorerPage />} />
-          <Route path="/resources" element={<LinkedResourcesPage />} />
+          <Route path="/" element={<LinkedResourcesPage />} />
+          <Route path="/explorer" element={<ExplorerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>

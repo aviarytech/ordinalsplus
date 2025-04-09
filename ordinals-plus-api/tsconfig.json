@@ -2,8 +2,8 @@
   "compilerOptions": {
     // Environment setup & latest features
     "lib": ["esnext"],
-    "target": "ESNext",
-    "module": "ESNext",
+    "target": "es2020",
+    "module": "esnext",
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "allowJs": true,
@@ -31,7 +31,11 @@
     "noPropertyAccessFromIndexSignature": false,
 
     // Output directory
-    "outDir": "dist"
+    "outDir": "dist",
+
+    "types": ["bun-types"],
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

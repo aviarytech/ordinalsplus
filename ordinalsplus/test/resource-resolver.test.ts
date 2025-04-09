@@ -1,172 +1,98 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { jest } from '@jest/globals';
 import { ResourceResolver } from '../src/resources/resource-resolver';
-import { OrdiscanProvider } from '../src/resources/providers/ordiscan-provider';
-import { OrdNodeProvider } from '../src/resources/providers/ord-node-provider';
-import { ERROR_CODES } from '../src/utils/constants';
-import { LinkedResource } from '../src/types';
-import { ProviderType, ProviderFactory } from '../src/resources/providers/provider-factory';
-
-// Test data constants
-const TEST_INSCRIPTION_ID = 'abc123i0';
-const TEST_SAT_NUMBER = '1234567890';
-const TEST_CONTENT = { value: 'test data' };
-const TEST_TIMESTAMP = '2024-01-01T00:00:00Z';
-const TEST_RESOURCE_ID = `did:btco:${TEST_SAT_NUMBER}/0`;
-
-// Expected test results
-const expectedResults = {
-    resource: {
-        id: TEST_RESOURCE_ID,
-        type: 'application/json',
-        contentType: 'application/json',
-        content: TEST_CONTENT,
-        sat: parseInt(TEST_SAT_NUMBER),
-        inscriptionId: TEST_INSCRIPTION_ID,
-        didReference: `did:btco:${TEST_SAT_NUMBER}`
-    },
-    resourceInfo: {
-        id: TEST_INSCRIPTION_ID,
-        type: 'application/json',
-        contentType: 'application/json',
-        createdAt: TEST_TIMESTAMP,
-        updatedAt: TEST_TIMESTAMP
-    }
-};
+import { LinkedResource, ResourceInfo } from '../src/types';
+import { ProviderFactory } from '../src/resources/providers/provider-factory';
 
 describe('ResourceResolver', () => {
-    describe('Ordiscan Provider', () => {
-        let provider: OrdiscanProvider;
-        let resolver: ResourceResolver;
+  let resolver: ResourceResolver;
+  let mockProvider: any;
 
-        beforeEach(() => {
-            provider = new OrdiscanProvider({ apiKey: 'test-api-key' });
+  beforeEach(() => {
+    // Create a mock provider
+    mockProvider = {
+      getSatInfo: jest.fn(),
+      resolveInscription: jest.fn()
+    };
 
-            // Mock provider methods
-            jest.spyOn(provider, 'getSatInfo').mockResolvedValue({
-                inscription_ids: [TEST_INSCRIPTION_ID]
-            });
+    // Mock the provider factory to return our mock provider
+    jest.spyOn(ProviderFactory, 'createProvider').mockReturnValue(mockProvider);
 
-            jest.spyOn(provider, 'resolveInscription').mockResolvedValue({
-                id: TEST_INSCRIPTION_ID,
-                sat: parseInt(TEST_SAT_NUMBER),
-                content_type: 'application/json',
-                content: TEST_CONTENT
-            });
+    resolver = new ResourceResolver({
+      apiKey: 'test-key',
+      apiEndpoint: 'https://test.ordinalsplus.com'
+    });
+  });
 
-            jest.spyOn(provider, 'resolveInfo').mockResolvedValue(expectedResults.resourceInfo);
+  describe('resolveResource', () => {
+    it('should resolve resource from provider', async () => {
+      const mockResource: LinkedResource = {
+        id: 'did:btco:123456789/0',
+        type: 'application/json',
+        contentType: 'application/json',
+        content_url: 'https://ordinalsplus.com/resource/1',
+        inscriptionId: '123i0',
+        didReference: 'did:btco:123456789',
+        sat: 123456789
+      };
 
-            jest.spyOn(provider, 'resolveCollection').mockResolvedValue([expectedResults.resource]);
+      // Mock the provider responses
+      mockProvider.getSatInfo.mockResolvedValueOnce({
+        inscription_ids: ['123i0']
+      });
 
-            // Mock provider factory
-            jest.spyOn(ProviderFactory, 'createProvider').mockReturnValue(provider);
+      mockProvider.resolveInscription.mockResolvedValueOnce({
+        id: '123i0',
+        sat: 123456789,
+        content_type: 'application/json',
+        content_url: 'https://ordinalsplus.com/resource/1'
+      });
 
-            resolver = new ResourceResolver({
-                type: ProviderType.ORDISCAN,
-                options: {
-                    apiKey: 'test-api-key'
-                }
-            });
-        });
-
-        it('should resolve a resource by ID', async () => {
-            const result = await resolver.resolve(TEST_RESOURCE_ID);
-            expect(result).toEqual(expectedResults.resource);
-        });
-
-        it('should resolve resource info', async () => {
-            const result = await resolver.resolveInfo(TEST_RESOURCE_ID);
-            expect(result).toEqual(expectedResults.resourceInfo);
-        });
-
-        it('should resolve a collection of resources', async () => {
-            const result = await resolver.resolveCollection(`did:btco:${TEST_SAT_NUMBER}`);
-            expect(result).toEqual([expectedResults.resource]);
-        });
-
-        it('should throw error for invalid resource ID', async () => {
-            await expect(resolver.resolve('invalid-id'))
-                .rejects
-                .toThrow(`${ERROR_CODES.INVALID_RESOURCE_ID}: Invalid resource identifier: invalid-id`);
-        });
+      const result = await resolver.resolve(mockResource.id);
+      expect(result).toEqual(mockResource);
     });
 
-    describe('Ord Provider', () => {
-        let provider: OrdNodeProvider;
-        let resolver: ResourceResolver;
+    it('should handle different content types', async () => {
+      const mockResource: LinkedResource = {
+        id: 'did:btco:123456789/0',
+        type: 'text/plain',
+        contentType: 'text/plain',
+        content_url: 'https://ordinalsplus.com/resource/1',
+        inscriptionId: '123i0',
+        didReference: 'did:btco:123456789',
+        sat: 123456789
+      };
 
-        beforeEach(() => {
-            provider = new OrdNodeProvider();
+      // Mock the provider responses
+      mockProvider.getSatInfo.mockResolvedValueOnce({
+        inscription_ids: ['123i0']
+      });
 
-            // Mock provider methods
-            jest.spyOn(provider, 'getSatInfo').mockResolvedValue({
-                inscription_ids: [TEST_INSCRIPTION_ID]
-            });
+      mockProvider.resolveInscription.mockResolvedValueOnce({
+        id: '123i0',
+        sat: 123456789,
+        content_type: 'text/plain',
+        content_url: 'https://ordinalsplus.com/resource/1'
+      });
 
-            jest.spyOn(provider, 'resolveInscription').mockResolvedValue({
-                id: TEST_INSCRIPTION_ID,
-                sat: parseInt(TEST_SAT_NUMBER),
-                content_type: 'application/json',
-                content: TEST_CONTENT
-            });
-
-            jest.spyOn(provider, 'resolveInfo').mockResolvedValue(expectedResults.resourceInfo);
-
-            jest.spyOn(provider, 'resolveCollection').mockResolvedValue([expectedResults.resource]);
-
-            // Mock provider factory
-            jest.spyOn(ProviderFactory, 'createProvider').mockReturnValue(provider);
-
-            resolver = new ResourceResolver({
-                type: ProviderType.ORD,
-                options: {
-                    nodeUrl: 'http://localhost:8080'
-                }
-            });
-        });
-
-        it('should resolve a resource by ID', async () => {
-            const result = await resolver.resolve(TEST_RESOURCE_ID);
-            expect(result).toEqual(expectedResults.resource);
-        });
-
-        it('should resolve resource info', async () => {
-            const result = await resolver.resolveInfo(TEST_RESOURCE_ID);
-            expect(result).toEqual(expectedResults.resourceInfo);
-        });
-
-        it('should resolve a collection of resources', async () => {
-            const result = await resolver.resolveCollection(`did:btco:${TEST_SAT_NUMBER}`);
-            expect(result).toEqual([expectedResults.resource]);
-        });
-
-        it('should throw error for invalid resource ID', async () => {
-            await expect(resolver.resolve('invalid-id'))
-                .rejects
-                .toThrow(`${ERROR_CODES.INVALID_RESOURCE_ID}: Invalid resource identifier: invalid-id`);
-        });
+      const result = await resolver.resolve(mockResource.id);
+      expect(result).toEqual(mockResource);
     });
 
-    describe('Provider Factory', () => {
-        it('should create an Ordiscan provider', () => {
-            const provider = new OrdiscanProvider({ apiKey: 'test-api-key' });
-            expect(provider).toBeInstanceOf(OrdiscanProvider);
-        });
-
-        it('should create an Ord provider', () => {
-            const provider = new OrdNodeProvider();
-            expect(provider).toBeInstanceOf(OrdNodeProvider);
-        });
-
-        it('should throw error for unsupported provider type', () => {
-            // Mock ProviderFactory.createProvider to throw error
-            jest.spyOn(ProviderFactory, 'createProvider').mockImplementation(() => {
-                throw new Error(`${ERROR_CODES.NETWORK_ERROR}: Unsupported provider type: unsupported`);
-            });
-
-            expect(() => {
-                // @ts-ignore
-                new ResourceResolver({ type: 'unsupported' });
-            }).toThrow(`${ERROR_CODES.NETWORK_ERROR}: Unsupported provider type: unsupported`);
-        });
+    it('should handle invalid resource ID', async () => {
+      await expect(resolver.resolve('invalid-id'))
+        .rejects
+        .toThrow('Invalid resource identifier');
     });
+
+    it('should handle no inscription found', async () => {
+      mockProvider.getSatInfo.mockResolvedValueOnce({
+        inscription_ids: []
+      });
+
+      await expect(resolver.resolve('did:btco:123456789/0'))
+        .rejects
+        .toThrow('No inscription found at index 0');
+    });
+  });
 }); 

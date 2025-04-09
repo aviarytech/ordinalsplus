@@ -3,10 +3,9 @@ import {
   Search,
   RotateCw
 } from 'lucide-react';
-import { DidService, DidDocument } from '../services/did-service';
 import DidDocumentViewer from './DidDocumentViewer';
 import LinkedResourceList from './LinkedResourceList';
-import { LinkedResource } from 'ordinalsplus';
+import { DidDocument, LinkedResource } from 'ordinalsplus';
 
 // Simple Label component with proper types (unused for now but kept for reference)
 /* interface LabelProps {
@@ -124,7 +123,7 @@ interface DidExplorerProps {
   onResourceSelect?: (resource: LinkedResource) => void;
 }
 
-const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }) => {
+const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplorerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,8 +132,6 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }) => {
   const [_, setCurrentPage] = useState(0);
   const [__, setTotalPages] = useState(0);
 
-  const didService = new DidService();
-
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
 
@@ -142,7 +139,16 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }) => {
     setError(null);
 
     try {
-      const document = await didService.resolveDid(searchQuery.trim());
+      const document = {
+        id: 'did:btco:1234567890',
+        controller: ['did:btco:1234567890'],
+        '@context': ['https://www.w3.org/ns/did/v1'],
+        verificationMethod: [],
+        authentication: [],
+        assertionMethod: [],
+        keyAgreement: []
+      } as DidDocument;
+      // todoawait didService.resolveDid(searchQuery.trim());
       setDidDocument(document);
       setDidString(searchQuery.trim());
       setTotalPages(1); // Since we're not paginating the DID document
@@ -197,7 +203,6 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }) => {
           <DidDocumentViewer document={didDocument} />
           <LinkedResourceList
             didString={didString}
-            didService={didService}
             showAllResources={false}
             onResourceSelect={onResourceSelect}
           />

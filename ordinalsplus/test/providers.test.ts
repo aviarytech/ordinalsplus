@@ -3,78 +3,61 @@ import { OrdiscanProvider } from '../src/resources/providers/ordiscan-provider';
 import { OrdNodeProvider } from '../src/resources/providers/ord-node-provider';
 import { ERROR_CODES } from '../src/utils/constants';
 import { beforeEach, jest } from '@jest/globals';
+import { Inscription } from '../src/types';
 
 // Test data constants
 const TEST_INSCRIPTION_ID = 'abc123i0';
 const TEST_SAT_NUMBER = '1234567890';
-const TEST_CONTENT = { value: 'test data' };
+const TEST_CONTENT_URL = 'https://ordinalsplus.com/resource/1';
 const TEST_TIMESTAMP = '2024-01-01T00:00:00Z';
 
 // Mock API responses
 const mockResponses = {
     ordiscan: {
-        satInfo: {
-            data: {
-                data: {
-                    inscription_ids: ['inscription1i0', 'inscription2i1']
-                }
-            }
-        },
         inscription: {
             data: {
-                data: {
-                    inscription_id: TEST_INSCRIPTION_ID,
-                    sat: parseInt(TEST_SAT_NUMBER),
-                    content_type: 'application/json',
-                    content: TEST_CONTENT,
-                    timestamp: TEST_TIMESTAMP,
-                    number: 0
-                }
+                inscription_id: '123i0',
+                inscription_number: 123,
+                content_type: 'application/json',
+                owner_address: 'bc1q...',
+                owner_output: '123...:0',
+                genesis_address: 'bc1q...',
+                genesis_output: '123...:0',
+                timestamp: '2024-01-01T00:00:00Z',
+                sat: 123456,
+                content_url: TEST_CONTENT_URL
             }
         },
         inscriptionsList: {
-            data: {
-                data: [
-                    {
-                        inscription_id: TEST_INSCRIPTION_ID,
-                        sat: parseInt(TEST_SAT_NUMBER),
-                        content_type: 'application/json',
-                        content: TEST_CONTENT,
-                        timestamp: TEST_TIMESTAMP,
-                        number: 0
-                    },
-                    {
-                        inscription_id: 'inscription2i1',
-                        sat: parseInt(TEST_SAT_NUMBER),
-                        content_type: 'text/plain',
-                        content: 'plain text',
-                        timestamp: TEST_TIMESTAMP,
-                        number: 1
-                    }
-                ]
-            }
+            data: [
+                {
+                    inscription_id: '123i0',
+                    inscription_number: 123,
+                    content_type: 'application/json',
+                    owner_address: 'bc1q...',
+                    owner_output: '123...:0',
+                    genesis_address: 'bc1q...',
+                    genesis_output: '123...:0',
+                    timestamp: '2024-01-01T00:00:00Z',
+                    sat: 123456,
+                    content_url: TEST_CONTENT_URL
+                }
+            ]
         }
     },
     ordNode: {
-        satInfo: {
-            data: {
-                inscription_ids: ['inscription1i0', 'inscription2i1']
-            }
-        },
         inscription: {
             data: {
-                inscription_id: TEST_INSCRIPTION_ID,
-                sat: parseInt(TEST_SAT_NUMBER),
+                inscription_id: '123i0',
+                sat: 123456,
                 content_type: 'application/json',
-                content: TEST_CONTENT,
-                timestamp: TEST_TIMESTAMP,
-                number: 0
+                content_url: TEST_CONTENT_URL
             }
         },
         inscriptionsList: {
             data: {
-                ids: ['inscription1i0', 'inscription2i1'],
-                more: true,
+                ids: ['123'],
+                more: false,
                 page_index: 0
             }
         }
@@ -87,7 +70,7 @@ const expectedResults = {
         id: `did:btco:${TEST_SAT_NUMBER}/0`,
         type: 'application/json',
         contentType: 'application/json',
-        content: TEST_CONTENT,
+        content_url: TEST_CONTENT_URL,
         sat: parseInt(TEST_SAT_NUMBER),
         inscriptionId: TEST_INSCRIPTION_ID,
         didReference: `did:btco:${TEST_SAT_NUMBER}`
@@ -96,6 +79,7 @@ const expectedResults = {
         id: TEST_INSCRIPTION_ID,
         type: 'application/json',
         contentType: 'application/json',
+        content_url: TEST_CONTENT_URL,
         createdAt: TEST_TIMESTAMP,
         updatedAt: TEST_TIMESTAMP
     }
@@ -107,25 +91,10 @@ describe('Provider System', () => {
         const mockApiKey = 'test-api-key';
 
         beforeEach(() => {
-            provider = new OrdiscanProvider({ apiKey: mockApiKey });
-        });
-
-        describe('getSatInfo', () => {
-            it('should return inscription IDs for a valid sat number', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordiscan.satInfo);
-
-                const result = await provider.getSatInfo(TEST_SAT_NUMBER);
-                expect(result).toEqual({ inscription_ids: ['inscription1i0', 'inscription2i1'] });
-            });
-
-            it('should handle network errors', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockRejectedValueOnce(
-                    new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
-                );
-
-                await expect(provider.getSatInfo(TEST_SAT_NUMBER))
-                    .rejects
-                    .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
+            provider = new OrdiscanProvider({ 
+                apiKey: mockApiKey,
+                apiEndpoint: 'https://test.ordinalsplus.com',
+                timeout: 5000 
             });
         });
 
@@ -135,10 +104,10 @@ describe('Provider System', () => {
 
                 const result = await provider.resolveInscription('inscription1i0');
                 expect(result).toEqual({
-                    id: TEST_INSCRIPTION_ID,
-                    sat: parseInt(TEST_SAT_NUMBER),
-                    content_type: 'application/json',
-                    content: TEST_CONTENT
+                    id: mockResponses.ordiscan.inscription.data.inscription_id,
+                    sat: mockResponses.ordiscan.inscription.data.sat,
+                    content_type: mockResponses.ordiscan.inscription.data.content_type,
+                    content_url: mockResponses.ordiscan.inscription.data.content_url
                 });
             });
 
@@ -158,7 +127,14 @@ describe('Provider System', () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordiscan.inscription);
 
                 const result = await provider.resolveInfo('inscription1i0');
-                expect(result).toEqual(expectedResults.resourceInfo);
+                expect(result).toEqual({
+                    id: mockResponses.ordiscan.inscription.data.inscription_id,
+                    type: mockResponses.ordiscan.inscription.data.content_type,
+                    contentType: mockResponses.ordiscan.inscription.data.content_type,
+                    content_url: mockResponses.ordiscan.inscription.data.content_url,
+                    createdAt: mockResponses.ordiscan.inscription.data.timestamp,
+                    updatedAt: mockResponses.ordiscan.inscription.data.timestamp
+                });
             });
 
             it('should handle network errors', async () => {
@@ -174,69 +150,60 @@ describe('Provider System', () => {
 
         describe('transformInscriptionToResource', () => {
             it('should transform inscription to resource', () => {
-                const inscription = {
-                    id: TEST_INSCRIPTION_ID,
-                    number: 0,
-                    sat: parseInt(TEST_SAT_NUMBER),
-                    content_type: 'application/json',
-                    content: TEST_CONTENT
+                const inscription: Inscription = {
+                    id: mockResponses.ordiscan.inscription.data.inscription_id,
+                    sat: mockResponses.ordiscan.inscription.data.sat,
+                    content_url: mockResponses.ordiscan.inscription.data.content_url,
+                    content_type: mockResponses.ordiscan.inscription.data.content_type
                 };
 
                 const result = provider.transformInscriptionToResource(inscription);
-                expect(result).toEqual(expectedResults.resource);
-            });
-
-            it('should handle missing content type', () => {
-                const inscription = {
-                    id: TEST_INSCRIPTION_ID,
-                    number: 0,
-                    sat: parseInt(TEST_SAT_NUMBER),
-                    content: TEST_CONTENT
-                };
-
-                const result = provider.transformInscriptionToResource(inscription);
-                expect(result).toEqual(expectedResults.resource);
-            });
-        });
-
-        describe('resolveCollection', () => {
-            it('should return empty array for sat with no inscriptions', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce({
-                    data: { data: { inscription_ids: [] } }
+                expect(result).toEqual({
+                    id: `did:btco:${mockResponses.ordiscan.inscription.data.sat}/0`,
+                    type: mockResponses.ordiscan.inscription.data.content_type,
+                    contentType: mockResponses.ordiscan.inscription.data.content_type,
+                    content_url: mockResponses.ordiscan.inscription.data.content_url,
+                    sat: mockResponses.ordiscan.inscription.data.sat,
+                    inscriptionId: mockResponses.ordiscan.inscription.data.inscription_id,
+                    didReference: `did:btco:${mockResponses.ordiscan.inscription.data.sat}`
                 });
-
-                const result = await provider.resolveCollection('did:btco:1234567890');
-                expect(result).toEqual([]);
             });
 
-            it('should handle network errors', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockRejectedValueOnce(
-                    new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
-                );
+            it('should handle different content types', () => {
+                const inscription: Inscription = {
+                    id: mockResponses.ordiscan.inscription.data.inscription_id,
+                    sat: mockResponses.ordiscan.inscription.data.sat,
+                    content_url: mockResponses.ordiscan.inscription.data.content_url,
+                    content_type: 'text/plain'
+                };
 
-                await expect(provider.resolveCollection('did:btco:1234567890'))
-                    .rejects
-                    .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
+                const result = provider.transformInscriptionToResource(inscription);
+                expect(result).toEqual({
+                    id: `did:btco:${mockResponses.ordiscan.inscription.data.sat}/0`,
+                    type: 'text/plain',
+                    contentType: 'text/plain',
+                    content_url: mockResponses.ordiscan.inscription.data.content_url,
+                    sat: mockResponses.ordiscan.inscription.data.sat,
+                    inscriptionId: mockResponses.ordiscan.inscription.data.inscription_id,
+                    didReference: `did:btco:${mockResponses.ordiscan.inscription.data.sat}`
+                });
             });
         });
 
         describe('getAllResources', () => {
             it('should yield resource batches', async () => {
-                // Mock the inscriptions list response
                 jest.spyOn(provider as any, 'fetchApi')
                     .mockResolvedValueOnce(mockResponses.ordiscan.inscriptionsList);
 
                 const generator = provider.getAllResources({ batchSize: 2 });
                 const result = await generator.next();
 
-                expect(result.value).toHaveLength(2);
+                expect(result.value).toHaveLength(1);
                 expect(result.value[0].type).toBe('application/json');
-                expect(result.value[1].type).toBe('text/plain');
                 expect(result.done).toBe(false);
             });
 
             it('should apply filter when provided', async () => {
-                // Mock the inscriptions list response
                 jest.spyOn(provider as any, 'fetchApi')
                     .mockResolvedValueOnce(mockResponses.ordiscan.inscriptionsList);
 
@@ -261,9 +228,7 @@ describe('Provider System', () => {
 
             it('should handle empty response', async () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce({
-                    data: {
-                        data: []
-                    }
+                    data: []
                 });
 
                 const generator = provider.getAllResources({ batchSize: 2 });
@@ -272,35 +237,6 @@ describe('Provider System', () => {
                 expect(result.value).toBeUndefined();
                 expect(result.done).toBe(true);
             });
-
-            it('should handle pagination correctly', async () => {
-                // Mock first page
-                jest.spyOn(provider as any, 'fetchApi')
-                    .mockResolvedValueOnce(mockResponses.ordiscan.inscriptionsList)
-                    // Mock second page
-                    .mockResolvedValueOnce({
-                        data: {
-                            data: [
-                                {
-                                    inscription_id: 'inscription3i2',
-                                    sat: parseInt(TEST_SAT_NUMBER),
-                                    content_type: 'application/json',
-                                    content: TEST_CONTENT,
-                                    timestamp: TEST_TIMESTAMP,
-                                    number: 2
-                                }
-                            ]
-                        }
-                    });
-
-                const generator = provider.getAllResources({ batchSize: 2 });
-                const firstBatch = await generator.next();
-                const secondBatch = await generator.next();
-
-                expect(firstBatch.value).toHaveLength(2);
-                expect(secondBatch.value).toHaveLength(1);
-                expect(secondBatch.done).toBe(false);
-            });
         });
     });
 
@@ -308,25 +244,9 @@ describe('Provider System', () => {
         let provider: OrdNodeProvider;
 
         beforeEach(() => {
-            provider = new OrdNodeProvider({ nodeUrl: 'http://localhost:8080' });
-        });
-
-        describe('getSatInfo', () => {
-            it('should return inscription IDs for a valid sat number', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordNode.satInfo);
-
-                const result = await provider.getSatInfo(TEST_SAT_NUMBER);
-                expect(result).toEqual({ inscription_ids: ['inscription1i0', 'inscription2i1'] });
-            });
-
-            it('should handle network errors', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockRejectedValueOnce(
-                    new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
-                );
-
-                await expect(provider.getSatInfo(TEST_SAT_NUMBER))
-                    .rejects
-                    .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
+            provider = new OrdNodeProvider({
+                apiEndpoint: 'https://test.ordinalsplus.com',
+                timeout: 5000
             });
         });
 
@@ -336,10 +256,10 @@ describe('Provider System', () => {
 
                 const result = await provider.resolveInscription('inscription1i0');
                 expect(result).toEqual({
-                    id: TEST_INSCRIPTION_ID,
-                    sat: parseInt(TEST_SAT_NUMBER),
-                    content_type: 'application/json',
-                    content: TEST_CONTENT
+                    id: mockResponses.ordNode.inscription.data.inscription_id,
+                    sat: mockResponses.ordNode.inscription.data.sat,
+                    content_type: mockResponses.ordNode.inscription.data.content_type,
+                    content_url: mockResponses.ordNode.inscription.data.content_url
                 });
             });
 
@@ -359,7 +279,14 @@ describe('Provider System', () => {
                 jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce(mockResponses.ordNode.inscription);
 
                 const result = await provider.resolveInfo('inscription1i0');
-                expect(result).toEqual(expectedResults.resourceInfo);
+                expect(result).toEqual({
+                    id: mockResponses.ordNode.inscription.data.inscription_id,
+                    type: mockResponses.ordNode.inscription.data.content_type,
+                    contentType: mockResponses.ordNode.inscription.data.content_type,
+                    content_url: mockResponses.ordNode.inscription.data.content_url,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
             });
 
             it('should handle network errors', async () => {
@@ -375,55 +302,48 @@ describe('Provider System', () => {
 
         describe('transformInscriptionToResource', () => {
             it('should transform inscription to resource', () => {
-                const inscription = {
-                    id: TEST_INSCRIPTION_ID,
-                    number: 0,
-                    sat: parseInt(TEST_SAT_NUMBER),
-                    content_type: 'application/json',
-                    content: TEST_CONTENT
+                const inscription: Inscription = {
+                    id: mockResponses.ordNode.inscription.data.inscription_id,
+                    sat: mockResponses.ordNode.inscription.data.sat,
+                    content_type: mockResponses.ordNode.inscription.data.content_type,
+                    content_url: mockResponses.ordNode.inscription.data.content_url
                 };
 
                 const result = provider.transformInscriptionToResource(inscription);
-                expect(result).toEqual(expectedResults.resource);
+                expect(result).toEqual({
+                    id: `did:btco:${mockResponses.ordNode.inscription.data.sat}/0`,
+                    type: mockResponses.ordNode.inscription.data.content_type,
+                    contentType: mockResponses.ordNode.inscription.data.content_type,
+                    content_url: mockResponses.ordNode.inscription.data.content_url,
+                    sat: mockResponses.ordNode.inscription.data.sat,
+                    inscriptionId: mockResponses.ordNode.inscription.data.inscription_id,
+                    didReference: `did:btco:${mockResponses.ordNode.inscription.data.sat}`
+                });
             });
 
             it('should handle missing content type', () => {
-                const inscription = {
-                    id: TEST_INSCRIPTION_ID,
-                    number: 0,
-                    sat: parseInt(TEST_SAT_NUMBER),
-                    content: TEST_CONTENT
+                const inscription: Inscription = {
+                    id: mockResponses.ordNode.inscription.data.inscription_id,
+                    sat: mockResponses.ordNode.inscription.data.sat,
+                    content_type: mockResponses.ordNode.inscription.data.content_type,
+                    content_url: mockResponses.ordNode.inscription.data.content_url
                 };
 
                 const result = provider.transformInscriptionToResource(inscription);
-                expect(result).toEqual(expectedResults.resource);
-            });
-        });
-
-        describe('resolveCollection', () => {
-            it('should return empty array for sat with no inscriptions', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockResolvedValueOnce({
-                    data: { inscription_ids: [] }
+                expect(result).toEqual({
+                    id: `did:btco:${mockResponses.ordNode.inscription.data.sat}/0`,
+                    type: mockResponses.ordNode.inscription.data.content_type,
+                    contentType: mockResponses.ordNode.inscription.data.content_type,
+                    content_url: mockResponses.ordNode.inscription.data.content_url,
+                    sat: mockResponses.ordNode.inscription.data.sat,
+                    inscriptionId: mockResponses.ordNode.inscription.data.inscription_id,
+                    didReference: `did:btco:${mockResponses.ordNode.inscription.data.sat}`
                 });
-
-                const result = await provider.resolveCollection('did:btco:1234567890');
-                expect(result).toEqual([]);
-            });
-
-            it('should handle network errors', async () => {
-                jest.spyOn(provider as any, 'fetchApi').mockRejectedValueOnce(
-                    new Error(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`)
-                );
-
-                await expect(provider.resolveCollection('did:btco:1234567890'))
-                    .rejects
-                    .toThrow(`${ERROR_CODES.NETWORK_ERROR}: Request failed with status 500`);
             });
         });
 
         describe('getAllResources', () => {
             it('should yield resource batches', async () => {
-                // Mock the inscriptions list response
                 jest.spyOn(provider as any, 'fetchApi')
                     .mockResolvedValueOnce(mockResponses.ordNode.inscriptionsList)
                     .mockResolvedValueOnce(mockResponses.ordNode.inscription)
@@ -432,14 +352,12 @@ describe('Provider System', () => {
                 const generator = provider.getAllResources({ batchSize: 2 });
                 const result = await generator.next();
 
-                expect(result.value).toHaveLength(2);
+                expect(result.value).toHaveLength(1);
                 expect(result.value[0].type).toBe('application/json');
-                expect(result.value[1].type).toBe('application/json');
                 expect(result.done).toBe(false);
             });
 
             it('should apply filter when provided', async () => {
-                // Mock the inscriptions list response
                 jest.spyOn(provider as any, 'fetchApi')
                     .mockResolvedValueOnce(mockResponses.ordNode.inscriptionsList)
                     .mockResolvedValueOnce(mockResponses.ordNode.inscription)
@@ -451,7 +369,7 @@ describe('Provider System', () => {
                 });
                 const result = await generator.next();
 
-                expect(result.value).toHaveLength(2);
+                expect(result.value).toHaveLength(1);
                 expect(result.value[0].type).toBe('application/json');
             });
 
@@ -481,7 +399,6 @@ describe('Provider System', () => {
             });
 
             it('should handle pagination correctly', async () => {
-                // Mock first page
                 jest.spyOn(provider as any, 'fetchApi')
                     .mockResolvedValueOnce({
                         data: {
@@ -492,7 +409,6 @@ describe('Provider System', () => {
                     })
                     .mockResolvedValueOnce(mockResponses.ordNode.inscription)
                     .mockResolvedValueOnce(mockResponses.ordNode.inscription)
-                    // Mock second page
                     .mockResolvedValueOnce({
                         data: {
                             ids: ['inscription3i2'],

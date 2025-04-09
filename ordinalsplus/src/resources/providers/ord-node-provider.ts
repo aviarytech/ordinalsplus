@@ -15,6 +15,27 @@ export interface OrdNodeApiResponse<T> {
     data: T;
 }
 
+export interface OrdNodeInscription {
+    id: string;
+    number: number;
+    sat: number;
+    content_type: string;
+    content_url: string;
+}
+
+interface OrdNodeInscriptionResponse {
+    inscription_id: string;
+    sat: number;
+    content_type: string;
+    content_url: string;
+}
+
+interface OrdNodeInscriptionListResponse {
+    ids: string[];
+    more: boolean;
+    page_index: number;
+}
+
 export class OrdNodeProvider implements ResourceProvider {
     private readonly nodeUrl: string;
     private readonly apiEndpoint: string;
@@ -60,34 +81,24 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async resolveInscription(inscriptionId: string): Promise<Inscription> {
-        const response = await this.fetchApi<{
-            inscription_id: string;
-            sat: number;
-            content_type: string;
-            content: any;
-        }>(`/inscription/${inscriptionId}`);
-
+        const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
             id: response.data.inscription_id,
             sat: response.data.sat,
             content_type: response.data.content_type,
-            content: response.data.content
+            content_url: response.data.content_url
         };
     }
 
     async resolveInfo(inscriptionId: string): Promise<ResourceInfo> {
-        const response = await this.fetchApi<{
-            inscription_id: string;
-            content_type: string;
-            timestamp: string;
-        }>(`/inscription/${inscriptionId}`);
-
+        const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
             id: response.data.inscription_id,
             type: response.data.content_type,
             contentType: response.data.content_type,
-            createdAt: response.data.timestamp,
-            updatedAt: response.data.timestamp
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            content_url: response.data.content_url
         };
     }
 
@@ -143,7 +154,7 @@ export class OrdNodeProvider implements ResourceProvider {
             id: `did:btco:${inscription.sat}/${extractIndexFromInscription(inscription)}`,
             type: contentType,
             contentType: contentType,
-            content: inscription.content,
+            content_url: inscription.content_url,
             sat: inscription.sat,
             inscriptionId: inscription.id,
             didReference: `did:btco:${inscription.sat}`
@@ -190,36 +201,19 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     private async fetchResourceBatch(cursor: number, size: number): Promise<ResourceBatch> {
-        interface InscriptionListResponse {
-            ids: string[];
-            more: boolean;
-            page_index: number;
-        }
-
-        interface InscriptionResponse {
-            inscription_id: string;
-            sat: number;
-            content_type: string;
-            content: any;
-        }
-
-        // Calculate page number (0-based) from cursor and size
         const page = Math.floor(cursor / size);
-        
-        // Fetch list of inscription IDs for the current page
-        const listResponse = await this.fetchApi<InscriptionListResponse>(`/inscriptions/${page}`);
+        const listResponse = await this.fetchApi<OrdNodeInscriptionListResponse>(`/inscriptions/${page}`);
 
-        // Fetch details for each inscription in the batch
         const resources = await Promise.all(
             listResponse.data.ids.map(async (id) => {
-                const inscriptionResponse = await this.fetchApi<InscriptionResponse>(`/inscription/${id}`);
+                const inscriptionResponse = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${id}`);
                 const inscription = inscriptionResponse.data;
                 
                 const inscriptionObj = {
                     id: inscription.inscription_id,
                     sat: inscription.sat,
                     content_type: inscription.content_type,
-                    content: inscription.content
+                    content_url: inscription.content_url
                 };
                 return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type);
             })
@@ -230,5 +224,25 @@ export class OrdNodeProvider implements ResourceProvider {
             nextCursor: listResponse.data.more ? cursor + size : undefined,
             hasMore: listResponse.data.more
         };
+    }
+
+    async getInscription(inscriptionId: string): Promise<Inscription> {
+        const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
+        return {
+            id: response.data.inscription_id,
+            sat: response.data.sat,
+            content_type: response.data.content_type,
+            content_url: response.data.content_url
+        };
+    }
+
+    async getInscriptionsByAddress(address: string): Promise<Inscription[]> {
+        const response = await this.fetchApi<{ inscriptions: OrdNodeInscriptionResponse[] }>(`/address/${address}/inscriptions`);
+        return response.data.inscriptions.map(inscription => ({
+            id: inscription.inscription_id,
+            sat: inscription.sat,
+            content_type: inscription.content_type,
+            content_url: inscription.content_url
+        }));
     }
 } 

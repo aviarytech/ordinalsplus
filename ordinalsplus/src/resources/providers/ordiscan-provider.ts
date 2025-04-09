@@ -11,10 +11,29 @@ export interface OrdiscanProviderOptions {
     timeout?: number;
 }
 
+export interface OrdiscanInscription {
+    id: string;
+    number: number;
+    sat: number;
+    content_type: string;
+    content_url: string;
+}
+
 export interface OrdiscanApiResponse<T> {
-    data: {
-        data: T;
-    };
+    data: T;
+}
+
+interface OrdiscanInscriptionResponse {
+    inscription_id: string;
+    inscription_number: number;
+    content_type: string;
+    owner_address: string;
+    owner_output: string;
+    genesis_address: string;
+    genesis_output: string;
+    timestamp: string;
+    sat: number;
+    content_url: string;
 }
 
 export class OrdiscanProvider implements ResourceProvider {
@@ -47,7 +66,7 @@ export class OrdiscanProvider implements ResourceProvider {
 
     async getSatInfo(satNumber: string): Promise<{ inscription_ids: string[] }> {
         const response = await this.fetchApi<{ inscription_ids: string[] }>(`/sat/${satNumber}`);
-        return { inscription_ids: response.data.data.inscription_ids };
+        return { inscription_ids: response.data.inscription_ids };
     }
 
     async resolve(resourceId: string): Promise<LinkedResource> {
@@ -65,34 +84,24 @@ export class OrdiscanProvider implements ResourceProvider {
     }
 
     async resolveInscription(inscriptionId: string): Promise<Inscription> {
-        const response = await this.fetchApi<{
-            inscription_id: string;
-            sat: number;
-            content_type: string;
-            content: any;
-        }>(`/inscription/${inscriptionId}`);
-
+        const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
-            id: response.data.data.inscription_id,
-            sat: response.data.data.sat,
-            content_type: response.data.data.content_type,
-            content: response.data.data.content
+            id: response.data.inscription_id,
+            sat: response.data.sat,
+            content_type: response.data.content_type,
+            content_url: response.data.content_url
         };
     }
 
     async resolveInfo(inscriptionId: string): Promise<ResourceInfo> {
-        const response = await this.fetchApi<{
-            inscription_id: string;
-            content_type: string;
-            timestamp: string;
-        }>(`/inscription/${inscriptionId}`);
-
+        const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
-            id: response.data.data.inscription_id,
-            type: response.data.data.content_type,
-            contentType: response.data.data.content_type,
-            createdAt: response.data.data.timestamp,
-            updatedAt: response.data.data.timestamp
+            id: response.data.inscription_id,
+            type: response.data.content_type,
+            contentType: response.data.content_type,
+            createdAt: response.data.timestamp,
+            updatedAt: response.data.timestamp,
+            content_url: response.data.content_url
         };
     }
 
@@ -148,9 +157,10 @@ export class OrdiscanProvider implements ResourceProvider {
             id: `did:btco:${inscription.sat}/${extractIndexFromInscription(inscription)}`,
             type: contentType,
             contentType: contentType,
-            content: inscription.content,
+            content_url: inscription.content_url,
             sat: inscription.sat,
             inscriptionId: inscription.id,
+            inscriptionNumber: inscription.number,
             didReference: `did:btco:${inscription.sat}`
         };
     }
@@ -195,39 +205,68 @@ export class OrdiscanProvider implements ResourceProvider {
     }
 
     private async fetchResourceBatch(cursor: number, size: number): Promise<ResourceBatch> {
-        interface InscriptionResponse {
-            inscription_id: string;
-            inscription_number: number;
-            content_type: string;
-            owner_address: string;
-            owner_output: string;
-            genesis_address: string;
-            genesis_output: string;
-            timestamp: string;
-            sat: number;
-            content_url: string;
+        // Calculate the after parameter based on the cursor
+        // Since we're using inscription_number_desc, we need to track the last inscription number
+        const after = cursor > 0 ? cursor : undefined;
+        
+        // Build the query parameters
+        const params = new URLSearchParams({
+            sort: 'inscription_number_desc',
+            limit: size.toString()
+        });
+        
+        if (after) {
+            params.append('after', after.toString());
         }
 
-        const response = await this.fetchApi<InscriptionResponse[]>(`/inscriptions?offset=${cursor}&limit=${size}`);
+        const response = await this.fetchApi<{ data: OrdiscanInscriptionResponse[] }>(`/inscriptions?${params.toString()}`);
 
-        const resources = response.data.data.map(inscription => {
+        if (!response.data || !Array.isArray(response.data)) {
+            return {
+                resources: [],
+                hasMore: false
+            };
+        }
+
+        const resources = response.data.map(inscription => {
             const inscriptionObj = {
                 id: inscription.inscription_id,
+                number: inscription.inscription_number,
                 sat: inscription.sat,
                 content_type: inscription.content_type,
-                content: null // Content will be fetched on demand
+                content_url: inscription.content_url
             };
             return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type);
         });
 
-        // Since the API doesn't return total count, we'll assume there are more if we got a full batch
+        // Check if there are more resources by looking at the last inscription number
         const hasMore = resources.length === size;
-        const nextCursor = hasMore ? cursor + size : undefined;
+        const nextCursor = hasMore ? resources[resources.length - 1].inscriptionNumber : undefined;
 
         return {
             resources,
             nextCursor,
             hasMore
         };
+    }
+
+    async getInscription(inscriptionId: string): Promise<Inscription> {
+        const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
+        return {
+            id: response.data.inscription_id,
+            sat: response.data.sat,
+            content_type: response.data.content_type,
+            content_url: response.data.content_url
+        };
+    }
+
+    async getInscriptionsByAddress(address: string): Promise<Inscription[]> {
+        const response = await this.fetchApi<{ inscriptions: OrdiscanInscriptionResponse[] }>(`/address/${address}/inscriptions`);
+        return response.data.inscriptions.map(inscription => ({
+            id: inscription.inscription_id,
+            sat: inscription.sat,
+            content_type: inscription.content_type,
+            content_url: inscription.content_url
+        }));
     }
 } 

@@ -30,9 +30,9 @@ async function fetchRealInscriptions(): Promise<Inscription[]> {
     return {
       id: inscription.id,
       number: inscription.number ?? index,
-      sat: Number(inscription.sat), // Ensure sat is a number
-      content_type: inscription.content_type,
-      content: inscription.content
+      sat: Number(inscription.sat),
+      content_type: inscription.content_type || 'application/json',
+      content_url: inscription.content_url || `https://ordinalsplus.com/resource/${index + 1}`
     };
   });
 }
@@ -52,78 +52,33 @@ describe('Resource Extraction with Real Data', () => {
           number: 0,
           sat: 1954913028215432,
           content_type: 'application/json',
-          content: {
-            name: 'Test Inscription',
-            description: 'A test inscription on Bitcoin',
-            version: '1.0.0'
-          }
+          content_url: 'https://ordinalsplus.com/resource/1'
         },
         {
           id: '7d8afc7939b66953d9633e4d59c3ed086413d34617619811e8295cdb9388fdi1',
           number: 1,
           sat: 1954913028215433,
           content_type: 'text/plain',
-          content: 'Hello, Bitcoin!'
+          content_url: 'https://ordinalsplus.com/resource/2'
         },
         {
           id: '9e8afc7939b66953d9633e4d59c3ed086413d34617619811e8295cdb9388fdi2',
           number: 2,
           sat: 1954913028215434,
           content_type: 'image/png',
-          content: 'base64_encoded_image_data'
+          content_url: 'https://ordinalsplus.com/resource/3'
         }
       ];
     }
   });
 
-  describe('JSON Content', () => {
-    it('should correctly process JSON inscription', () => {
-      const inscription = realInscriptions[0];
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      
-      expect(resource).toEqual({
-        id: `did:btco:${inscription.sat}/0`,
-        type: 'TestResource',
-        inscriptionId: inscription.id,
-        contentType: 'application/json',
-        content: { value: inscription.content as Record<string, unknown> },
-        sat: inscription.sat,
-        didReference: `did:btco:${inscription.sat}`
-      });
-    });
-  });
-
-  describe('Text Content', () => {
-    it('should correctly process text inscription', () => {
-      const inscription = realInscriptions[1];
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      
-      expect(resource).toEqual({
-        id: `did:btco:${inscription.sat}/1`,
-        type: 'TestResource',
-        inscriptionId: inscription.id,
-        contentType: 'text/plain',
-        content: { value: inscription.content as string },
-        sat: inscription.sat,
-        didReference: `did:btco:${inscription.sat}`
-      });
-    });
-  });
-
-  describe('Binary Content', () => {
-    it('should correctly process binary inscription', () => {
-      const inscription = realInscriptions[2];
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      
-      expect(resource).toEqual({
-        id: `did:btco:${inscription.sat}/2`,
-        type: 'TestResource',
-        inscriptionId: inscription.id,
-        contentType: 'image/png',
-        content: { value: inscription.content as string },
-        sat: inscription.sat,
-        didReference: `did:btco:${inscription.sat}`
-      });
+  describe('Resource ID Generation', () => {
+    it('should generate correct resource IDs for real inscriptions', () => {
+      for (const inscription of realInscriptions) {
+        const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
+        expect(resource.id).toBe(`did:btco:${inscription.sat}/${inscription.number}`);
+        expect(resource.didReference).toBe(`did:btco:${inscription.sat}`);
+      }
     });
   });
 
@@ -136,11 +91,16 @@ describe('Resource Extraction with Real Data', () => {
     });
   });
 
-  describe('Resource ID Generation', () => {
-    it('should generate correct resource IDs for real inscriptions', () => {
+  describe('Resource Creation', () => {
+    it('should create resources with correct content URLs', () => {
       for (const inscription of realInscriptions) {
         const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-        expect(resource.id).toBe(`did:btco:${inscription.sat}/${inscription.number}`);
+        if (inscription.content_url) {
+          expect(resource.content_url).toBe(inscription.content_url);
+        }
+        if (inscription.content_type) {
+          expect(resource.contentType).toBe(inscription.content_type);
+        }
       }
     });
   });

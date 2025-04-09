@@ -1,6 +1,5 @@
 import type { DID, LinkedResource, Inscription } from '../types';
 import { 
-  createDidFromInscription as ordinalsPlusCreateDidFromInscription,
   createLinkedResourceFromInscription as ordinalsPlusCreateLinkedResourceFromInscription
 } from 'ordinalsplus';
 
@@ -27,7 +26,7 @@ export const buildDidSearchQuery = (): string => {
  */
 export function createDidFromInscription(inscription: Inscription): DID {
   // Use the ordinalsplus package to create the DID
-  return ordinalsPlusCreateDidFromInscription(inscription);
+  // return ordinalsPlusCreateDidFromInscription(inscription);
 }
 
 /**
@@ -42,9 +41,13 @@ export function createLinkedResourceFromInscription(
   inscription: Inscription, 
   type: string, 
   didReference?: string
-): LinkedResource {
-  // Use the ordinalsplus package to create the linked resource
-  return ordinalsPlusCreateLinkedResourceFromInscription(inscription, type, didReference);
+): LinkedResource | null {
+  try {
+    return ordinalsPlusCreateLinkedResourceFromInscription(inscription, type);
+  } catch (error) {
+    console.error('Error creating linked resource:', error);
+    return null;
+  }
 }
 
 /**

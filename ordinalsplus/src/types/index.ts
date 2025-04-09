@@ -1,10 +1,12 @@
+export * from './did';
+
 export interface Inscription {
     id: string;
     number?: number;
     sat: number;
     sat_ordinal?: string;
     content_type?: string;
-    content?: any;
+    content_url: string;
 }
 
 export interface ParsedResourceId {
@@ -19,10 +21,9 @@ export interface LinkedResource {
     inscriptionId: string;
     didReference: string;
     contentType: string;
-    content: {
-        value: any;
-    };
+    content_url: string;
     sat: number;
+    inscriptionNumber?: number;
 }
 
 export interface ResourceInfo {
@@ -31,4 +32,8 @@ export interface ResourceInfo {
     contentType: string;
     createdAt: string;
     updatedAt: string;
+    content_url: string;
+    inscriptionId?: string;
+    didReference?: string;
+    sat?: number;
 } 

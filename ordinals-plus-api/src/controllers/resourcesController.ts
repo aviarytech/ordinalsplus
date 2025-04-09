@@ -5,162 +5,64 @@ import type {
   Inscription
 } from '../types';
 import { 
-  createDidFromInscription, 
-  createLinkedResourceFromInscription, 
-} from 'ordinalsplus';
-import { 
   fetchInscriptions, 
   fetchInscriptionById, 
   fetchInscriptionContent, 
   fetchInscriptionBySat
 } from '../services/ordinalsService';
+import { getProvider } from '../services/providerService';
+
+// Cache expiration time in milliseconds (5 minutes)
+const CACHE_EXPIRATION = 5 * 60 * 1000;
 
 // Simple cache to avoid refetching on every request
 const resourcesCache: Record<string, ApiResponse> = {};
 const cacheTimestamps: Record<string, number> = {};
 
-// Cache expiration time in milliseconds (5 minutes)
-const CACHE_EXPIRATION = 5 * 60 * 1000;
-
 /**
  * Get all resources with pagination
  */
-export const getAllResources = async (page = 1, limit = 10): Promise<ApiResponse> => {
+export const getAllResources = async (page = 1, limit = 20, contentType?: string | null): Promise<ApiResponse> => {
   try {
-    // Check if API key is set
-    if (!process.env.ORDISCAN_API_KEY) {
-      console.error('ORDISCAN_API_KEY is not set in environment variables.');
-      return {
-        dids: [],
-        linkedResources: [],
-        page: page,
-        totalItems: 0,
-        itemsPerPage: limit,
-        error: 'API key not configured. Please set the ORDISCAN_API_KEY environment variable.'
-      };
-    }
-    
-    const cacheKey = `resources_${page}_${limit}`;
-    
-    // Check if we have cached data
-    if (resourcesCache[cacheKey]) {
-      const cacheAge = Date.now() - (cacheTimestamps[cacheKey] || 0);
-      if (cacheAge < CACHE_EXPIRATION) {
-        return resourcesCache[cacheKey];
-      }
-    }
-    
-    // Calculate offset based on page
-    const offset = (page - 1) * limit;
-    
-    // Fetch inscriptions from the ordinals service
-    const inscriptionsResponse = await fetchInscriptions(offset, limit);
-    const inscriptions = inscriptionsResponse.results;
-    
-    // Create a map to store DID references for resources
-    const didReferences = new Map<string, string>();
-    
-    // Process inscriptions to extract DIDs and create linked resources
-    const dids: DID[] = [];
-    const linkedResources: LinkedResource[] = [];
-    
-    for (const inscription of inscriptions) {
-      // Skip inscriptions without both id and sat
-      if (!inscription.id && !inscription.sat) {
-        console.warn('Skipping inscription without both ID and sat:', inscription);
-        continue;
-      }
+    const provider = getProvider();
+    const generator = provider.getAllResources({ 
+      batchSize: limit,
+      startFrom: (page - 1) * limit // Calculate the starting cursor based on page
+    });
 
-      // Fetch full inscription data using either id or sat
-      let fullInscription: Inscription;
-      try {
-        if (inscription.id) {
-          fullInscription = await fetchInscriptionById(inscription.id);
-        } else if (inscription.sat) {
-          // If we have sat but no id, we need to fetch by sat
-          // Note: This assumes the ordinals service has a method to fetch by sat
-          fullInscription = await fetchInscriptionBySat(inscription.sat);
-        } else {
-          console.warn('Cannot fetch inscription: missing both ID and sat');
-          continue;
-        }
-      } catch (error) {
-        console.warn(`Failed to fetch full inscription data:`, error);
-        continue;
-      }
+    let resources: LinkedResource[] = [];
+    let totalItems = 0;
 
-      // Check if this is a DID inscription
-      if (
-        fullInscription.content && 
-        typeof fullInscription.content === 'object' &&
-        fullInscription.content !== null
-      ) {
-        const content = fullInscription.content as Record<string, unknown>;
-        if (
-          content.id && 
-          typeof content.id === 'string' &&
-          isValidBtcoDid(content.id)
-        ) {
-          // Create a DID object using the ordinalsplus package
-          const did = createDidFromInscription(fullInscription);
-          dids.push(did);
-          
-          // Store the DID-to-inscription mapping for resource linking
-          didReferences.set(fullInscription.id!, did.id);
-        }
-      }
-
-      const contentType = fullInscription.content_type || 'application/json';
-      const resourceType = getResourceTypeFromContentType(contentType);
-      
-      // Fetch content if needed
-      if (!fullInscription.content && contentType.includes('json')) {
-        try {
-          const content = await fetchInscriptionContent(fullInscription.id!, contentType);
-          if (content) {
-            fullInscription.content = content;
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch content for inscription ${fullInscription.id}`, error);
-        }
-      }
-      
-      // Find the DID reference if available
-      const didReference = didReferences.get(fullInscription.id!);
-      
-      try {
-        // Create a linked resource using the ordinalsplus package
-        const resource = createLinkedResourceFromInscription(
-          fullInscription, 
-          resourceType, 
-          didReference || undefined
-        );
-        
-        linkedResources.push(resource);
-      } catch (error) {
-        console.warn(`Failed to create linked resource for inscription ${fullInscription.id}:`, error);
-        continue;
-      }
+    // Get the first batch of resources
+    const result = await generator.next();
+    if (!result.done && result.value) {
+      resources = result.value;
+      // Get the next batch to check if there are more items
+      const nextResult = await generator.next();
+      totalItems = resources.length + (nextResult.done ? 0 : nextResult.value.length);
     }
-    
-    // Create the response object
-    const response: ApiResponse = {
-      dids: dids,
-      linkedResources: linkedResources,
+
+    // Filter by content type if specified
+    if (contentType) {
+      resources = resources.filter((resource: LinkedResource) => 
+        resource.contentType?.includes(contentType)
+      );
+      // Adjust total items based on filtered count
+      totalItems = resources.length;
+    }
+
+    console.log(`Fetched page ${page} with ${resources.length} resources, total items: ${totalItems}`);
+
+    return {
+      dids: [], // DIDs are now handled separately
+      linkedResources: resources,
       page: page,
-      totalItems: inscriptionsResponse.total,
+      totalItems: totalItems,
       itemsPerPage: limit,
       error: ''
     };
-    
-    // Cache the response
-    resourcesCache[cacheKey] = response;
-    cacheTimestamps[cacheKey] = Date.now();
-    
-    return response;
   } catch (error) {
     console.error('Error fetching resources:', error);
-    
     return {
       dids: [],
       linkedResources: [],
@@ -177,66 +79,11 @@ export const getAllResources = async (page = 1, limit = 10): Promise<ApiResponse
  */
 export const getResourceById = async (id: string): Promise<ApiResponse> => {
   try {
-    // Validate if this is a proper DID
-    const isDid = isValidBtcoDid(id);
-    
-    // Extract the inscription ID from the DID if needed
-    const inscriptionId = isDid ? id.replace('did:btco:', '') : id;
-    
-    // Fetch the inscription
-    const inscription = await fetchInscriptionById(inscriptionId);
-    
-    if (!inscription) {
-      return {
-        dids: [],
-        linkedResources: [],
-        page: 0,
-        totalItems: 0,
-        itemsPerPage: 1,
-        error: `Resource not found with ID: ${id}`
-      };
-    }
-    
-    // For certain content types, we might need to fetch the content if it's not already included
-    const contentType = inscription.content_type || 'application/json';
-    if (!inscription.content && contentType.includes('json')) {
-      try {
-        // Ensure inscription.id is defined before using it
-        if (!inscription.id) {
-          console.warn('Cannot fetch content: inscription ID is missing');
-          return {
-            dids: [],
-            linkedResources: [],
-            page: 0,
-            totalItems: 0,
-            itemsPerPage: 0,
-            error: 'Inscription ID is missing'
-          };
-        }
-        const content = await fetchInscriptionContent(inscription.id, contentType);
-        if (content) {
-          inscription.content = content;
-        }
-      } catch (error) {
-        console.warn(`Failed to fetch content for inscription ${inscription.id}`, error);
-      }
-    }
-    
-    // Create a DID object using the ordinalsplus package
-    const did = createDidFromInscription(inscription);
-    
-    // Determine the resource type from content type
-    const resourceType = getResourceTypeFromContentType(contentType);
-    
-    // Create a linked resource using the ordinalsplus package
-    const resource = createLinkedResourceFromInscription(
-      inscription,
-      resourceType,
-      did.id // Reference the DID for this resource
-    );
-    
+    const provider = getProvider();
+    const resource = await provider.resolve(id);
+
     return {
-      dids: [did],
+      dids: [], // DIDs are now handled separately
       linkedResources: [resource],
       page: 0,
       totalItems: 1,
@@ -261,92 +108,19 @@ export const getResourceById = async (id: string): Promise<ApiResponse> => {
  */
 export const getResourcesByDid = async (didId: string): Promise<ApiResponse> => {
   try {
-    // Ensure the DID id is properly formatted
-    if (!didId || !isValidBtcoDid(didId)) {
-      return {
-        dids: [],
-        linkedResources: [],
-        page: 0,
-        totalItems: 0,
-        itemsPerPage: 0,
-        error: 'Invalid DID identifier'
-      };
-    }
+    const provider = getProvider();
+    const resources = await provider.resolveCollection(didId, {});
 
-    // Fetch all inscriptions for this DID
-    const inscriptions = await fetchInscriptionsByDid(didId);
-    
-    if (!inscriptions || inscriptions.length === 0) {
-      return {
-        dids: [],
-        linkedResources: [],
-        page: 0,
-        totalItems: 0,
-        itemsPerPage: 0,
-        error: `No resources found for DID: ${didId}`
-      };
-    }
-
-    // Create a DID object using the ordinalsplus package
-    const did = createDid(didId);
-    
-    // Map inscriptions to linked resources
-    let linkedResources = await Promise.all(inscriptions.map(async (inscription) => {
-      // Skip inscriptions without an ID
-      if (!inscription.id) {
-        console.warn('Skipping inscription without ID:', inscription);
-        return null;
-      }
-
-      // For certain content types, we might need to fetch the content if it's not already included
-      const contentType = inscription.content_type || 'application/json';
-      if (!inscription.content && contentType.includes('json')) {
-        try {
-          // Ensure inscription.id is defined before using it
-          if (!inscription.id) {
-            console.warn('Cannot fetch content: inscription ID is missing');
-            return {
-              dids: [],
-              linkedResources: [],
-              page: 0,
-              totalItems: 0,
-              itemsPerPage: 0,
-              error: 'Inscription ID is missing'
-            };
-          }
-          const content = await fetchInscriptionContent(inscription.id, contentType);
-          if (content) {
-            inscription.content = content;
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch content for inscription ${inscription.id}`, error);
-        }
-      }
-      
-      // Determine the resource type from content type
-      const resourceType = getResourceTypeFromContentType(contentType);
-      
-      // Create a linked resource using the ordinalsplus package
-      return createLinkedResourceFromInscription(
-        inscription,
-        resourceType,
-        didId
-      );
-    })).then((resources) => resources.filter((resource: any) => resource !== null));
-
-    // Create the response
-    const response: ApiResponse = {
-      dids: [did],
-      linkedResources: linkedResources as LinkedResource[],
+    return {
+      dids: [], // DIDs are now handled separately
+      linkedResources: resources,
       page: 0,
-      totalItems: inscriptions.length,
-      itemsPerPage: linkedResources.length,
+      totalItems: resources.length,
+      itemsPerPage: resources.length,
       error: ''
     };
-    
-    return response;
   } catch (error) {
-    console.error(`Error fetching resources by DID ${didId}:`, error);
+    console.error(`Error fetching resources for DID ${didId}:`, error);
     return {
       dids: [],
       linkedResources: [],

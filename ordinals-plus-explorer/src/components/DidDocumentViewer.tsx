@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, CheckCircle2 } from 'lucide-react';
-import { DidDocument } from '../services/did-service';
+import { DidDocument, VerificationMethod, Service } from 'ordinalsplus';
 
 interface DidDocumentViewerProps {
   document: DidDocument;
@@ -103,7 +103,7 @@ const DidDocumentViewer: React.FC<DidDocumentViewerProps> = ({ document }) => {
               <div>
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Verification Methods</h3>
                 <div className="mt-1 space-y-2">
-                  {document.verificationMethod.map((method, index) => (
+                  {document.verificationMethod.map((method: VerificationMethod, index: number) => (
                     <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
                       <div className="grid grid-cols-1 gap-1">
                         <div className="flex flex-col">
@@ -136,7 +136,7 @@ const DidDocumentViewer: React.FC<DidDocumentViewerProps> = ({ document }) => {
               <div>
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Services</h3>
                 <div className="mt-1 space-y-2">
-                  {document.service.map((service, index) => (
+                  {document.service.map((service: Service, index: number) => (
                     <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-md">
                       <div className="grid grid-cols-1 gap-1">
                         <div className="flex flex-col">

@@ -152,8 +152,6 @@ ordinals-plus-explorer/
 │   │   ├── DidDocumentViewer.tsx # DID document display
 │   │   ├── LinkedResourceList.tsx # Resource list component
 │   │   └── ResourceCard.tsx   # Resource display component
-│   ├── services/              # Service layer
-│   │   └── did-service.ts     # DID and resource service
 │   ├── types/                 # TypeScript type definitions
 │   └── utils/                 # Utility functions
 │       └── formatting.ts      # Formatting utilities

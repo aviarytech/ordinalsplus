@@ -1,4 +1,5 @@
-import { ApiResponse, CoreLinkedResource, ExplorerState } from '../types';
+import { ApiResponse, ExplorerState } from '../types';
+import { LinkedResource } from 'ordinalsplus';
 
 class ApiService {
   private baseUrl: string;
@@ -12,13 +13,6 @@ class ApiService {
    */
   getConfig(): { baseUrl: string } {
     return { baseUrl: this.baseUrl };
-  }
-
-  /**
-   * Get the content URL for a resource
-   */
-  getContentUrl(identifier: string): string {
-    return `${this.baseUrl}/api/content/${encodeURIComponent(identifier)}`;
   }
 
   /**
@@ -43,7 +37,7 @@ class ApiService {
   /**
    * Fetch resource content
    */
-  async fetchResourceContent(identifier: string): Promise<CoreLinkedResource> {
+  async fetchResourceContent(identifier: string): Promise<LinkedResource> {
     try {
       const response = await fetch(`${this.baseUrl}/api/content/${encodeURIComponent(identifier)}`);
       
@@ -74,7 +68,6 @@ class ApiService {
       
       if (data.error) {
         return {
-          dids: [],
           linkedResources: [],
           isLoading: false,
           error: data.error,
@@ -85,7 +78,6 @@ class ApiService {
       }
       
       return {
-        dids: data.dids,
         linkedResources: data.linkedResources,
         isLoading: false,
         error: null,
@@ -96,7 +88,6 @@ class ApiService {
     } catch (error) {
       console.error('Error exploring DIDs:', error);
       return {
-        dids: [],
         linkedResources: [],
         isLoading: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -119,7 +110,7 @@ class ApiService {
       didReference?: string;
       metadata?: Record<string, unknown>;
     }
-  ): Promise<CoreLinkedResource> {
+  ): Promise<LinkedResource> {
     try {
       // Ensure inscriptionId is present
       if (!resourceData.inscriptionId) {
@@ -157,7 +148,7 @@ class ApiService {
         throw new Error(data.message || 'Unknown error occurred');
       }
       
-      return data.data as CoreLinkedResource;
+      return data.data as LinkedResource;
     } catch (error) {
       console.error('Error creating linked resource:', error);
       throw error;
@@ -167,7 +158,7 @@ class ApiService {
   /**
    * Retrieve a linked resource by its DID
    */
-  async getResourceByDid(didId: string): Promise<CoreLinkedResource> {
+  async getResourceByDid(didId: string): Promise<LinkedResource> {
     try {
       const response = await fetch(`${this.baseUrl}/api/resources/${encodeURIComponent(didId)}`);
       
@@ -181,7 +172,7 @@ class ApiService {
         throw new Error(data.message || 'Unknown error occurred');
       }
       
-      return data.data as CoreLinkedResource;
+      return data.data as LinkedResource;
     } catch (error) {
       console.error(`Error retrieving resource for DID ${didId}:`, error);
       throw error;
@@ -191,11 +182,14 @@ class ApiService {
   /**
    * Fetches all resources
    */
-  async fetchAllResources(page = 1, limit = 20): Promise<ApiResponse> {
+  async fetchAllResources(page = 1, limit = 20, contentType?: string | null): Promise<ApiResponse> {
     try {
-      const response = await fetch(
-        `${this.baseUrl}/api/resources?page=${page}&limit=${limit}`
-      );
+      let url = `${this.baseUrl}/api/resources?page=${page}&limit=${limit}`;
+      if (contentType) {
+        url += `&contentType=${encodeURIComponent(contentType)}`;
+      }
+
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status} ${response.statusText}`);
@@ -208,7 +202,6 @@ class ApiService {
       const totalItems = data.totalItems || data.data?.totalItems || resources.length;
       
       return {
-        dids: data.dids || data.data?.dids || [],
         linkedResources: resources,
         page: data.page || page,
         totalItems,
@@ -218,7 +211,6 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching resources from API:', error);
       return {
-        dids: [],
         linkedResources: [],
         page,
         totalItems: 0,
@@ -241,7 +233,6 @@ class ApiService {
 
       const data = await response.json();
       return {
-        dids: data.dids || [],
         linkedResources: data.linkedResources || [],
         page: 1,
         totalItems: 1,
@@ -251,7 +242,6 @@ class ApiService {
     } catch (error) {
       console.error('Error fetching resource from API:', error);
       return {
-        dids: [],
         linkedResources: [],
         page: 1,
         totalItems: 0,

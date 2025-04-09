@@ -3,17 +3,60 @@ import { createLinkedResourceFromInscription } from '../src/did/did-utils';
 import { Inscription } from '../src/types';
 
 describe('createLinkedResourceFromInscription', () => {
+  it('should create linked resource from inscription', () => {
+    const inscription: Inscription = {
+      id: '123i0',
+      sat: 123456,
+      content_type: 'application/json',
+      content_url: 'https://ordinalsplus.com/resource/1'
+    };
+
+    const result = createLinkedResourceFromInscription(inscription, 'application/json');
+    expect(result).toEqual({
+      id: 'did:btco:123456/0',
+      type: 'application/json',
+      contentType: 'application/json',
+      content_url: 'https://ordinalsplus.com/resource/1',
+      inscriptionId: '123i0',
+      didReference: 'did:btco:123456',
+      sat: 123456
+    });
+  });
+
+  it('should handle missing inscription ID', () => {
+    const inscription: Inscription = {
+      id: '',
+      sat: 123456,
+      content_type: 'application/json',
+      content_url: 'https://ordinalsplus.com/resource/1'
+    };
+
+    expect(() => createLinkedResourceFromInscription(inscription, 'application/json')).toThrow('Invalid inscription');
+  });
+
+  it('should handle missing content URL', () => {
+    const inscription: Inscription = {
+      id: '123i0',
+      sat: 123456,
+      content_type: 'application/json',
+      content_url: ''
+    };
+
+    const result = createLinkedResourceFromInscription(inscription, 'application/json');
+    expect(result.content_url).toBe('');
+  });
+
   it('should create a linked resource from an inscription with sat and index', () => {
     const inscription: Inscription = {
       id: '123i0',
       sat: 1000,
-      content: { name: 'test' },
-      content_type: 'application/json'
+      content_type: 'application/json',
+      content_url: 'https://ordinalsplus.com/resource/1'
     };
 
     const result = createLinkedResourceFromInscription(inscription, 'test-type');
     expect(result).toEqual({
-      content: { value: { name: 'test' } },
+      content_url: 'https://ordinalsplus.com/resource/1',
       contentType: 'application/json',
       didReference: 'did:btco:1000',
       id: 'did:btco:1000/0',
@@ -23,37 +66,17 @@ describe('createLinkedResourceFromInscription', () => {
     });
   });
 
-  it('should handle object content', () => {
+  it('should handle different content types', () => {
     const inscription: Inscription = {
       id: '123i0',
       sat: 1000,
-      content: { name: 'test' },
-      content_type: 'application/json'
+      content_type: 'text/plain',
+      content_url: 'https://ordinalsplus.com/resource/1'
     };
 
     const result = createLinkedResourceFromInscription(inscription, 'test-type');
     expect(result).toEqual({
-      content: { value: { name: 'test' } },
-      contentType: 'application/json',
-      didReference: 'did:btco:1000',
-      id: 'did:btco:1000/0',
-      inscriptionId: '123i0',
-      sat: 1000,
-      type: 'test-type'
-    });
-  });
-
-  it('should handle non-object content', () => {
-    const inscription: Inscription = {
-      id: '123i0',
-      sat: 1000,
-      content: 'test string',
-      content_type: 'text/plain'
-    };
-
-    const result = createLinkedResourceFromInscription(inscription, 'test-type');
-    expect(result).toEqual({
-      content: { value: 'test string' },
+      content_url: 'https://ordinalsplus.com/resource/1',
       contentType: 'text/plain',
       didReference: 'did:btco:1000',
       id: 'did:btco:1000/0',
@@ -63,16 +86,17 @@ describe('createLinkedResourceFromInscription', () => {
     });
   });
 
-  it('should handle missing content', () => {
+  it('should handle missing content URL', () => {
     const inscription: Inscription = {
       id: '123i0',
       sat: 1000,
-      content_type: 'application/json'
+      content_type: 'application/json',
+      content_url: ''
     };
 
     const result = createLinkedResourceFromInscription(inscription, 'test-type');
     expect(result).toEqual({
-      content: { value: null },
+      content_url: '',
       contentType: 'application/json',
       didReference: 'did:btco:1000',
       id: 'did:btco:1000/0',
@@ -85,9 +109,9 @@ describe('createLinkedResourceFromInscription', () => {
   it('should throw error when no index in inscription ID', () => {
     const inscription: Inscription = {
       id: '123',
-      content: { name: 'test' },
       sat: 1000,
-      content_type: 'application/json'
+      content_type: 'application/json',
+      content_url: 'https://ordinalsplus.com/resource/1'
     };
 
     expect(() => createLinkedResourceFromInscription(inscription, 'test-type'))
@@ -97,8 +121,8 @@ describe('createLinkedResourceFromInscription', () => {
   it('should throw error when no sat number', () => {
     const inscription: any = {
       id: '123i0',
-      content: { name: 'test' },
-      content_type: 'application/json'
+      content_type: 'application/json',
+      content_url: 'https://ordinalsplus.com/resource/1'
     };
 
     expect(() => createLinkedResourceFromInscription(inscription, 'test-type'))
@@ -108,11 +132,11 @@ describe('createLinkedResourceFromInscription', () => {
   it('should throw error when no inscription ID', () => {
     const inscription: Partial<Inscription> = {
       sat: 1000,
-      content: { name: 'test' },
-      content_type: 'application/json'
+      content_type: 'application/json',
+      content_url: 'https://ordinalsplus.com/resource/1'
     };
 
     expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'test-type'))
-      .toThrow('Inscription ID is required');
+      .toThrow('Invalid inscription');
   });
 }); 

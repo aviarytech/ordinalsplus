@@ -1,11 +1,8 @@
-import { CuratedCollectionCredential, DID as OrdinalsDID, ExplorerApiResponse, LinkedResource, ResourceInfo, ResourceMetadata } from "ordinalsplus";
-
-export type DID = OrdinalsDID;
+import { LinkedResource } from 'ordinalsplus';
 
 // Explorer-specific types
-export interface ApiResponse extends ExplorerApiResponse {
+export interface ApiResponse {
   linkedResources: LinkedResource[];
-  dids: DID[];
   page: number;
   totalItems: number;
   itemsPerPage: number;
@@ -13,7 +10,6 @@ export interface ApiResponse extends ExplorerApiResponse {
 }
 
 export interface ExplorerState {
-  dids: DID[];
   linkedResources: LinkedResource[];
   isLoading: boolean;
   error: string | null;
@@ -22,23 +18,12 @@ export interface ExplorerState {
   itemsPerPage: number;
 }
 
-export interface CoreLinkedResource extends LinkedResource {
-  id: string;
-  type: string;
-  didReference?: string;
-  contentType: string;
-  content: Record<string, unknown>;
-  sat?: string;
-  metadata?: ResourceMetadata;
-  info?: ResourceInfo;
-}
-
 export interface ResourceCollection {
   id: string;
   type: 'did' | 'heritage' | 'controller' | 'curated';
   resources: string[];
-  metadata?: ResourceMetadata;
-  credential?: CuratedCollectionCredential;
+  // metadata?: ResourceMetadata;
+  // credential?: CuratedCollectionCredential;
 }
 
 export interface NetworkConfig {

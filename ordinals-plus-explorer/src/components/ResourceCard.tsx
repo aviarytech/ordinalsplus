@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Eye, Code, Image } from 'lucide-react';
 import ApiServiceProvider from '../services/ApiServiceProvider';
-import { LinkedResource } from '../types';
+import { LinkedResource } from 'ordinalsplus';
 
 interface ResourceCardProps {
   resource: LinkedResource;
@@ -17,20 +17,21 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
   
   useEffect(() => {
     // Try to fetch text content directly for any resource that could be text
-    // This handles cases where the content type might be wrong or unknown
     const fetchTextForUnknownTypes = async () => {
       if (
-        (resource.contentType.includes('text/') || 
+        (resource.contentType?.includes('text/') || 
          resource.contentType === 'unknown' || 
-         resource.contentType === '' ||
-         (!resource.content && resource.sat))
+         resource.contentType === '')
       ) {
         setTextLoading(true);
         setTextError(null);
         
         try {
-          const text = await apiService.fetchTextContent(resource.inscriptionId);
-          setPreviewText(text);
+          if (resource.content_url) {
+            const response = await fetch(resource.content_url);
+            const text = await response.text();
+            setPreviewText(text);
+          }
         } catch (error) {
           console.error('Error fetching text content:', error);
           setTextError(error instanceof Error ? error.message : 'Unknown error');
@@ -41,15 +42,15 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
     };
     
     fetchTextForUnknownTypes();
-  }, [resource.inscriptionId, resource.contentType]);
+  }, [resource.content_url, resource.contentType]);
   
   // Helper to get border style based on content type
   const getBorderColorClass = () => {
-    if (resource.contentType.includes('image/')) {
+    if (resource.contentType?.includes('image/')) {
       return 'border-pink-500 dark:border-pink-600';
-    } else if (resource.contentType.includes('application/json')) {
+    } else if (resource.contentType?.includes('application/json')) {
       return 'border-blue-500 dark:border-blue-600';
-    } else if (resource.contentType.includes('text/') || resource.contentType === 'unknown') {
+    } else if (resource.contentType?.includes('text/') || resource.contentType === 'unknown') {
       return 'border-green-500 dark:border-green-600';
     } else {
       return 'border-gray-300 dark:border-gray-600';
@@ -94,28 +95,12 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
       );
     }
     
-    // For text content that we haven't fetched yet
-    if (resource.contentType.includes('text/')) {
-      if (typeof resource.content === 'string' && resource.content) {
-        const previewLength = 100;
-        const displayText = resource.content.length > previewLength
-          ? resource.content.substring(0, previewLength) + '...'
-          : resource.content;
-          
-        return (
-          <div className="p-2 text-sm font-mono overflow-hidden">
-            {displayText}
-          </div>
-        );
-      }
-    }
-    
     // For image content
-    if (resource.contentType.startsWith('image/')) {
-      return resource.inscriptionId ? (
+    if (resource.contentType?.startsWith('image/')) {
+      return resource.content_url ? (
         <div className="bg-gray-100 dark:bg-gray-800 h-16 flex items-center justify-center">
           <img 
-            src={apiService.getContentUrl(resource.inscriptionId)} 
+            src={resource.content_url} 
             alt="Resource preview" 
             className="max-h-16 max-w-full object-contain"
             onError={(e) => {
@@ -133,21 +118,10 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
     }
     
     // For JSON content
-    if (resource.contentType.includes('application/json')) {
-      let jsonPreview = 'JSON data';
-      
-      if (typeof resource.content === 'object' && resource.content !== null) {
-        try {
-          jsonPreview = JSON.stringify(resource.content).substring(0, 100);
-          if (jsonPreview.length === 100) jsonPreview += '...';
-        } catch (e) {
-          jsonPreview = 'Invalid JSON data';
-        }
-      }
-      
+    if (resource.contentType?.includes('application/json')) {
       return (
         <div className="p-2 text-xs font-mono text-blue-600 dark:text-blue-400 overflow-hidden">
-          {jsonPreview}
+          JSON data
         </div>
       );
     }
@@ -162,11 +136,11 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
 
   // Color class for the resource type icon
   const getIconColorClass = () => {
-    if (resource.contentType.startsWith('image/')) {
+    if (resource.contentType?.startsWith('image/')) {
       return 'text-pink-500';
-    } else if (resource.contentType.includes('application/json')) {
+    } else if (resource.contentType?.includes('application/json')) {
       return 'text-blue-500';
-    } else if (resource.contentType.includes('text/') || resource.contentType === 'unknown' || resource.contentType === '') {
+    } else if (resource.contentType?.includes('text/') || resource.contentType === 'unknown' || resource.contentType === '') {
       return 'text-green-500';
     } else {
       return 'text-gray-500';
@@ -175,11 +149,11 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
 
   // Determine which icon to use based on content type
   const getResourceIcon = () => {
-    if (resource.contentType.startsWith('image/')) {
+    if (resource.contentType?.startsWith('image/')) {
       return <Image className={`h-5 w-5 ${getIconColorClass()}`} />;
-    } else if (resource.contentType.includes('application/json')) {
+    } else if (resource.contentType?.includes('application/json')) {
       return <Code className={`h-5 w-5 ${getIconColorClass()}`} />;
-    } else if (resource.contentType.includes('text/') || resource.contentType === 'unknown' || resource.contentType === '') {
+    } else if (resource.contentType?.includes('text/') || resource.contentType === 'unknown' || resource.contentType === '') {
       return <FileText className={`h-5 w-5 ${getIconColorClass()}`} />;
     } else {
       return <FileText className={`h-5 w-5 ${getIconColorClass()}`} />;
@@ -196,7 +170,6 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
     }
     // For backwards compatibility only - log warning
     console.warn('Resource missing sat number, cannot create proper DID format');
-    // This should eventually be removed once all resources have sat numbers
     return resource.didReference || `did:btco:${resource.inscriptionId}`;
   };
 
@@ -215,7 +188,6 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
             {formatDid().length > 20 ? '...' : ''}
           </h3>
         </div>
-        <Eye className="h-4 w-4 text-gray-400" />
       </div>
       
       {renderPreview()}

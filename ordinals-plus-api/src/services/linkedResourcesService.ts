@@ -57,7 +57,7 @@ const extractIndexFromInscriptionId = (inscriptionId: string): string => {
  */
 const generateDidFromInscription = (inscription: Inscription): string => {
   // Extract the correct index from the inscription ID
-  const index = extractIndexFromInscriptionId(inscription.inscriptionId || inscription.id);
+  const index = extractIndexFromInscriptionId(inscription.id);
   
   // If we have sat data, use it to form the DID
   if (inscription.sat) {
@@ -187,13 +187,11 @@ export const extractLinkedResourceFromInscription = (inscription: Inscription): 
           return {
             id: did,
             type: resourceType,
-            didReference,
+            didReference: didReference || `did:btco:${inscription.sat}`,
             inscriptionId: inscription.id,
             contentType: inscription.content_type,
-            content: {
-              ...content,
-              contentUrl: inscription.content_url
-            }
+            content_url: inscription.content_url || '',
+            sat: typeof inscription.sat === 'string' ? parseInt(inscription.sat, 10) : inscription.sat || 0
           };
         }
       } catch (e) {
@@ -207,20 +205,14 @@ export const extractLinkedResourceFromInscription = (inscription: Inscription): 
     // Generate a proper DID for this resource
     const did = generateDidFromInscription(inscription);
     
-    // Create a synthetic content object
-    content = {
-      id: did,
-      contentType: inscription.content_type,
-      type: resourceType,
-      contentUrl: inscription.content_url
-    };
-    
     return {
       id: did,
       type: resourceType,
       inscriptionId: inscription.id,
       contentType: inscription.content_type,
-      content
+      content: inscription.content_url || '',
+      didReference: `did:btco:${inscription.sat}`,
+      sat: typeof inscription.sat === 'string' ? parseInt(inscription.sat, 10) : inscription.sat || 0
     };
     
   } catch (error) {
@@ -278,11 +270,10 @@ export const extractLinkedResourcesFromInscriptions = (inscriptions: Inscription
 };
 
 /**
- * Build a search query string for finding linked resources in inscriptions
- * This is kept for compatibility but not used for actual filtering
+ * Build a search query for linked resources
  */
 export const buildLinkedResourceSearchQuery = (): string => {
-  return '';
+  return LINKED_RESOURCE_TYPES.join(' OR ');
 };
 
 /**
@@ -320,7 +311,9 @@ export function processInscriptionsForLinkedResources(
       didReference
     );
     
-    linkedResources.push(linkedResource);
+    if (linkedResource) {
+      linkedResources.push(linkedResource);
+    }
   }
   
   return linkedResources;

@@ -8,6 +8,8 @@ describe('Resource ID Generation', () => {
       const inscription: Inscription = {
         id: '123',
         sat: 1234567890,
+        content_url: 'https://ordinalsplus.com/resource/1',
+        content_type: 'application/json',
         number: 0
       };
 
@@ -34,7 +36,7 @@ describe('Resource ID Generation', () => {
   it('should generate a valid DID from inscription data', () => {
     const inscription: Inscription = {
       id: '123',
-      content: { name: 'test' },
+      content_url: 'https://ordinalsplus.com/resource/1',
       sat: 1234567890,
       content_type: 'application/json',
       number: 0

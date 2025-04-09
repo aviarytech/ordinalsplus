@@ -17,13 +17,11 @@ describe('Resource Extraction', () => {
           id: testCase.id,
           sat: 87654321,
           content_type: 'application/json',
-          content: {},
+          content_url: 'https://ordinalsplus.com/resource/1',
           number: testCase.expectedIndex
         };
         const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-        // The resource ID should include the correct index
         expect(resource.id).toBe(`did:btco:87654321/${testCase.expectedIndex}`);
-        // The DID reference should not include the index
         expect(resource.didReference).toBe('did:btco:87654321');
       });
     });
@@ -34,12 +32,10 @@ describe('Resource Extraction', () => {
         number: 123,
         sat: 87654321,
         content_type: 'application/json',
-        content: { value: {} }
+        content_url: 'https://ordinalsplus.com/resource/2'
       };
       const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      // Should use the number property as index
       expect(resource.id).toBe('did:btco:87654321/123');
-      // The DID reference should not include the index
       expect(resource.didReference).toBe('did:btco:87654321');
     });
 
@@ -48,9 +44,8 @@ describe('Resource Extraction', () => {
         id: '152d8afc7939b66953d9633e4d59c3ed086413d34617619811e8295cdb9388fd',
         sat: 87654321,
         content_type: 'application/json',
-        content: { value: {} }
+        content_url: 'https://ordinalsplus.com/resource/3'
       };
-      // Should throw error because there's no inscription index in ID and no number property
       expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource'))
         .toThrow('No valid index found in inscription');
     });
@@ -59,9 +54,8 @@ describe('Resource Extraction', () => {
       const inscription: Partial<Inscription> = {
         id: '152d8afc7939b66953d9633e4d59c3ed086413d34617619811e8295cdb9388fdi0',
         content_type: 'application/json',
-        content: { value: {} }
+        content_url: 'https://ordinalsplus.com/resource/4'
       };
-      // Check that it throws an error now instead of falling back
       expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource'))
         .toThrow('Sat number is required');
     });
@@ -72,13 +66,11 @@ describe('Resource Extraction', () => {
         sat: 87654321,
         sat_ordinal: '99999999',
         content_type: 'application/json',
-        content: {},
+        content_url: 'https://ordinalsplus.com/resource/5',
         number: 0
       };
       const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      // The sat property should be used, not sat_ordinal
       expect(resource.id).toBe('did:btco:87654321/0');
-      // The DID reference should not include the index
       expect(resource.didReference).toBe('did:btco:87654321');
     });
 
@@ -87,7 +79,7 @@ describe('Resource Extraction', () => {
         id: '123',
         sat: 12345678,
         content_type: 'application/json',
-        content: { value: {} },
+        content_url: 'https://ordinalsplus.com/resource/6',
         number: 0
       };
       const resource1 = createLinkedResourceFromInscription(inscription1, 'TestResource');
@@ -98,7 +90,7 @@ describe('Resource Extraction', () => {
         id: '456',
         sat: 87654321,
         content_type: 'application/json',
-        content: { value: {} },
+        content_url: 'https://ordinalsplus.com/resource/7',
         number: 0
       };
       const resource2 = createLinkedResourceFromInscription(inscription2, 'TestResource');
@@ -111,7 +103,7 @@ describe('Resource Extraction', () => {
         id: '152d8afc7939b66953d9633e4d59c3ed086413d34617619811e8295cdb9388fdi0',
         sat: 0, // Invalid sat number
         content_type: 'application/json',
-        content: { value: {} }
+        content_url: 'https://ordinalsplus.com/resource/8'
       };
       expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource'))
         .toThrow('Sat number is required');
@@ -125,7 +117,7 @@ describe('Resource Extraction', () => {
         number: 0,
         sat: 1234567890,
         content_type: 'application/json',
-        content: { value: {} }
+        content_url: 'https://ordinalsplus.com/resource/9'
       };
       
       const satNumber = extractSatNumber(inscription);
@@ -138,7 +130,7 @@ describe('Resource Extraction', () => {
         number: 0,
         sat: 0, // Invalid sat number to trigger error
         content_type: 'application/json',
-        content: { value: {} }
+        content_url: 'https://ordinalsplus.com/resource/10'
       };
       
       expect(() => extractSatNumber(inscription)).toThrow();
@@ -150,406 +142,10 @@ describe('Resource Extraction', () => {
         number: 0,
         sat: 0, // Invalid sat number
         content_type: 'application/json',
-        content: { value: {} }
+        content_url: 'https://ordinalsplus.com/resource/11'
       };
       
       expect(() => extractSatNumber(inscription)).toThrow();
-    });
-  });
-
-  describe('Content Extraction', () => {
-    describe('JSON Content', () => {
-      it('should extract JSON content from inscription', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: { name: 'Test Resource', description: 'A test resource' },
-          sat: 87654321,
-          content_type: 'application/json'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: { value: { name: 'Test Resource', description: 'A test resource' } },
-          contentType: 'application/json',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle empty JSON content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: {},
-          sat: 87654321,
-          content_type: 'application/json'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: { value: {} },
-          contentType: 'application/json',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle null JSON content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: null,
-          sat: 87654321,
-          content_type: 'application/json'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: { value: null },
-          contentType: 'application/json',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-    });
-
-    describe('Text Content', () => {
-      it('should extract text content from inscription', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: 'Hello, World!',
-          sat: 87654321,
-          content_type: 'text/plain'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: 'Hello, World!'
-          },
-          contentType: 'text/plain',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle empty text content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: '',
-          sat: 87654321,
-          content_type: 'text/plain'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: ''
-          },
-          contentType: 'text/plain',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-    });
-
-    describe('Binary Content', () => {
-      it('should handle image content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: 'base64-encoded-image-data',
-          sat: 12345678,
-          content_type: 'image/png'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: 'base64-encoded-image-data'
-          },
-          contentType: 'image/png',
-          id: 'did:btco:12345678/0',
-          didReference: 'did:btco:12345678',
-          inscriptionId: '123',
-          sat: 12345678,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle audio content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: 'base64-encoded-audio-data',
-          sat: 87654321,
-          content_type: 'audio/mp3'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: 'base64-encoded-audio-data'
-          },
-          contentType: 'audio/mp3',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle video content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: 'base64-encoded-video-data',
-          sat: 87654321,
-          content_type: 'video/mp4'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: 'base64-encoded-video-data'
-          },
-          contentType: 'video/mp4',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-    });
-
-    describe('Edge Cases', () => {
-      it('should handle missing content type', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: 'test',
-          sat: 1234567890
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: 'test'
-          },
-          contentType: 'application/json',
-          id: 'did:btco:1234567890/0',
-          didReference: 'did:btco:1234567890',
-          inscriptionId: '123',
-          sat: 1234567890,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle undefined content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          sat: 1234567890,
-          content_type: 'text/plain'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: null
-          },
-          contentType: 'text/plain',
-          id: 'did:btco:1234567890/0',
-          didReference: 'did:btco:1234567890',
-          inscriptionId: '123',
-          sat: 1234567890,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle missing content', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          sat: 87654321,
-          content_type: 'application/json'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: null
-          },
-          contentType: 'application/json',
-          id: 'did:btco:87654321/0',
-          didReference: 'did:btco:87654321',
-          inscriptionId: '123',
-          sat: 87654321,
-          type: 'test-type'
-        });
-      });
-
-      it('should handle custom content type', () => {
-        const inscription: Inscription = {
-          id: '123',
-          number: 0,
-          content: 'custom data',
-          sat: 1234567890,
-          content_type: 'application/x-custom'
-        };
-        
-        const result = createLinkedResourceFromInscription(inscription, 'test-type');
-        expect(result).toEqual({
-          content: {
-            value: 'custom data'
-          },
-          contentType: 'application/x-custom',
-          id: 'did:btco:1234567890/0',
-          didReference: 'did:btco:1234567890',
-          inscriptionId: '123',
-          sat: 1234567890,
-          type: 'test-type'
-        });
-      });
-    });
-  });
-
-  describe('Content Type Handling', () => {
-    it('should handle JSON content correctly', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: { value: { name: 'test', description: 'test description' } },
-        sat: 87654321,
-        content_type: 'application/json'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: { name: 'test', description: 'test description' } });
-    });
-
-    it('should handle empty object content', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: { value: {} },
-        sat: 87654321,
-        content_type: 'application/json'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: {} });
-    });
-
-    it('should handle null content', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: { value: null },
-        sat: 87654321,
-        content_type: 'application/json'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: null });
-    });
-
-    it('should handle string content that looks like JSON', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: '{"test": "value"}',
-        sat: 87654321,
-        content_type: 'application/json'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: '{"test": "value"}' });
-    });
-
-    it('should handle invalid JSON string content', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: '{invalid json}',
-        sat: 87654321,
-        content_type: 'application/json'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: '{invalid json}' });
-    });
-
-    it('should handle plain text content', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: 'Hello, world!',
-        sat: 87654321,
-        content_type: 'text/plain'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: 'Hello, world!' });
-    });
-
-    it('should handle HTML content', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: '<h1>Hello</h1>',
-        sat: 87654321,
-        content_type: 'text/html'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: '<h1>Hello</h1>' });
-    });
-
-    it('should handle SVG content', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: '<svg></svg>',
-        sat: 87654321,
-        content_type: 'image/svg+xml'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: '<svg></svg>' });
-    });
-
-    it('should handle binary content', () => {
-      const inscription: Inscription = {
-        id: '123',
-        number: 0,
-        content: 'binary data',
-        sat: 87654321,
-        content_type: 'application/octet-stream'
-      };
-      
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
-      expect(resource.content).toEqual({ value: 'binary data' });
     });
   });
 }); 
