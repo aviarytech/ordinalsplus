@@ -160,17 +160,17 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
     }
   };
 
-  // Format a DID using sat number and inscription index
+  // Format a DID using sat number and inscription index, or return inscription ID if sat is missing
   const formatDid = (): string => {
     if (resource.sat) {
       // Extract inscription index from inscriptionId
       const match = resource.inscriptionId?.match(/i(\d+)$/);
       const index = match && match[1] ? match[1] : '0';
-      return `did:btco:${resource.sat}/${index}`;
+      return `did:btco:${resource.sat}/${index}`; // Correct format
     }
-    // For backwards compatibility only - log warning
-    console.warn('Resource missing sat number, cannot create proper DID format');
-    return resource.didReference || `did:btco:${resource.inscriptionId}`;
+    // If sat is missing, return the inscription ID directly as a fallback identifier
+    console.warn('Resource missing sat number, cannot create proper DID format. Returning inscription ID instead.');
+    return resource.inscriptionId || ''; // Return inscription ID or empty string
   };
 
   return (

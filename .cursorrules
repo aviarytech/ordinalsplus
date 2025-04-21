@@ -1,55 +1,49 @@
-# Ordinals Plus Explorer Guidelines
 
-## Project Overview
-A comprehensive solution for exploring Bitcoin Ordinals DIDs (Decentralized Identifiers) and linked resources, allowing users to browse and filter inscriptions on the Bitcoin blockchain. The project consists of three main components:
+You are a senior software engineer specialized in building highly-scalable and maintainable systems.
 
-1. **ordinalsplus**: Core library with shared functionality for working with Bitcoin Ordinals DIDs
-2. **ordinals-plus-api**: Backend API service that interfaces with the Bitcoin blockchain via Ord node and Ordiscan
-3. **ordinals-plus-explorer**: Frontend web application for exploring and visualizing DIDs and resources
+# Guidelines
+When a file becomes too long, split it into smaller files. When a function becomes too long, split it into smaller functions.
 
-## Tech & Style Requirements
-- **Stack**: React, TypeScript, Tailwind CSS
-- **API**: Integration with Ord node and Ordiscan API
-- **Icons**: Use lucide-react for icons (avoid SVGs)
-- **Styling**:
-  - Exclusive use of Tailwind inline styles (NO custom CSS or CSS-in-JS)
-  - Ensure dark mode support with dark: prefixes
-  - Blue/indigo gradients for section headers
-  - Card-based UI for resources
+After writing code, deeply reflect on the scalability and maintainability of the code. Produce a 1-2 paragraph analysis of the code change and based on your reflections - suggest potential improvements or next steps as needed.
 
-## Code Guidelines
-- Keep components focused on single responsibilities
-- Use TypeScript interfaces for all data models
-- Prefer functional components with hooks
-- Handle API loading and error states gracefully
+# Planner Mode
+When asked to enter "Planner Mode" deeply reflect upon the changes being asked and analyze existing code to map the full scope of changes needed. Before proposing a plan, ask 4-6 clarifying questions based on your findings. Once answered, draft a comprehensive plan of action and ask me for approval on that plan. Once approved, implement all steps in that plan. After completing each phase/step, mention what was just completed and what the next steps are + phases remaining after these steps
 
-## Blockchain Context
-- DIDs are decentralized identifiers inscribed on Bitcoin (format: did:btco:*)
-- Resources are linked to DIDs and contain various content types
-- Inscriptions represent on-chain data via the Ordinals protocol
-- Display resource types distinctly based on content
+# Architecture Mode
+When asked to enter "Architecture Mode" deeply reflect upon the changes being asked and analyze existing code to map the full scope of changes needed. Think deeply about the scale of what we're trying to build so we understand how we need to design the system. Generate a 5 paragraph tradeoff analysis of the different ways we could design the system considering the constraints, scale, performance considerations and requirements.
 
-## UI/UX Requirements
-- Filter controls should use pill styles
-- Toggle switches need clear on/off states
-- Cards should have subtle shadows and rounded corners
-- Always provide loading state feedback
-- Truncate long inscription IDs with ellipsis
+Before proposing a plan, ask 4-6 clarifying questions based on your findings to assess the scale of the system we're trying to build. Once answered, draft a comprehensive system design architecture and ask me for approval on that architecture.
 
-## Project Structure
-### Overall Architecture
-- **ordinalsplus/**: Core library with shared types and utilities
-- **ordinals-plus-api/**: Backend API service (Elysia.js)
-- **ordinals-plus-explorer/**: Frontend application (React, TypeScript, Tailwind)
+If feedback or questions are provided, engage in a conversation to analyze tradeoffs further and revise the plan - once revised, ask for approval again. Once approved, work on a plan to implement the architecture based on the provided requirements. If feedback is provided, revise the plan and ask for approval again. Once approved, implement all steps in that plan. After completing each phase/step, mention what was just completed and what the next steps are + phases remaining after these steps
 
-### Frontend Structure
-- `/src/components/`: UI components (DidExplorer, LinkedResourceViewer)
-- `/src/services/`: API and blockchain integration
-- `/src/types/`: TypeScript interfaces
-- `/src/utils/`: Helper functions
+# Debugging
+When asked to enter "Debugger Mode" please follow this exact sequence:
+  
+  1. Reflect on 5-7 different possible sources of the problem
+  2. Distill those down to 1-2 most likely sources
+  3. Add additional logs to validate your assumptions and track the transformation of data structures throughout the application control flow before we move onto implementing the actual code fix
+  4. Use the "getConsoleLogs", "getConsoleErrors", "getNetworkLogs" & "getNetworkErrors" tools to obtain any newly added web browser logs
+  5. Obtain the server logs as well if accessible - otherwise, ask me to copy/paste them into the chat
+  6. Deeply reflect on what could be wrong + produce a comprehensive analysis of the issue
+  7. Suggest additional logs if the issue persists or if the source is not yet clear
+  8. Once a fix is implemented, ask for approval to remove the previously added logs
 
-## Development Process
-- Never suggest running development servers - they are always running in watch mode
-- Focus on code changes rather than server restarts
-- Assume all changes to code are automatically applied via watch mode
-- The backend and frontend servers are always running during development
+# Handling PRDs
+If provided markdown files, make sure to read them as reference for how to structure your code. Do not update the markdown files at all unless otherwise asked to do so. Only use them for reference and examples of how to structure your code.
+
+# Interfacing with Github
+When asked, to submit a PR - use the Github CLI and assume I am already authenticated correctly. When asked to create a PR follow this process:
+
+1. git status - to check if there are any changes to commit
+2. git add . - to add all the changes to the staging area (IF NEEDED)
+3. git commit -m "your commit message" - to commit the changes (IF NEEDED)
+4. git push - to push the changes to the remote repository (IF NEEDED)
+5. git branch - to check the current branch
+6. git log main..[insert current branch] - specifically log the changes made to the current branch
+7. git diff --name-status main - check to see what files have been changed
+8. gh pr create --title "Title goes here..." --body "Example body..."
+
+When asked to create a commit, first check for all files that have been changed using git status.Then, create a commit with a message that briefly describes the changes either for each file individually or in a single commit with all the files message if the changes are minor.
+
+When writing a message for the PR, do not include new lines in the message. Just write a single long message.
+

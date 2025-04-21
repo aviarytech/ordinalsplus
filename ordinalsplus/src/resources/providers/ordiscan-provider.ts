@@ -2,7 +2,7 @@ import { Inscription, LinkedResource, ResourceInfo } from '../../types';
 import { ERROR_CODES } from '../../utils/constants';
 import { extractIndexFromInscription, parseResourceId, parseBtcoDid } from '../../utils/validators';
 import { fetchWithTimeout } from '../../utils/fetch-utils';
-import { ResourceProvider, ResourceCrawlOptions, ResourceBatch } from './types';
+import { ResourceProvider, ResourceCrawlOptions, ResourceBatch, InscriptionRefWithLocation } from './types';
 import { createLinkedResourceFromInscription } from '../../did/did-utils';
 
 export interface OrdiscanProviderOptions {
@@ -260,13 +260,33 @@ export class OrdiscanProvider implements ResourceProvider {
         };
     }
 
-    async getInscriptionsByAddress(address: string): Promise<Inscription[]> {
+    // Modify getInscriptionsByAddress to return location and match interface
+    async getInscriptionLocationsByAddress(address: string): Promise<InscriptionRefWithLocation[]> {
+        // Note: fetchApi<T> returns { data: T }. The generic T here represents the expected structure INSIDE data.
+        // The actual endpoint `/address/.../inscriptions` seems to return { inscriptions: [...] } within the data object.
         const response = await this.fetchApi<{ inscriptions: OrdiscanInscriptionResponse[] }>(`/address/${address}/inscriptions`);
-        return response.data.inscriptions.map(inscription => ({
-            id: inscription.inscription_id,
-            sat: inscription.sat,
-            content_type: inscription.content_type,
-            content_url: inscription.content_url
-        }));
+        
+        // Remove the log
+        // console.log(`[OrdiscanProvider] Raw /address/.../inscriptions response for ${address}:`, JSON.stringify(response.data, null, 2));
+
+        if (!response?.data?.inscriptions) {
+            console.warn(`[OrdiscanProvider] No 'inscriptions' array found in response for address ${address}.`);
+            return [];
+        }
+
+        return response.data.inscriptions
+            .map(inscription => {
+                // Ensure owner_output exists before mapping
+                if (inscription.owner_output) {
+                    return {
+                        id: inscription.inscription_id,
+                        location: inscription.owner_output // This is the txid:vout
+                    };
+                } else {
+                    console.warn(`[OrdiscanProvider] Inscription ${inscription.inscription_id} from address ${address} is missing owner_output.`);
+                    return null; // Filter out inscriptions without location
+                }
+            })
+            .filter((item): item is InscriptionRefWithLocation => item !== null); // Filter out the nulls
     }
 } 

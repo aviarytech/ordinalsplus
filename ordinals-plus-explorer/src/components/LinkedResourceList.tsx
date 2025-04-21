@@ -1,129 +1,160 @@
 import React, { useState, useEffect } from 'react';
-import { useApiService } from '../hooks/useApiService';
+import { Loader2, AlertTriangle, Inbox } from 'lucide-react';
 import { LinkedResource } from 'ordinalsplus';
 import ResourceCard from './ResourceCard';
+import { useApi } from '../context/ApiContext';
+import { ApiResponse } from '../types/index';
+import Pagination from './Pagination';
 
 interface LinkedResourceListProps {
-  didString?: string;
-  showAllResources?: boolean;
-  contentTypeFilter?: string | null;
+  did?: string;
   onResourceSelect?: (resource: LinkedResource) => void;
   currentPage?: number;
+  contentTypeFilter?: string | null;
+  itemsPerPage?: number;
   onPageChange?: (page: number) => void;
 }
 
-const LinkedResourceList: React.FC<LinkedResourceListProps> = ({ 
-  didString,
-  showAllResources = false,
-  contentTypeFilter = null,
-  onResourceSelect,
+const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
+  did,
+  onResourceSelect = () => {},
   currentPage = 1,
-  onPageChange
+  contentTypeFilter = null,
+  itemsPerPage = 20,
+  onPageChange = () => {},
 }) => {
   const [resources, setResources] = useState<LinkedResource[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalItems, setTotalItems] = useState(0);
-  const [itemsPerPage] = useState(20);
-  const [selectedResource, setSelectedResource] = useState<LinkedResource | null>(null);
-  const apiProvider = useApiService();
-  const apiService = apiProvider.getApiService();
+  const [selectedResourceId, setSelectedResourceId] = useState<string | null>(null);
+  const [totalItems, setTotalItems] = useState<number>(0);
 
-  const loadResources = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      if (didString) {
-        const result = await apiService.getResourceByDid(didString);
-        if (!result) {
-          setError('Resource not found');
-          return;
-        }
-        setResources([result]);
-        setTotalItems(1);
-      } else {
-        const result = await apiService.fetchAllResources(currentPage, itemsPerPage, contentTypeFilter);
-        if (!result) {
-          setError('Failed to load resources');
-          return;
-        }
-        setResources(result.linkedResources || []);
-        setTotalItems(result.totalItems || 0);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load resources');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { apiService } = useApi();
 
   useEffect(() => {
-    loadResources();
-  }, [didString, currentPage, contentTypeFilter]);
+    const fetchDidResources = async (targetDid: string) => {
+      if (!apiService) return;
+      setLoading(true);
+      setError(null);
+      setResources([]);
+      setTotalItems(0);
+      try {
+        console.log(`[LinkedResourceList] Fetching resources for DID: ${targetDid}`);
+        const fetchedResources = await apiService.getLinkedResources(targetDid);
+        console.log(`[LinkedResourceList] Fetched ${fetchedResources.length} resources for DID ${targetDid}.`);
+        setResources(fetchedResources || []);
+        setTotalItems(fetchedResources.length);
+      } catch (err) {
+        console.error(`[LinkedResourceList] Error fetching resources for DID ${targetDid}:`, err);
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load linked resources';
+        setError(errorMsg.includes('404') ? `No linked resources found for this DID.` : errorMsg);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handlePageChange = (newPage: number) => {
-    if (onPageChange) {
-      onPageChange(newPage);
+    const fetchAll = async () => {
+      if (!apiService) return;
+      setLoading(true);
+      setError(null);
+      try {
+        console.log(`[LinkedResourceList] Fetching all resources. Page: ${currentPage}, Filter: ${contentTypeFilter}`);
+        const response: ApiResponse = await apiService.fetchAllResources(currentPage, itemsPerPage, contentTypeFilter);
+        console.log(`[LinkedResourceList] Fetched all resources response:`, response);
+        setResources(response.linkedResources || []);
+        setTotalItems(response.totalItems || 0);
+        if (response.error) {
+            setError(response.error);
+        }
+      } catch (err) {
+        console.error(`[LinkedResourceList] Error fetching all resources:`, err);
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load resources';
+        setError(errorMsg);
+        setResources([]);
+        setTotalItems(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (did) {
+      fetchDidResources(did);
+    } else {
+      fetchAll();
     }
+  }, [did, currentPage, contentTypeFilter, apiService, itemsPerPage]);
+
+  const handleCardClick = (resource: LinkedResource) => {
+    setSelectedResourceId(resource.id);
+    onResourceSelect(resource);
   };
 
-  const handleResourceClick = (resource: LinkedResource) => {
-    setSelectedResource(resource);
-    if (onResourceSelect) {
-      onResourceSelect(resource);
-    }
-  };
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-  if (loading) {
+  if (loading && resources.length === 0) {
     return (
-      <div className="flex justify-center items-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+      <div className="flex justify-center items-center p-8 min-h-[200px]">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-500 dark:text-gray-400" />
+        <span className="ml-2 text-gray-600 dark:text-gray-300">Loading resources...</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="text-red-500 text-center py-8">
-        {error}
+      <div className="flex flex-col items-center justify-center p-8 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg min-h-[200px]">
+        <AlertTriangle className="h-8 w-8 mb-2" />
+        <p className="font-semibold">Error Loading Resources</p>
+        <p className="text-sm text-center">{error}</p>
       </div>
     );
   }
+  
+  if (did && !loading && !error && resources.length === 0) {
+      return (
+          <div className="flex flex-col items-center justify-center p-8 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 rounded-lg min-h-[200px]">
+              <Inbox className="h-10 w-10 mb-3 text-gray-400 dark:text-gray-500"/>
+              <p className="font-semibold">No Linked Resources Found</p>
+              <p className="text-sm text-center">This DID does not have any associated resources.</p>
+          </div>
+      );
+  }
 
+  if (!loading && !error && resources.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 rounded-lg min-h-[200px]">
+        <Inbox className="h-10 w-10 mb-3 text-gray-400 dark:text-gray-500"/>
+        <p className="font-semibold">No Resources Found</p>
+        <p className="text-sm text-center">No resources match the current criteria.</p>
+      </div>
+    );
+  }
+  
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4">
+    <div className="space-y-6">
+       {loading && resources.length > 0 && (
+         <div className="absolute inset-0 bg-gray-100/50 dark:bg-gray-800/50 flex justify-center items-center z-10">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-500 dark:text-gray-400" />
+         </div>
+       )}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 ${loading ? 'opacity-50' : ''}`}>
         {resources.map((resource) => (
-          <ResourceCard
-            key={resource.id}
-            resource={resource}
-            onClick={() => handleResourceClick(resource)}
-            isSelected={selectedResource?.id === resource.id}
-          />
+          <ResourceCard 
+              key={resource.id}
+              resource={resource}
+              onClick={() => handleCardClick(resource)}
+              isSelected={selectedResourceId === resource.id}
+           />
         ))}
       </div>
-      
-      {!didString && (
-        <div className="flex justify-center space-x-4 mt-4">
-          <button
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage <= 1}
-            className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="px-4 py-2 text-gray-700 dark:text-gray-300">
-            Page {currentPage} of {Math.ceil(totalItems / itemsPerPage)}
-          </span>
-          <button
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage >= Math.ceil(totalItems / itemsPerPage)}
-            className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
+      {!did && totalPages > 1 && (
+          <div className="flex justify-center pt-4">
+              <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={onPageChange} 
+              />
+          </div>
       )}
     </div>
   );

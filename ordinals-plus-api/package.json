@@ -8,15 +8,27 @@
     "build": "tsc"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/body-parser": "^1.19.5",
+    "@types/bun": "latest",
+    "@types/express": "^5.0.1"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
+    "@elysiajs/swagger": "^1.2.2",
+    "@omnisat/lasereyes": "^0.0.142",
+    "@omnisat/lasereyes-core": "^0.0.64",
+    "@ordzaar/ordit-sdk": "^4.2.4",
+    "@types/bitcoinjs-lib": "^5.0.4",
     "axios": "^1.8.4",
+    "bitcoinjs-lib": "^6.1.7",
+    "body-parser": "^2.2.0",
+    "ecpair": "^3.0.0",
     "elysia": "^1.2.25",
-    "ordinalsplus": "file:../ordinalsplus"
+    "express": "^5.1.0",
+    "ordinalsplus": "file:../ordinalsplus",
+    "tiny-secp256k1": "^2.2.3"
   }
 }

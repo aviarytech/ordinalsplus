@@ -202,9 +202,8 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
         <div className="space-y-6">
           <DidDocumentViewer document={didDocument} />
           <LinkedResourceList
-            didString={didString}
-            showAllResources={false}
-            onResourceSelect={onResourceSelect}
+            did={didString}
+            onResourceSelect={onResourceSelect || (() => {})}
           />
         </div>
       )}

@@ -4,6 +4,7 @@ import { extractIndexFromInscription, parseResourceId, parseBtcoDid } from '../.
 import { fetchWithTimeout } from '../../utils/fetch-utils';
 import { ResourceProvider, ResourceCrawlOptions, ResourceBatch } from './types';
 import { createLinkedResourceFromInscription } from '../../did/did-utils';
+import { InscriptionRefWithLocation } from './types';
 
 export interface OrdNodeProviderOptions {
     nodeUrl?: string;
@@ -34,6 +35,14 @@ interface OrdNodeInscriptionListResponse {
     ids: string[];
     more: boolean;
     page_index: number;
+}
+
+interface OrdNodeFullInscriptionResponse {
+    inscription_id: string;
+    output?: string;
+    address?: string;
+    sat?: number;
+    content_type?: string;
 }
 
 export class OrdNodeProvider implements ResourceProvider {
@@ -244,5 +253,55 @@ export class OrdNodeProvider implements ResourceProvider {
             content_type: inscription.content_type,
             content_url: inscription.content_url
         }));
+    }
+
+    async getInscriptionLocationsByAddress(address: string): Promise<InscriptionRefWithLocation[]> {
+        if (!address) {
+            console.warn('[OrdNodeProvider] getInscriptionLocationsByAddress called with empty address.');
+            return [];
+        }
+
+        const idsEndpoint = `/address/${address}/inscription_ids`;
+        let inscriptionIds: string[] = [];
+
+        try {
+            console.log(`[OrdNodeProvider] Fetching inscription IDs for address ${address} from endpoint: ${idsEndpoint}`);
+            const idResponse = await this.fetchApi<{ ids: string[] }>(idsEndpoint); 
+            if (idResponse?.data?.ids && Array.isArray(idResponse.data.ids)) {
+                inscriptionIds = idResponse.data.ids;
+                console.log(`[OrdNodeProvider] Found ${inscriptionIds.length} potential inscription IDs for address ${address}.`);
+            } else {
+                console.warn(`[OrdNodeProvider] No inscription IDs found or unexpected format for address ${address} at ${idsEndpoint}.`);
+                return [];
+            }
+        } catch (error) {
+            console.error(`[OrdNodeProvider] Error fetching inscription IDs for address ${address} from ${idsEndpoint}:`, error);
+            return [];
+        }
+
+        if (inscriptionIds.length === 0) {
+            return [];
+        }
+
+        console.log(`[OrdNodeProvider] Fetching full details for ${inscriptionIds.length} inscriptions...`);
+        const locationPromises = inscriptionIds.map(async (id): Promise<InscriptionRefWithLocation | null> => {
+            try {
+                const detailResponse = await this.fetchApi<OrdNodeFullInscriptionResponse>(`/inscription/${id}`);
+                
+                const location = detailResponse?.data?.output;
+                if (location) {
+                    return { id, location };
+                } else {
+                    console.warn(`[OrdNodeProvider] Location (output field) not found for inscription ${id}.`);
+                    return null;
+                }
+            } catch (detailError) {
+                console.error(`[OrdNodeProvider] Error fetching details for inscription ${id}:`, detailError);
+                return null;
+            }
+        });
+
+        const results = await Promise.all(locationPromises);
+        return results.filter((item: InscriptionRefWithLocation | null): item is InscriptionRefWithLocation => item !== null);
     }
 } 

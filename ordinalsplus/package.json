@@ -3,13 +3,17 @@
   "version": "0.1.0",
   "description": "A JavaScript/TypeScript library for working with BTCO DIDs and DID Linked Resources on the Bitcoin blockchain",
   "type": "module",
-  "main": "./dist/src/index.js",
-  "module": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "typesVersions": {
     "*": {
-      "*": ["./dist/src/index.d.ts"],
-      "types": ["./dist/src/types/index.d.ts"]
+      "*": [
+        "./dist/index.d.ts"
+      ],
+      "types": [
+        "./dist/types/index.d.ts"
+      ]
     }
   },
   "files": [
@@ -19,9 +23,9 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
-      "import": "./dist/src/index.js",
-      "require": "./dist/src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
     }
   },
   "scripts": {
@@ -58,17 +62,21 @@
   },
   "homepage": "https://github.com/yourname/ordinalsplus#readme",
   "dependencies": {
+    "@jest/globals": "^29.7.0",
+    "bitcoinjs-lib": "^6.1.7",
     "jsonld": "^8.3.0",
-    "multiformats": "^12.1.0"
+    "multiformats": "^12.1.0",
+    "tiny-secp256k1": "^2.2.3"
   },
   "devDependencies": {
+    "@types/bitcoinjs-lib": "^5.0.4",
     "@types/bun": "^1.2.8",
     "@types/jsonld": "^1.5.15",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "bun-types": "latest",
     "eslint": "^8.57.0",
-    "typescript": "^5.2.2",
-    "bun-types": "latest"
+    "typescript": "^5.2.2"
   },
   "engines": {
     "node": ">=18.0.0"

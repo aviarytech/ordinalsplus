@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import ExplorerPage from './pages/ExplorerPage';
 import LinkedResourcesPage from './pages/LinkedResourcesPage';
 import SettingsPage from './pages/SettingsPage';
+import CreatePage from './pages/CreatePage';
+import WalletConnector from './components/WalletConnector';
 import './index.css';
 
 function App() {
@@ -11,9 +13,12 @@ function App() {
         <nav className="bg-gradient-to-r from-orange-400 to-orange-600 text-white p-4 shadow-md">
           <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center">
             <div className="font-bold text-xl">Ordinals Plus Explorer</div>
-            <div className="flex space-x-4">
-              <Link to="/" className="text-white hover:text-orange-200 transition-colors">Explorer</Link>
+            <div className="flex items-center space-x-4">
+              <Link to="/explorer" className="text-white hover:text-orange-200 transition-colors">Explorer</Link>
+              <Link to="/" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
+              <Link to="/create" className="text-white hover:text-orange-200 transition-colors">Create</Link>
               <Link to="/settings" className="text-white hover:text-orange-200 transition-colors">Settings</Link>
+              <WalletConnector compact showAddress />
             </div>
           </div>
         </nav>
@@ -21,6 +26,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LinkedResourcesPage />} />
           <Route path="/explorer" element={<ExplorerPage />} />
+          <Route path="/create" element={<CreatePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </div>

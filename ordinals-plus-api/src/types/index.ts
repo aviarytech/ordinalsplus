@@ -1,15 +1,15 @@
 import type { 
-  CuratedCollectionCredential, 
-  ResourceMetadata,
-  DID, 
+  // CuratedCollectionCredential, 
+  // ResourceMetadata,
+  // DID, 
   LinkedResource, 
   Inscription, 
-  InscriptionResponse, 
-  ExplorerApiResponse 
+  // InscriptionResponse, 
+  // ExplorerApiResponse 
 } from "ordinalsplus";
 
 // Re-export core types
-export type { DID, LinkedResource, Inscription, InscriptionResponse, ExplorerApiResponse };
+export type { LinkedResource, Inscription }; // Removed DID, InscriptionResponse, ExplorerApiResponse
 
 export interface ApiConfig {
   port: number;
@@ -39,6 +39,8 @@ export interface ApiResponse<T = unknown> {
   };
 }
 
+/* Commenting out as ResourceMetadata and CuratedCollectionCredential 
+   are not currently exported from ordinalsplus
 export interface ResourceCollection {
   id: string;
   type: 'did' | 'heritage' | 'controller' | 'curated';
@@ -46,6 +48,7 @@ export interface ResourceCollection {
   metadata?: ResourceMetadata;
   credential?: CuratedCollectionCredential;
 }
+*/
 
 export interface HealthCheckResponse {
   status: 'healthy' | 'unhealthy';
@@ -69,4 +72,103 @@ export interface Network {
   isTestnet: boolean;
   apiEndpoint: string;
   explorerUrl: string;
+}
+
+// --- Inscription Creation Types --- 
+
+// Shared interface for inscription requests
+export interface GenericInscriptionRequest {
+  contentType: string;
+  contentBase64: string; // Base64 encoded content
+  feeRate: number;       // Fee rate in sats/vbyte
+  recipientAddress: string; // Address to send the inscription
+  // senderPublicKey: string; // REMOVED - Not needed for reveal PSBT generation
+}
+
+// Specific request for DID inscription
+export interface DidInscriptionRequest extends GenericInscriptionRequest {}
+
+// Specific request for Resource inscription
+export interface ResourceInscriptionRequest extends GenericInscriptionRequest {
+  parentDid?: string;     // Optional DID the resource is linked to
+  metadata?: Record<string, string>; // Optional metadata
+  // Note: Extends Generic, so doesn't need fields listed again
+  // unless overriding or adding specifics like parentDid/metadata
+}
+
+// --- Restore first PsbtResponse definition ---
+export interface PsbtResponse {
+  psbtBase64: string; // The partially signed transaction, base64 encoded
+  
+  // Fields relevant to the REVEAL PSBT returned by constructGenericPsbt
+  commitTxOutputValue: number; // The value (in sats) required for the commit transaction's P2TR output
+  revealFee: number; // The estimated fee (in sats) for the reveal transaction itself
+  revealSignerPrivateKeyWif: string; // The WIF private key needed to sign the reveal transaction input
+}
+
+// --- Restore first FeeEstimateResponse definition ---
+export interface FeeEstimateResponse {
+  low: number; // sat/vB
+  medium: number; // sat/vB
+  high: number; // sat/vB
+}
+
+export interface TransactionStatusRequest {
+  txid: string;
+}
+
+export interface TransactionStatusResponse {
+  status: 'pending' | 'confirmed' | 'failed' | 'not_found';
+  blockHeight?: number;
+  inscriptionId?: string;
+}
+
+// --- Inscription Content Fetching (NEW) ---
+export interface InscriptionDetailsResponse {
+  inscriptionId: string;
+  contentType: string;
+  contentBase64: string;
+  contentLength: number; // Byte length of the original content
+}
+
+// --- Error Response ---
+export interface ErrorResponse {
+  error: string;
+  details?: any; // Optional additional details
+}
+
+// --- General API Response Structure (Placeholder - refine as needed) ---
+export interface ApiResponse {
+  linkedResources: LinkedResource[];
+  dids?: any[]; // Define DID type if needed
+  page?: number;
+  totalItems?: number;
+  itemsPerPage?: number;
+  // error?: string; // REMOVED to avoid type conflict
+}
+
+// --- Explorer State (Mirrors frontend type) ---
+export interface ExplorerState {
+  linkedResources: LinkedResource[];
+  isLoading: boolean;
+  error: string | null;
+  currentPage: number;
+  totalItems: number;
+  itemsPerPage: number;
+}
+
+// --- Inscription Response (from Ordinals Provider) ---
+// Defines the expected structure from provider.fetchInscriptions
+export interface InscriptionResponse {
+  results: Inscription[]; // Assuming the provider returns inscriptions in a 'results' array
+  total: number; // Total number of inscriptions available
+  limit: number; // The limit used for the request
+  offset: number; // The offset used for the request
+}
+
+// --- Network Configuration (NEW) ---
+export interface NetworkInfo {
+  id: string; // e.g., 'mainnet', 'testnet'
+  name: string; // e.g., 'Bitcoin Mainnet', 'Bitcoin Testnet'
+  // Add other relevant fields if needed, like explorer URLs, etc.
 } 
