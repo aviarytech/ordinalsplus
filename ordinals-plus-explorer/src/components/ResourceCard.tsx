@@ -160,19 +160,6 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
     }
   };
 
-  // Format a DID using sat number and inscription index, or return inscription ID if sat is missing
-  const formatDid = (): string => {
-    if (resource.sat) {
-      // Extract inscription index from inscriptionId
-      const match = resource.inscriptionId?.match(/i(\d+)$/);
-      const index = match && match[1] ? match[1] : '0';
-      return `did:btco:${resource.sat}/${index}`; // Correct format
-    }
-    // If sat is missing, return the inscription ID directly as a fallback identifier
-    console.warn('Resource missing sat number, cannot create proper DID format. Returning inscription ID instead.');
-    return resource.inscriptionId || ''; // Return inscription ID or empty string
-  };
-
   return (
     <div
       className={`border ${getBorderColorClass()} rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
@@ -184,8 +171,7 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
         <div className="flex items-center space-x-2">
           {getResourceIcon()}
           <h3 className="text-sm font-medium truncate">
-            {formatDid().substring(0, 20)}
-            {formatDid().length > 20 ? '...' : ''}
+            {resource.id}
           </h3>
         </div>
       </div>

@@ -199,6 +199,12 @@ const ResourceCreationForm: React.FC = () => {
       setFlowState('failed');
       return;
     }
+    const currentNetwork = walletNetwork;
+    if (!currentNetwork) {
+        setFlowError('Wallet network not determined.');
+        setFlowState('failed');
+        return;
+    }
 
     // --- Content Preparation and Base64 Encoding ---
     let contentBase64: string;
@@ -223,412 +229,252 @@ const ResourceCreationForm: React.FC = () => {
     // This part assumes GenericInscriptionRequest for now
     console.log("[Submit] Content prepared (Base64, first 100 chars):", contentBase64.substring(0, 100));
 
-    // --- Call /api/inscriptions/create ONLY to get commit details (TEMPORARY) ---
-    console.log("[Submit] Fetching commit details (TEMPORARY) via API...");
-    setFlowState('fetchingPsbt'); // Keep state name for now
+    // --- Use ApiService to get PSBT/Commit Details ---
+    // Replace direct fetch with apiService call
+    console.log(`[Submit] Calling apiService.createResourceInscription for network: ${currentNetwork}`);
+    setFlowState('fetchingPsbt');
 
     try {
-      const apiUrl = apiService.getConfig().baseUrl;
-      const endpoint = `${apiUrl}/api/inscriptions/create`;
+      // Construct the request for the API service method
       const createRequest: ResourceInscriptionRequest = {
           contentType,
           contentBase64,
           feeRate: currentFeeRate,
           recipientAddress: walletAddress,
+          // parentDid: parentId || undefined, // Add parentId if/when implemented
+          // metadata: {}, // Add metadata if/when implemented
       };
 
-      console.log(`[Submit] Calling POST ${endpoint} for details with payload:`, createRequest);
-      const apiResponse = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(createRequest),
-      });
+      // Call the appropriate apiService method, passing the network type
+      // Using createResourceInscription as an example, adjust if needed (e.g., createGenericInscription)
+      const response: PsbtResponse = await apiService.createResourceInscription(currentNetwork, createRequest);
 
-      if (!apiResponse.ok) {
-          let errorBody = 'Unknown API error';
-          try { errorBody = await apiResponse.text(); } catch(e) {}
-          throw new Error(`API Error ${apiResponse.status}: ${errorBody}`);
+      console.log('[Submit] Received PsbtResponse from API:', response);
+      
+      // Store details needed for commit/reveal from the response
+      setUnsignedCommitPsbtHex(response.psbtBase64); // Assuming API returns commit PSBT here
+      setCommitOutputValueFromApi(response.commitTxOutputValue);
+      setRevealPsbtBase64(response.psbtBase64); // TODO: API needs to return Reveal PSBT separately
+      setRevealSignerWif(response.revealSignerPrivateKeyWif); // TODO: API needs to return Reveal WIF separately
+      setCommitTxFee(response.revealFee); // Assuming this is commit fee? API naming unclear.
+
+      // --- Proceed to Prepare Commit Transaction (using data from API response) ---
+      if (!response.psbtBase64) { // Check if commit PSBT was returned
+           throw new Error('API did not return the required commit PSBT.');
       }
+      // Continue with signing commit PSBT
+      await handleSignAndBroadcastCommit(response.psbtBase64);
+      
 
-      const responseData: PsbtResponse = await apiResponse.json();
-      const { commitTxOutputValue, revealFee, psbtBase64, revealSignerPrivateKeyWif } = responseData;
-
-      // --- Store TEMPORARY values needed for later steps --- 
-      setCommitOutputValueFromApi(commitTxOutputValue);
-      setRevealPsbtBase64(psbtBase64); // Keep for reveal step for now
-      setRevealSignerWif(revealSignerPrivateKeyWif); // Keep for reveal step for now
-
-      console.log(`[Submit] Received commit details: OutputValue=${commitTxOutputValue}, RevealFee=${revealFee}`);
-
-      // --- Proceed to Prepare Commit using library --- 
-      // CHANGED: Call new handler function
-      await handlePrepareCommitPsbt(commitTxOutputValue, currentFeeRate);
-
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to get commit details from API';
-      console.error('[Submit] Error during fetching commit details:', errorMsg, err);
-      setFlowError(`Fetch Details Error: ${errorMsg}`);
+    } catch (error) {
+      console.error('[Submit] Error during inscription creation API call:', error);
+      setFlowError(error instanceof Error ? error.message : 'Failed to get inscription details from API');
       setFlowState('failed');
     }
   };
 
-  // --- STEP 1: Prepare Commit PSBT using Library ---
+  // --- Helper Functions (Commit/Reveal Flow) ---
+
+  // Placeholder - this function might be redundant if API provides commit PSBT directly
   const handlePrepareCommitPsbt = async (commitOutputValue: number, currentFeeRate: number) => {
-    setFlowState('preparingCommit'); // Use new state name
-    console.log(`[Commit Step 1] Preparing Commit PSBT via library. Required output value: ${commitOutputValue} sats, FeeRate: ${currentFeeRate} sat/vB`);
-
-    if (!walletAddress || !walletPublicKey) {
-      setFlowError('Wallet address or public key missing.');
-      setFlowState('failed');
-      return;
-    }
-    if (commitOutputValue <= 0) {
-      setFlowError(`Invalid commit output value for library: ${commitOutputValue}`);
-      setFlowState('failed');
-      return;
-    }
-
-    try {
-      console.log('[Commit Step 1] Fetching UTXOs...');
-      const availableUtxos = await getUtxos();
-      console.log(`[Commit Step 1] Found ${availableUtxos.length} UTXOs.`);
-      if (availableUtxos.length === 0) {
-        setFlowError('No UTXOs available to fund the transaction.');
-        setFlowState('failed');
-        return;
-      }
-
-      // --- Call Library Function --- 
-      const { psbt, selectedUtxos, commitFee } = await prepareCommitTransactionPsbt(
-          availableUtxos,
-          commitOutputValue,
-          walletPublicKey, // Use wallet's public key for P2TR commit output
-          walletAddress, // Change address
-          networkConfig,
-          currentFeeRate
-      );
-
-      console.log(`[Commit Step 1] Library prepared unsigned commit PSBT. Fee: ${commitFee} sats`);
-      setCommitUtxosUsed(selectedUtxos);
-      setCommitTxFee(commitFee); // Store the calculated fee
-
-      const unsignedHex = psbt.toHex();
-      console.log("[Commit Step 1] Library PSBT (hex):", unsignedHex.substring(0, 100) + "...");
-      setUnsignedCommitPsbtHex(unsignedHex);
-      
-      // --- Proceed to Sign and Broadcast --- 
-      const unsignedBase64 = psbt.toBase64();
-      await handleSignAndBroadcastCommit(unsignedBase64); // Pass base64 to next step
-
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error preparing commit PSBT via library';
-      console.error('[Commit Step 1] Error:', errorMsg, err);
-      setFlowError(`Prepare Commit Error: ${errorMsg}`);
-      setFlowState('failed');
-    }
+    // ... (existing logic might be removed or adapted based on API response) ...
+    console.warn("[handlePrepareCommitPsbt] This function might be redundant if API provides commit PSBT.");
   };
 
-  // --- Step 1b: Sign and Broadcast Commit --- 
   const handleSignAndBroadcastCommit = async (unsignedCommitBase64: string) => {
-       console.log("[Commit Step 1b] Signing and Broadcasting commit PSBT...");
-       if (!walletAddress) {
-         setFlowError("Wallet address is missing for signing.");
-         setFlowState('failed');
-         return;
-       }
-       if (!apiService) {
-         setFlowError("API service is not available for broadcast.");
-         setFlowState('failed');
-         return;
-       }
-       if (!walletPublicKey) {
-           setFlowError("Wallet public key missing, cannot find commit vout.");
-           setFlowState('failed');
-           return;
-       }
+    // ... (existing signing logic using signPsbt) ...
+    console.log("[SignCommit] Attempting to sign commit PSBT...");
+    setFlowState('signingCommit');
+    try {
+      if (!signPsbt) throw new Error("signPsbt function not available from wallet.");
+      const signedCommitBase64 = await signPsbt(unsignedCommitBase64);
+      setSignedCommitPsbtHex(signedCommitBase64);
+      console.log("[SignCommit] Commit PSBT signed successfully.");
 
-       try {
-           // Sign
-           setFlowState('signingCommit'); 
-           console.log("[Commit Step 1b] Requesting commit signature from wallet...");
-           const signedBase64 = await signPsbt(unsignedCommitBase64);
-           if (!signedBase64) {
-               throw new Error('Wallet failed to sign the commit transaction.');
-           }
-           console.log("[Commit Step 1b] Commit PSBT signed by wallet.");
-           const signedHex = Buffer.from(signedBase64, 'base64').toString('hex');
-           setSignedCommitPsbtHex(signedHex);
+      // --- Proceed to Broadcast Commit ---
+      await handleBroadcastCommit(signedCommitBase64);
 
-           // Broadcast
-           setFlowState('broadcastingCommit');
-           console.log("[Commit Step 1b] Broadcasting signed commit transaction...");
-
-           // Finalize the PSBT 
-           const signedPsbt = bitcoin.Psbt.fromBase64(signedBase64, { network: networkConfig });
-           // TODO: Validate finalization? Does the wallet return finalized?
-           // Assuming wallet doesn't finalize, finalize all inputs here.
-           signedPsbt.finalizeAllInputs(); 
-
-           const commitTx = signedPsbt.extractTransaction();
-           const commitTxHex = commitTx.toHex();
-           const calculatedCommitTxid = commitTx.getId();
-           console.log(`[Commit Step 1b] Final Commit TX Hex (length ${commitTxHex.length}): ${commitTxHex.substring(0,100)}...`);
-           console.log(`[Commit Step 1b] Calculated Commit TXID: ${calculatedCommitTxid}`);
-
-           // Use the API service's broadcast method
-           const broadcastResponse = await apiService.broadcastTransaction(commitTxHex);
-           const receivedTxid = (typeof broadcastResponse === 'string') ? broadcastResponse : broadcastResponse?.txid;
-
-           if (!receivedTxid || typeof receivedTxid !== 'string' || receivedTxid.length < 64) {
-               throw new Error(`Invalid transaction ID received from broadcast: ${JSON.stringify(broadcastResponse)}`);
-           }
-           console.log(`[Commit Step 1b] Broadcast successful. Commit TXID: ${receivedTxid}`);
-           setCommitTxid(receivedTxid);
-
-           // Find the commit Vout for the reveal input
-           // Re-calculate script for lookup (assuming p2tr output from library matches)
-           const internalPubKey = Buffer.from(walletPublicKey, 'hex').slice(1);
-           const { output: commitOutputScript } = bitcoin.payments.p2tr({ internalPubkey: internalPubKey, network: networkConfig });
-           if (!commitOutputScript) throw new Error("Failed to recalculate P2TR output script for vout lookup");
-           const commitOutputScriptHex = commitOutputScript.toString('hex');
-
-           const commitVoutIndex = commitTx.outs.findIndex(out => out.script.toString('hex') === commitOutputScriptHex);
-           if (commitVoutIndex === -1) {
-               console.error("[Commit Step 1b] Could not find commit output script in finalized transaction!", { txOutputs: commitTx.outs.map(o=>o.script.toString('hex')), searchScript: commitOutputScriptHex });
-               throw new Error('Commit output script not found in finalized transaction. Cannot proceed with reveal.');
-           }
-           console.log(`[Commit Step 1b] Found commit output at vout: ${commitVoutIndex}`);
-           setCommitVout(commitVoutIndex);
-
-           // --- Proceed to reveal step (using OLD logic for now) --- 
-           await handleConstructAndSignReveal(receivedTxid, commitVoutIndex);
-
-       } catch (err) {
-           const errorMsg = err instanceof Error ? err.message : 'Error signing or broadcasting commit transaction';
-           console.error('[Commit Step 1b] Error:', errorMsg, err);
-           setFlowError(`Sign/Broadcast Commit Error: ${errorMsg}`);
-           setFlowState('failed');
-       }
+    } catch (error) {
+      console.error('[SignCommit] Error signing commit PSBT:', error);
+      setFlowError(error instanceof Error ? error.message : 'Failed to sign commit transaction');
+      setFlowState('failed');
+    }
   };
 
-  // --- STEP 2: Broadcast Commit Transaction ---
   const handleBroadcastCommit = async (signedCommitBase64: string) => {
+    console.log("[BroadcastCommit] Broadcasting commit transaction...");
     setFlowState('broadcastingCommit');
-    console.log("[Commit Step 2] Broadcasting signed commit transaction...");
-
     try {
-      // Finalize the PSBT (convert base64 to PSBT object)
-      const signedPsbt = bitcoin.Psbt.fromBase64(signedCommitBase64, { network: networkConfig });
-      // Finalize inputs (needed to extract final tx)
-      signedPsbt.finalizeAllInputs(); // Finalize all inputs
+      if (!apiService) throw new Error("API Service not available");
+      const currentNetwork = walletNetwork;
+      if (!currentNetwork) throw new Error("Wallet network not determined");
       
-      const commitTx = signedPsbt.extractTransaction();
-      const commitTxHex = commitTx.toHex();
-      const calculatedCommitTxid = commitTx.getId();
-      console.log(`[Commit Step 2] Final Commit TX Hex (length ${commitTxHex.length}): ${commitTxHex.substring(0,100)}...`);
-      console.log(`[Commit Step 2] Calculated Commit TXID: ${calculatedCommitTxid}`);
+      // Convert Base64 PSBT to Hex for broadcasting if needed by API
+      // const signedCommitHex = bitcoin.Psbt.fromBase64(signedCommitBase64).extractTransaction().toHex();
+      // Assuming API accepts Base64 PSBT for broadcast endpoint or internally handles hex conversion
+      // For now, let's assume apiService.broadcastTransaction needs the *final tx hex*
+      const finalCommitTx = bitcoin.Psbt.fromBase64(signedCommitBase64).extractTransaction();
+      const finalCommitTxHex = finalCommitTx.toHex();
 
-      if (!apiService) throw new Error("ApiService is not available");
-      const broadcastResponse = await apiService.broadcastTransaction(commitTxHex);
-      
-      const receivedTxid = (typeof broadcastResponse === 'string') ? broadcastResponse : broadcastResponse?.txid;
-      
-      if (!receivedTxid || typeof receivedTxid !== 'string' || receivedTxid.length < 64) {
-           throw new Error(`Invalid transaction ID received from broadcast: ${JSON.stringify(broadcastResponse)}`);
-      }
-      
-      console.log(`[Commit Step 2] Broadcast successful. Commit TXID: ${receivedTxid}`);
-      setCommitTxid(receivedTxid);
+      const broadcastResponse = await apiService.broadcastTransaction(currentNetwork, finalCommitTxHex);
+      const receivedCommitTxid = broadcastResponse.txid;
+      setCommitTxid(receivedCommitTxid);
+      console.log(`[BroadcastCommit] Commit TX broadcast successful. TXID: ${receivedCommitTxid}`);
 
-      // --- Find the commit Vout for the reveal input --- 
-      // We need the output index (vout) of the P2TR script in the committed transaction
-      if (typeof walletPublicKey !== 'string' || !walletPublicKey) {
-          throw new Error("Wallet public key is missing, cannot find commit vout.");
+      // --- Determine Commit Vout (Needed for Reveal) ---
+      // Find the P2TR output address matching the recipient (our wallet address)
+      const outputs = finalCommitTx.outs;
+      let foundVout = -1;
+      for (let i = 0; i < outputs.length; i++) {
+          try {
+              const outputAddress = bitcoin.address.fromOutputScript(outputs[i].script, networkConfig);
+              if (outputAddress === walletAddress) {
+                  foundVout = i;
+                  break;
+              }
+          } catch (e) { /* Ignore outputs that aren't addresses */ }
       }
-      const commitOutputScriptHex = getTaprootOutputScript(walletPublicKey).toString('hex');
-      const commitVoutIndex = commitTx.outs.findIndex(out => out.script.toString('hex') === commitOutputScriptHex);
-      
-      if (commitVoutIndex === -1) {
-          console.error("[Commit Step 2] Could not find commit output script in finalized transaction!", { txOutputs: commitTx.outs.map(o=>o.script.toString('hex')), searchScript: commitOutputScriptHex });
-          throw new Error('Commit output script not found in finalized transaction. Cannot proceed with reveal.');
+      if (foundVout === -1) {
+          throw new Error("Could not find commit transaction output VOUT for the recipient address.");
       }
-      console.log(`[Commit Step 2] Found commit output at vout: ${commitVoutIndex}`);
-      setCommitVout(commitVoutIndex);
-      
-      // Proceed to reveal step
-      await handleConstructAndSignReveal(receivedTxid, commitVoutIndex);
+      setCommitVout(foundVout);
+      console.log(`[BroadcastCommit] Determined commit Vout: ${foundVout}`);
 
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error broadcasting commit transaction';
-      console.error('[Commit Step 2] Error:', errorMsg, err);
-      setFlowError(`Broadcast Commit Error: ${errorMsg}`);
+      // --- Proceed to Reveal ---
+      // TODO: Need the reveal PSBT and WIF from the initial API response!
+      // Assuming revealPsbtBase64 and revealSignerWif were set correctly earlier
+      if (!revealPsbtBase64 || !revealSignerWif) {
+          throw new Error("Missing reveal PSBT or signer WIF from API response.");
+      }
+      await handleConstructAndSignReveal(receivedCommitTxid, foundVout, revealPsbtBase64, revealSignerWif);
+
+    } catch (error) {
+      console.error('[BroadcastCommit] Error broadcasting commit TX:', error);
+      setFlowError(error instanceof Error ? error.message : 'Failed to broadcast commit transaction');
       setFlowState('failed');
     }
   };
 
-  // --- STEP 3: Construct and Sign Reveal PSBT (KEEPING OLD LOGIC FOR NOW) ---
-  const handleConstructAndSignReveal = async (confirmedCommitTxid: string, confirmedCommitVout: number) => {
+  // Updated to accept reveal PSBT/WIF from API response
+  const handleConstructAndSignReveal = async (confirmedCommitTxid: string, confirmedCommitVout: number, revealPsbtBase64: string, revealSignerWif: string) => {
+    console.log("[ConstructReveal] Constructing and signing reveal transaction...");
     setFlowState('constructingReveal');
-    console.log(`[Reveal Step 3] Constructing Reveal PSBT using Commit TXID: ${confirmedCommitTxid}, Vout: ${confirmedCommitVout}`);
-
-    // --- Validation --- 
-    if (!revealPsbtBase64 || !revealSignerWif || !commitOutputValueFromApi) {
-      setFlowError('Reveal PSBT data or signer key missing from state.');
-      setFlowState('failed');
-      return;
-    }
-    if (!walletAddress) {
-      setFlowError('Recipient address (wallet address) missing.');
-      setFlowState('failed');
-      return;
-    }
-
     try {
-      const revealPsbt = bitcoin.Psbt.fromBase64(revealPsbtBase64, { network: networkConfig });
-      console.log("[Reveal Step 3] Loaded reveal PSBT from backend response (using old flow).");
+      // TODO: The API should ideally provide the *unsigned* reveal PSBT.
+      // The frontend should ONLY sign it.
+      // Assuming for now revealPsbtBase64 IS the unsigned reveal PSBT.
       
-      if (typeof revealSignerWif !== 'string' || !revealSignerWif) {
-          throw new Error("Reveal signer WIF is missing or invalid (using old flow).");
-      }
-      // @ts-ignore 
-      const signerKeyPair = ECPair.fromWIF(revealSignerWif, networkConfig);
-      // TEMP FIX: Convert public key to Buffer
-      const signerPublicKeyBuffer = Buffer.from(signerKeyPair.publicKey);
-      console.log(`[Reveal Step 3] Derived signer public key: ${signerPublicKeyBuffer.toString('hex')} (using old flow)`);
+      // The reveal signing key comes from the API
+      const revealKeyPair = ECPair.fromWIF(revealSignerWif, networkConfig);
+      const revealPublicKeyBuffer = Buffer.from(revealKeyPair.publicKey); // Ensure public key is Buffer
 
-      const inputIndex = 0;
-      
-      if (typeof signerKeyPair.signSchnorr !== 'function') {
-          throw new Error("signSchnorr method not found on signerKeyPair (using old flow).");
-      }
-
-      // Recreate schnorrSigner object with type conversions
-      const schnorrSigner: bitcoin.Signer = {
-          // TEMP FIX: Use Buffer public key
-          publicKey: signerPublicKeyBuffer,
-          // TEMP FIX: Wrap signSchnorr for Buffer/Uint8Array conversion
-          signSchnorr: (hash: Buffer): Buffer => {
-              const hashUint8Array = Uint8Array.from(hash);
-              const signatureUint8Array = signerKeyPair.signSchnorr(hashUint8Array);
-              return Buffer.from(signatureUint8Array);
-          },
-          // Add dummy sign method as before
-          sign: (hash: Buffer): Buffer => {
-                console.warn("[ResourceCreationForm] ECDSA sign method called unexpectedly on Schnorr signer!");
-                throw new Error("ECDSA sign method called unexpectedly during Taproot script path signing (ResourceCreationForm).");
-            },
+      // Create a Signer object compatible with bitcoinjs-lib
+      const taprootSigner: bitcoin.Signer = {
+        publicKey: revealPublicKeyBuffer,
+        signSchnorr: (hash: Buffer): Buffer => {
+          // ECPair signSchnorr expects Uint8Array, returns Uint8Array
+          const hashUint8 = Uint8Array.from(hash);
+          const sigUint8 = revealKeyPair.signSchnorr(hashUint8);
+          return Buffer.from(sigUint8); // Convert back to Buffer
+        },
+        // Provide dummy sign method if needed, though not used for taproot script path
+        sign: (hash: Buffer): Buffer => { 
+          throw new Error("ECDSA sign called on taprootSigner");
+        },
       };
 
-      revealPsbt.signInput(inputIndex, schnorrSigner, [bitcoin.Transaction.SIGHASH_DEFAULT]);
-      console.log("[Reveal Step 3] Reveal PSBT input signed (using old flow).");
-
-      // Finalize? Usually wallet handles this or it's done before extraction.
-      // Let's assume signing is enough for now.
+      // Deserialize the unsigned reveal PSBT received from the API
+      const revealPsbt = bitcoin.Psbt.fromBase64(revealPsbtBase64, { network: networkConfig });
       
-      const signedRevealHex = revealPsbt.toHex(); // Get hex of the signed PSBT
-      console.log("[Reveal Step 3] Constructed signed reveal PSBT (hex):", signedRevealHex.substring(0, 100) + "...");
-      setSignedRevealPsbtHex(signedRevealHex);
-      setFlowState('signingReveal'); 
+      // Sign the reveal PSBT's input (usually index 0) using the compatible Signer
+      revealPsbt.signInput(0, taprootSigner); // Pass the Signer object
+      revealPsbt.finalizeInput(0); // Finalize the input
 
-      await handleBroadcastReveal(revealPsbt.toBase64()); 
+      const signedRevealBase64 = revealPsbt.toBase64();
+      setSignedRevealPsbtHex(signedRevealBase64); // Store signed reveal PSBT
+      console.log("[ConstructReveal] Reveal PSBT signed locally.");
 
-    } catch (err) { 
-        // ... error handling ... 
-    }
-  };
+      // --- Proceed to Broadcast Reveal ---
+      await handleBroadcastReveal(signedRevealBase64);
 
-  // --- STEP 4: Broadcast Reveal Transaction ---
-  const handleBroadcastReveal = async (signedRevealBase64: string) => {
-    setFlowState('broadcastingReveal');
-    console.log("[Reveal Step 4] Broadcasting signed reveal transaction...");
-
-    try {
-      const revealPsbt = bitcoin.Psbt.fromBase64(signedRevealBase64, { network: networkConfig });
-      // Finalize inputs (needed to extract final tx)
-      revealPsbt.finalizeAllInputs(); // Finalize all inputs
-      
-      const revealTx = revealPsbt.extractTransaction();
-      const revealTxHex = revealTx.toHex();
-      const calculatedRevealTxid = revealTx.getId();
-      console.log(`[Reveal Step 4] Final Reveal TX Hex (length ${revealTxHex.length}): ${revealTxHex.substring(0,100)}...`);
-      console.log(`[Reveal Step 4] Calculated Reveal TXID: ${calculatedRevealTxid}`);
-
-      if (!apiService) throw new Error("ApiService is not available");
-      const broadcastResponse = await apiService.broadcastTransaction(revealTxHex);
-      const receivedTxid = (typeof broadcastResponse === 'string') ? broadcastResponse : broadcastResponse?.txid;
-
-      if (!receivedTxid || typeof receivedTxid !== 'string' || receivedTxid.length < 64) {
-           throw new Error(`Invalid transaction ID received from broadcast: ${JSON.stringify(broadcastResponse)}`);
-      }
-      
-      console.log(`[Reveal Step 4] Broadcast successful. Reveal TXID: ${receivedTxid}`);
-      setRevealTxid(receivedTxid);
-
-      // Start polling for confirmation
-      pollTransactionStatus(receivedTxid);
-      setFlowState('pollingStatus');
-
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error broadcasting reveal transaction';
-      console.error('[Reveal Step 4] Error:', errorMsg, err);
-      setFlowError(`Broadcast Reveal Error: ${errorMsg}`);
+    } catch (error) {
+      console.error('[ConstructReveal] Error constructing/signing reveal TX:', error);
+      setFlowError(error instanceof Error ? error.message : 'Failed to construct or sign reveal transaction');
       setFlowState('failed');
     }
   };
 
-  // --- STEP 5: Poll Transaction Status ---
+  const handleBroadcastReveal = async (signedRevealBase64: string) => {
+    console.log("[BroadcastReveal] Broadcasting reveal transaction...");
+    setFlowState('broadcastingReveal');
+    try {
+      if (!apiService) throw new Error("API Service not available");
+      const currentNetwork = walletNetwork;
+      if (!currentNetwork) throw new Error("Wallet network not determined");
+
+      // Assuming apiService.broadcastTransaction needs the final tx hex
+      const finalRevealTxHex = bitcoin.Psbt.fromBase64(signedRevealBase64).extractTransaction().toHex();
+
+      const broadcastResponse = await apiService.broadcastTransaction(currentNetwork, finalRevealTxHex);
+      setRevealTxid(broadcastResponse.txid);
+      console.log(`[BroadcastReveal] Reveal TX broadcast successful. TXID: ${broadcastResponse.txid}`);
+
+      // --- Start Polling --- 
+      setFlowState('pollingStatus');
+      setConfirmationStatus('Waiting for confirmation...');
+      pollTransactionStatus(broadcastResponse.txid);
+
+    } catch (error) {
+      console.error('[BroadcastReveal] Error broadcasting reveal TX:', error);
+      setFlowError(error instanceof Error ? error.message : 'Failed to broadcast reveal transaction');
+      setFlowState('failed');
+    }
+  };
+
   const pollTransactionStatus = (txid: string) => {
-       console.log(`[Polling] Starting polling for reveal TXID: ${txid}`);
-       console.time(`poll_${txid}`); // Start timer for poll duration
-       setConfirmationStatus('Broadcasted. Waiting for confirmation...');
+    console.log(`[Polling] Starting polling for TXID: ${txid}`);
+    // Clear any existing interval
+    if (pollingIntervalId) clearInterval(pollingIntervalId);
 
-       if (pollingIntervalId) clearInterval(pollingIntervalId); // Clear previous interval if any
+    const interval = setInterval(async () => {
+      try {
+        if (!apiService) throw new Error("API Service not available");
+        const currentNetwork = walletNetwork;
+        if (!currentNetwork) throw new Error("Wallet network not determined");
+        
+        console.log(`[Polling] Checking status for TXID: ${txid} on network ${currentNetwork}`);
+        const response = await apiService.getTransactionStatus(currentNetwork, txid);
 
-       const interval = setInterval(async () => {
-           if (!apiService) {
-               console.log("[Polling] API service not available, stopping poll.");
-               setFlowError("API service unavailable, cannot check status.");
-               setFlowState("failed");
-               clearInterval(interval);
-               setPollingIntervalId(null);
-               return;
-           }
-           try {
-               console.log(`[Polling] Checking status for ${txid}...`);
-               const statusResponse = await apiService.getTransactionStatus(txid);
-               console.log("[Polling] Status response:", statusResponse);
+        if (response.status === 'confirmed') {
+          console.log(`[Polling] TXID ${txid} confirmed!`);
+          setConfirmationStatus(`Confirmed! Inscription ID (usually reveal_txid:0): ${txid}:0`);
+          setFlowState('confirmed');
+          clearInterval(interval);
+          setPollingIntervalId(null);
+        } else if (response.status === 'failed') {
+           console.error(`[Polling] TXID ${txid} failed.`);
+           setFlowError('Reveal transaction failed to confirm or was rejected.');
+           setFlowState('failed');
+           clearInterval(interval);
+           setPollingIntervalId(null);
+        } else if (response.status === 'not_found') {
+            console.warn(`[Polling] TXID ${txid} not found yet...`);
+            setConfirmationStatus('Transaction not found yet, still polling...');
+        } else { // pending
+            console.log(`[Polling] TXID ${txid} still pending...`);
+            setConfirmationStatus('Transaction pending confirmation...');
+        }
+      } catch (error) {
+        console.error(`[Polling] Error polling status for ${txid}:`, error);
+        // Optional: Stop polling on error or just log and continue?
+        // setFlowError('Error checking transaction status.');
+        // setFlowState('failed');
+        // clearInterval(interval);
+        // setPollingIntervalId(null);
+      }
+    }, 10000); // Poll every 10 seconds
 
-               if (statusResponse.status === 'confirmed') {
-                   console.log(`[Polling] Transaction ${txid} confirmed!`);
-                   setConfirmationStatus(`Confirmed in block ${statusResponse.blockHeight || 'N/A'}.`);
-                   console.timeEnd(`poll_${txid}`); // End timer on confirmation
-                   setFlowState('confirmed');
-                   clearInterval(interval);
-                   setPollingIntervalId(null);
-                   // TODO: Maybe fetch final inscription details here?
-               } else if (statusResponse.status === 'pending') {
-                   setConfirmationStatus(`Pending... (Seen: ${statusResponse.seen ?? 'N/A'}, Confirmations: ${statusResponse.confirmations ?? 0})`);
-                   // Continue polling
-               } else { // Not found, error, etc.
-                   console.warn(`[Polling] Non-pending/confirmed status for ${txid}:`, statusResponse.status);
-                   console.timeEnd(`poll_${txid}`); // End timer on failure/stop
-                   console.log(`[Polling] Transaction ${txid} not found or status unknown. Stopping poll.`);
-                   setFlowError(`Transaction status check failed or TX not found for ${txid}.`);
-                   setFlowState('failed'); // Consider if 'pending' is more appropriate if simply not found yet
-                   clearInterval(interval);
-                   setPollingIntervalId(null);
-               }
-           } catch (error) {
-               console.error(`[Polling] Error checking transaction status for ${txid}:`, error);
-               setFlowError(`Error checking transaction status: ${error instanceof Error ? error.message : 'Unknown error'}`);
-               setFlowState('failed');
-               console.timeEnd(`poll_${txid}`); // End timer on error
-               clearInterval(interval);
-               setPollingIntervalId(null);
-           }
-       }, 10000); // Poll every 10 seconds
-
-       setPollingIntervalId(interval);
+    setPollingIntervalId(interval);
   };
 
   // --- Utility functions within component ---

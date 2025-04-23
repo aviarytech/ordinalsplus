@@ -13,13 +13,44 @@ const CACHE_EXPIRATION = 5 * 60 * 1000;
 const resourcesCache: Record<string, ApiResponse> = {};
 const cacheTimestamps: Record<string, number> = {};
 
+// Define options type for clarity
+interface GetAllResourcesOptions {
+  network: string;
+  page?: number;
+  limit?: number;
+  contentType?: string | null;
+}
+
 /**
- * Get all resources with pagination
+ * Get all resources with pagination and network support
  */
-export const getAllResources = async (page = 1, limit = 20, contentType?: string | null): Promise<ApiResponse> => {
+export const getAllResources = async (options: GetAllResourcesOptions): Promise<ApiResponse> => {
+  // Destructure options with defaults
+  const {
+    network = 'mainnet', // Default to mainnet if not provided
+    page = 1,
+    limit = 20,
+    contentType = null
+  } = options;
+
+  console.log(`[getAllResources] Requesting resources for network: ${network}, page: ${page}, limit: ${limit}, contentType: ${contentType}`);
+
   try {
-    const provider = getProvider();
+    // Pass the network from options to getProvider
+    const provider = getProvider(network); 
+    if (!provider) {
+      // Updated error message slightly
+      throw new Error(`Resource provider not available or configured for network: ${network}`);
+    }
+
+    // Explicit check to satisfy TypeScript, although the throw above should suffice
+    if (!provider) {
+      throw new Error(`Provider became null unexpectedly for network: ${network}`); // Should not happen
+    }
+
+    // Assuming provider's getAllResources also needs network or is network-specific instance
     const generator = provider.getAllResources({ 
+      // network: network, // Pass network if provider method needs it explicitly
       batchSize: limit,
       startFrom: (page - 1) * limit // Calculate the starting cursor based on page
     });
@@ -51,12 +82,12 @@ export const getAllResources = async (page = 1, limit = 20, contentType?: string
       totalItems = resources.length > 0 ? (page * limit + 1) : (page - 1) * limit + resources.length; // Still a placeholder
     }
 
-    console.log(`Fetched page ${page} with ${resources.length} resources, total items estimate: ${totalItems}`);
+    console.log(`Fetched page ${page} for network ${network} with ${resources.length} resources, total items estimate: ${totalItems}`);
 
     // Return only the fields defined in the non-generic ApiResponse type
     return {
       linkedResources: resources,
-      page: page,
+      page: page, // Correctly return the numeric page
       totalItems: totalItems, // Note: Accuracy depends on provider and filtering
       itemsPerPage: limit,
       // No 'error' field on success
@@ -73,7 +104,11 @@ export const getAllResources = async (page = 1, limit = 20, contentType?: string
  */
 export const getResourceById = async (id: string): Promise<ApiResponse> => {
   try {
-    const provider = getProvider();
+    // Assuming default network 'mainnet' if not specified by route
+    const provider = getProvider('mainnet'); // TODO: Need network context here!
+    if (!provider) {
+      throw new Error(`Resource provider not available or configured for network: mainnet`);
+    }
     const resource = await provider.resolve(id);
 
     // Return success structure (no error field)
@@ -95,7 +130,11 @@ export const getResourceById = async (id: string): Promise<ApiResponse> => {
  */
 export const getResourcesByDid = async (didId: string): Promise<ApiResponse> => {
   try {
-    const provider = getProvider();
+    // Assuming default network 'mainnet' if not specified by route
+    const provider = getProvider('mainnet'); // TODO: Need network context here!
+    if (!provider) {
+      throw new Error(`Resource provider not available or configured for network: mainnet`);
+    }
     const resources = await provider.resolveCollection(didId, {});
 
     // Return success structure (no error field)

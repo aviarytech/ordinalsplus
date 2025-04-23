@@ -106,10 +106,10 @@ export interface InscriptionDetailsResponse {
 
 // --- Network Information (Mirrors backend) ---
 export interface NetworkInfo {
-  id: string; // e.g., 'mainnet', 'testnet', 'signet'
-  name: string; // e.g., 'Bitcoin Mainnet', 'Bitcoin Testnet'
-  type: 'mainnet' | 'testnet' | 'regtest' | 'signet'; // Added signet
-  apiUrl: string; // Base API URL for this network
+  id: string;
+  name: string;
+  type: 'mainnet' | 'testnet' | 'regtest' | 'signet';
+  apiUrl?: string;
 }
 
 // Error response structure (optional, for typing error handlers)

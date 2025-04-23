@@ -1,5 +1,5 @@
 /// <reference types="cypress" />
-import React, { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import ApiService from '../services/apiService';
 import { useNetwork } from './NetworkContext'; // Import useNetwork
 
@@ -24,21 +24,23 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
                         (window.Cypress ? Cypress.env('API_BASE_URL') : undefined);
 
   // Use the NetworkContext to get the active network
-  const { network: activeNetwork } = useNetwork();
+  // REMOVED: We no longer need activeNetwork here directly to change the URL
+  // const { network: activeNetwork } = useNetwork();
 
   // Create the ApiService instance using useMemo so it persists
   const apiServiceInstance = useMemo(() => {
-    // Use initial URL only if no better URL is available yet
+    // Use initial URL only
     const urlToUse = initialApiUrl;
     if (!urlToUse) {
       console.error('[ApiProvider] No initial API URL found (VITE_API_BASE_URL missing?). ApiService not created.');
       return null;
     } 
-    console.log(`[ApiProvider] Creating ApiService with initial URL: ${urlToUse}`);
+    console.log(`[ApiProvider] Creating ApiService with base URL: ${urlToUse}`);
     return new ApiService(urlToUse);
   }, [initialApiUrl]); // Only depends on initial URL for creation
 
-  // Effect to update ApiService base URL when activeNetwork changes
+  // REMOVED: Effect to update ApiService base URL when activeNetwork changes
+  /*
   useEffect(() => {
     if (apiServiceInstance && activeNetwork?.apiUrl) {
       console.log(`[ApiProvider] Network changed to ${activeNetwork.name}. Updating ApiService base URL to: ${activeNetwork.apiUrl}`); 
@@ -48,6 +50,7 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     } else {
     }
   }, [activeNetwork, apiServiceInstance]); // Depend on network and service instance
+  */
 
   // Log if ApiService instance is null
   if (!apiServiceInstance) {

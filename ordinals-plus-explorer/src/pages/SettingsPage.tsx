@@ -1,5 +1,6 @@
 import React from 'react';
-import { useNetwork, NetworkInfo } from '../context/NetworkContext';
+import { useNetwork } from '../context/NetworkContext';
+import { NetworkInfo } from '../types/index';
 import { useWallet } from '../context/WalletContext';
 import { Loader2, Wifi } from 'lucide-react';
 
@@ -66,7 +67,7 @@ const SettingsPage: React.FC = () => {
                 {/* Populate dropdown from availableNetworks */} 
                 {availableNetworks.map((net: NetworkInfo) => ( // Add type annotation
                   <option key={net.id} value={net.id}>
-                    {net.name} ({net.type})
+                    {net.name}
                   </option>
                 ))}
               </select>
@@ -79,19 +80,12 @@ const SettingsPage: React.FC = () => {
               )}
               
               {/* Warning if wallet network and selected context network mismatch (can happen briefly or if context fallback used) */} 
-              {walletConnected && activeNetwork && walletNetwork && activeNetwork.type.toLowerCase() !== walletNetwork.toLowerCase() && (
+              {walletConnected && activeNetwork && walletNetwork && activeNetwork.id.toLowerCase() !== walletNetwork.toLowerCase() && (
                  <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
-                    Warning: Wallet is connected to {walletNetwork}, but the active context is {activeNetwork.type}. API calls might target the wrong network.
+                    Warning: Wallet is connected to {walletNetwork}, but the active context is {activeNetwork.id}. API calls might target the wrong network.
                  </p>
               )}
             </div>
-            
-            {/* Display current API endpoint */} 
-            {activeNetwork && (
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Using API endpoint: <code className="text-xs bg-gray-100 dark:bg-gray-700 p-1 rounded">{activeNetwork.apiUrl}</code>
-                </div>
-            )}
           </div>
         )}
         

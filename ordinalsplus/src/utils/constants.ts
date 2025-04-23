@@ -16,7 +16,8 @@ export const ERROR_CODES = {
     INVALID_RESOURCE_ID: 'invalidResourceId',
     INVALID_INSCRIPTION: 'invalidInscription',
     NOT_FOUND: 'notFound',
-    NETWORK_ERROR: 'networkError'
+    NETWORK_ERROR: 'networkError',
+    RESOLUTION_FAILED: 'resolutionFailed'
 } as const;
 
 export const CONTENT_TYPES = {

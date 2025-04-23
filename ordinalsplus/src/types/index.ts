@@ -1,4 +1,12 @@
 export * from './did';
+// Assuming ./resource.ts and ./provider.ts exist or will be created
+// export * from './resource'; 
+// export * from './provider';
+
+// Define supported Bitcoin networks
+export type BitcoinNetwork = 'mainnet' | 'signet';
+
+// TODO: Consider adding 'testnet', 'regtest' if needed in the future
 
 export interface Inscription {
     id: string;
@@ -7,6 +15,7 @@ export interface Inscription {
     sat_ordinal?: string;
     content_type?: string;
     content_url: string;
+    timestamp: string;
 }
 
 export interface ParsedResourceId {
@@ -45,4 +54,4 @@ export interface Utxo {
     value: number; // Amount in satoshis
     scriptPubKey: string; // Hex-encoded script public key
     status?: any; // Optional status field from block explorer APIs
-} 
+}

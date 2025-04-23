@@ -1,19 +1,19 @@
-import { Inscription, LinkedResource, ResourceInfo } from '../../types';
+import { Inscription, LinkedResource, ResourceInfo, BitcoinNetwork } from '../../types';
 import { ERROR_CODES } from '../../utils/constants';
-import { extractIndexFromInscription, parseResourceId, parseBtcoDid } from '../../utils/validators';
+import { parseResourceId, parseBtcoDid } from '../../utils/validators';
 import { fetchWithTimeout } from '../../utils/fetch-utils';
-import { ResourceProvider, ResourceCrawlOptions, ResourceBatch } from './types';
-import { createLinkedResourceFromInscription } from '../../did/did-utils';
-import { InscriptionRefWithLocation } from './types';
+import { createLinkedResourceFromInscription } from '../../resources/linked-resource';
+import { ResourceProvider, ResourceCrawlOptions, ResourceBatch, InscriptionRefWithLocation } from './types';
 
 export interface OrdNodeProviderOptions {
-    nodeUrl?: string;
-    apiEndpoint?: string;
+    nodeUrl: string;
+    apiKey?: string;
     timeout?: number;
+    network?: BitcoinNetwork;
 }
 
 export interface OrdNodeApiResponse<T> {
-    data: T;
+    [x: string]: any;
 }
 
 export interface OrdNodeInscription {
@@ -25,7 +25,7 @@ export interface OrdNodeInscription {
 }
 
 interface OrdNodeInscriptionResponse {
-    inscription_id: string;
+    id: string;
     sat: number;
     content_type: string;
     content_url: string;
@@ -47,24 +47,29 @@ interface OrdNodeFullInscriptionResponse {
 
 export class OrdNodeProvider implements ResourceProvider {
     private readonly nodeUrl: string;
-    private readonly apiEndpoint: string;
+    private readonly apiKey?: string;
     private readonly timeout: number;
-    private readonly baseUrl: string;
+    private readonly network: BitcoinNetwork;
     private readonly batchSize: number;
 
-    constructor(options: OrdNodeProviderOptions = {}, baseUrl: string = 'http://localhost:8080', batchSize: number = 100) {
-        this.nodeUrl = options.nodeUrl || 'http://localhost:3000';
-        this.apiEndpoint = options.apiEndpoint || this.nodeUrl;
+    constructor(options: OrdNodeProviderOptions, batchSize: number = 100) {
+        this.nodeUrl = options.nodeUrl.endsWith('/') ? options.nodeUrl.slice(0, -1) : options.nodeUrl;
+        this.apiKey = options.apiKey;
         this.timeout = options.timeout || 5000;
-        this.baseUrl = baseUrl;
+        this.network = options.network || 'mainnet';
         this.batchSize = batchSize;
+        console.log('options', options)
     }
 
     protected async fetchApi<T>(endpoint: string): Promise<OrdNodeApiResponse<T>> {
         const response = await fetchWithTimeout<OrdNodeApiResponse<T>>(
-            `${this.apiEndpoint}${endpoint}`,
+            `${this.nodeUrl}${endpoint}`,
             {
-                timeout: this.timeout
+                timeout: this.timeout,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
             }
         );
         return response.data;
@@ -72,7 +77,7 @@ export class OrdNodeProvider implements ResourceProvider {
 
     async getSatInfo(satNumber: string): Promise<{ inscription_ids: string[] }> {
         const response = await this.fetchApi<{ inscription_ids: string[] }>(`/sat/${satNumber}`);
-        return { inscription_ids: response.data.inscription_ids };
+        return { inscription_ids: response.inscription_ids };
     }
 
     async resolve(resourceId: string): Promise<LinkedResource> {
@@ -92,22 +97,23 @@ export class OrdNodeProvider implements ResourceProvider {
     async resolveInscription(inscriptionId: string): Promise<Inscription> {
         const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
-            id: response.data.inscription_id,
-            sat: response.data.sat,
-            content_type: response.data.content_type,
-            content_url: response.data.content_url
+            id: response.inscription_id,
+            sat: response.sat,
+            content_type: response.content_type,
+            content_url: response.content_url,
+            timestamp: response.timestamp
         };
     }
 
     async resolveInfo(inscriptionId: string): Promise<ResourceInfo> {
         const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
-            id: response.data.inscription_id,
-            type: response.data.content_type,
-            contentType: response.data.content_type,
+            id: response.inscription_id,
+            type: response.content_type,
+            contentType: response.content_type,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            content_url: response.data.content_url
+            content_url: response.content_url
         };
     }
 
@@ -158,16 +164,8 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     transformInscriptionToResource(inscription: Inscription): LinkedResource {
-        const contentType = inscription.content_type || 'application/json';
-        return {
-            id: `did:btco:${inscription.sat}/${extractIndexFromInscription(inscription)}`,
-            type: contentType,
-            contentType: contentType,
-            content_url: inscription.content_url,
-            sat: inscription.sat,
-            inscriptionId: inscription.id,
-            didReference: `did:btco:${inscription.sat}`
-        };
+        console.log('here444')
+        return createLinkedResourceFromInscription(inscription, inscription.content_type || 'Unknown', this.network);
     }
 
     async *getAllResources(options: ResourceCrawlOptions = {}): AsyncGenerator<LinkedResource[]> {
@@ -212,43 +210,44 @@ export class OrdNodeProvider implements ResourceProvider {
     private async fetchResourceBatch(cursor: number, size: number): Promise<ResourceBatch> {
         const page = Math.floor(cursor / size);
         const listResponse = await this.fetchApi<OrdNodeInscriptionListResponse>(`/inscriptions/${page}`);
-
         const resources = await Promise.all(
-            listResponse.data.ids.map(async (id) => {
+            listResponse.ids.map(async (id: string) => {
                 const inscriptionResponse = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${id}`);
-                const inscription = inscriptionResponse.data;
                 
-                const inscriptionObj = {
-                    id: inscription.inscription_id,
-                    sat: inscription.sat,
-                    content_type: inscription.content_type,
-                    content_url: inscription.content_url
+                console.log(inscriptionResponse)
+                const inscriptionObj: Inscription = {
+                    id: inscriptionResponse.id,
+                    sat: inscriptionResponse.sat,
+                    content_type: inscriptionResponse.content_type,
+                    content_url: `${this.nodeUrl}/content/${inscriptionResponse.id}`,
+                    timestamp: inscriptionResponse.timestamp
                 };
-                return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type);
+                return createLinkedResourceFromInscription(inscriptionObj, inscriptionResponse.content_type || 'Unknown', this.network);
             })
         );
 
         return {
             resources,
-            nextCursor: listResponse.data.more ? cursor + size : undefined,
-            hasMore: listResponse.data.more
+            nextCursor: listResponse.more ? cursor + size : undefined,
+            hasMore: listResponse.more
         };
     }
 
     async getInscription(inscriptionId: string): Promise<Inscription> {
         const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
-            id: response.data.inscription_id,
-            sat: response.data.sat,
-            content_type: response.data.content_type,
-            content_url: response.data.content_url
+            id: response.inscription_id,
+            sat: response.sat,
+            content_type: response.content_type,
+            content_url: response.content_url,
+            timestamp: response.timestamp
         };
     }
 
     async getInscriptionsByAddress(address: string): Promise<Inscription[]> {
         const response = await this.fetchApi<{ inscriptions: OrdNodeInscriptionResponse[] }>(`/address/${address}/inscriptions`);
-        return response.data.inscriptions.map(inscription => ({
-            id: inscription.inscription_id,
+        return response.inscriptions.map((inscription: OrdNodeInscriptionResponse) => ({
+            id: inscription.id,
             sat: inscription.sat,
             content_type: inscription.content_type,
             content_url: inscription.content_url
@@ -267,8 +266,8 @@ export class OrdNodeProvider implements ResourceProvider {
         try {
             console.log(`[OrdNodeProvider] Fetching inscription IDs for address ${address} from endpoint: ${idsEndpoint}`);
             const idResponse = await this.fetchApi<{ ids: string[] }>(idsEndpoint); 
-            if (idResponse?.data?.ids && Array.isArray(idResponse.data.ids)) {
-                inscriptionIds = idResponse.data.ids;
+            if (idResponse?.ids && Array.isArray(idResponse.ids)) {
+                inscriptionIds = idResponse.ids;
                 console.log(`[OrdNodeProvider] Found ${inscriptionIds.length} potential inscription IDs for address ${address}.`);
             } else {
                 console.warn(`[OrdNodeProvider] No inscription IDs found or unexpected format for address ${address} at ${idsEndpoint}.`);
@@ -288,7 +287,7 @@ export class OrdNodeProvider implements ResourceProvider {
             try {
                 const detailResponse = await this.fetchApi<OrdNodeFullInscriptionResponse>(`/inscription/${id}`);
                 
-                const location = detailResponse?.data?.output;
+                const location = detailResponse?.output;
                 if (location) {
                     return { id, location };
                 } else {

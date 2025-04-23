@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNetwork } from '../context/NetworkContext';
+import { useApi } from '../context/ApiContext';
+import { FeeEstimateResponse } from '../types/index';
 
 export interface FeeRates {
   fastestFee: number;
@@ -15,60 +17,57 @@ interface UseFeeRatesResult {
   refreshFees: () => void;
 }
 
-const MEMPOOL_SPACE_URL_MAINNET = 'https://mempool.space/api/v1/fees/recommended';
-const MEMPOOL_SPACE_URL_TESTNET = 'https://mempool.space/testnet/api/v1/fees/recommended';
-
 /**
- * Hook to fetch recommended Bitcoin transaction fee rates from Mempool.space API.
- * Automatically selects the correct endpoint based on the active network context.
+ * Hook to fetch recommended Bitcoin transaction fee rates via the backend API service.
+ * Automatically uses the active network context.
  */
 export const useFeeRates = (): UseFeeRatesResult => {
   const [feeRates, setFeeRates] = useState<FeeRates | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState<number>(0); // State to trigger refresh
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   
-  const { network: activeNetwork } = useNetwork(); // Get active network from context
+  const { network: activeNetwork } = useNetwork();
+  const { apiService } = useApi();
 
-  const refreshFees = () => {
-    setRefreshTrigger(prev => prev + 1); // Increment trigger to re-run effect
-  };
+  const refreshFees = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     const fetchFeeRates = async () => {
-      if (!activeNetwork) {
-          setError('No active network selected.');
-          setFeeRates(null);
-          return;
+      if (!activeNetwork?.type) {
+        setError('No active network selected.');
+        setFeeRates(null);
+        setLoading(false);
+        return;
+      }
+      if (!apiService) {
+        setError('API service not available.');
+        setFeeRates(null);
+        setLoading(false);
+        return;
       }
       
       setLoading(true);
       setError(null);
-      setFeeRates(null); // Clear previous rates
+      setFeeRates(null);
 
-      // Determine API URL based on active network type
-      const apiUrl = activeNetwork.type === 'testnet' 
-                       ? MEMPOOL_SPACE_URL_TESTNET 
-                       : MEMPOOL_SPACE_URL_MAINNET;
-                       
-      // Note: Mempool.space doesn't have a regtest endpoint
-      if (activeNetwork.type === 'regtest') {
-           console.warn('[useFeeRates] Regtest network detected. Using mock fee rates as Mempool.space has no regtest API.');
-           // Provide mock/default fees for regtest
-           setFeeRates({ fastestFee: 1, halfHourFee: 1, hourFee: 1, minimumFee: 1 });
-           setLoading(false);
-           return;
-      }
-
-      console.log(`[useFeeRates] Fetching fees for ${activeNetwork.type} from ${apiUrl}`);
+      console.log(`[useFeeRates] Fetching fees for ${activeNetwork.id} via ApiService`);
 
       try {
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch fee rates: ${response.status} ${response.statusText}`);
+        const response: FeeEstimateResponse = await apiService.getFeeEstimates(activeNetwork.id);
+        
+        if (response && typeof response.high === 'number' && typeof response.medium === 'number' && typeof response.low === 'number') {
+          setFeeRates({
+            fastestFee: response.high,
+            halfHourFee: response.medium,
+            hourFee: response.low,
+          });
+        } else {
+            throw new Error('Invalid fee rate data received from API (missing low/medium/high)');
         }
-        const data: FeeRates = await response.json();
-        setFeeRates(data);
+        
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error fetching fee rates';
         console.error('[useFeeRates] Error:', errorMsg);
@@ -80,8 +79,7 @@ export const useFeeRates = (): UseFeeRatesResult => {
 
     fetchFeeRates();
     
-    // Re-fetch when activeNetwork changes or refresh is triggered
-  }, [activeNetwork, refreshTrigger]); 
+  }, [activeNetwork, apiService, refreshTrigger]);
 
   return { feeRates, loading, error, refreshFees };
 }; 

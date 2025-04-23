@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "btc:signet": "bitcoind -conf=/Users/brian/Projects/ordinalsplus/bitcoin.conf",
+    "ord:index": "ord --signet --bitcoin-rpc-url http://127.0.0.1:38332 --cookie-file /Users/brian/Projects/ordinalsplus/data/signet/.cookie --index-sats --data-dir=/Users/brian/Projects/ordinalsplus/data/signet index run",
+    "ord:server": "ord --signet --bitcoin-rpc-url http://127.0.0.1:38332 --cookie-file /Users/brian/Projects/ordinalsplus/data/signet/.cookie --index-sats --data-dir=/Users/brian/Projects/ordinalsplus/data/signet server"
+  },
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "vite-plugin-node-polyfills": "^0.23.0",

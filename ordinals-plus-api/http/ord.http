@@ -1,0 +1,45 @@
+# Examples for interacting with a locally running `ord` server
+# (https://github.com/ordinals/ord)
+# Assumes default port 80. Change if your server runs elsewhere (e.g., 8080).
+@baseUrl = http://localhost:80
+@inscriptionId = aa45005f684a1d6c0869f905196358c4b6ac65239fad40c56e345ad7e4084ff0i0
+@satNumber = 1954913028215432
+###
+# Get inscriptions
+GET {{baseUrl}}/inscriptions
+Accept: application/json
+
+###
+# Get inscription details by ID
+# Replace <INSCRIPTION_ID> with an actual inscription ID (e.g., a TXIDi0)
+GET {{baseUrl}}/inscription/{{inscriptionId}}
+Accept: application/json
+
+###
+# Get inscription content by ID
+# Replace <INSCRIPTION_ID> with an actual inscription ID
+GET {{baseUrl}}/content/{{inscriptionId}}
+
+###
+# Get satoshi details by sat number
+# Replace <SAT_NUMBER> with an actual sat number
+GET {{baseUrl}}/sat/{{satNumber}}
+Accept: application/json
+
+###
+# Get block information by hash or height
+# Replace <BLOCK_HASH_OR_HEIGHT> (e.g., 0000000000000000000abc... or 800000)
+GET {{baseUrl}}/block/<BLOCK_HASH_OR_HEIGHT>
+Accept: application/json
+
+###
+# Get inscriptions on a specific output
+# Replace <TXID> and <VOUT>
+GET {{baseUrl}}/output/<TXID>/<VOUT>
+Accept: application/json
+
+###
+# Get latest block info (if the specific version supports /block/latest or similar)
+# This endpoint might not exist on all versions
+# GET {{baseUrl}}/block/latest
+# Accept: application/json

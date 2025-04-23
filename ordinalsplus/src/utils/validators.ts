@@ -81,26 +81,6 @@ export function parseResourceId(id: string): { did: string; satNumber: string; i
 }
 
 /**
- * Creates a DID from inscription data
- * @param inscription The inscription data
- * @returns The created DID
- */
-export function createDidFromInscriptionData(inscription: Inscription): string {
-    const satNumber = extractSatNumber(inscription);
-    return `did:btco:${satNumber}`;
-}
-
-/**
- * Creates a resource ID from inscription data
- * Format: did:btco:satNumber/index
- */
-export function createResourceIdFromInscription(inscription: Inscription): string {
-    const satNumber = extractSatNumber(inscription);
-    const index = extractIndexFromInscription(inscription);
-    return `did:btco:${satNumber}/${index}`;
-}
-
-/**
  * Type guard for SatInscription
  */
 export function isSatInscription(inscription: Inscription): inscription is Inscription {

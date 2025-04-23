@@ -1,14 +1,15 @@
-import { Inscription, LinkedResource, ResourceInfo } from '../../types';
+import { Inscription, LinkedResource, ResourceInfo, BitcoinNetwork } from '../../types';
 import { ERROR_CODES } from '../../utils/constants';
 import { extractIndexFromInscription, parseResourceId, parseBtcoDid } from '../../utils/validators';
 import { fetchWithTimeout } from '../../utils/fetch-utils';
 import { ResourceProvider, ResourceCrawlOptions, ResourceBatch, InscriptionRefWithLocation } from './types';
-import { createLinkedResourceFromInscription } from '../../did/did-utils';
+import { createLinkedResourceFromInscription } from '../../resources/linked-resource';
 
 export interface OrdiscanProviderOptions {
     apiKey: string;
     apiEndpoint?: string;
     timeout?: number;
+    network?: BitcoinNetwork;
 }
 
 export interface OrdiscanInscription {
@@ -17,6 +18,7 @@ export interface OrdiscanInscription {
     sat: number;
     content_type: string;
     content_url: string;
+    timestamp: string;
 }
 
 export interface OrdiscanApiResponse<T> {
@@ -42,6 +44,7 @@ export class OrdiscanProvider implements ResourceProvider {
     private readonly timeout: number;
     private readonly baseUrl: string;
     private readonly batchSize: number;
+    private readonly network: BitcoinNetwork;
 
     constructor(options: OrdiscanProviderOptions, baseUrl: string = 'https://ordiscan.com/api', batchSize: number = 100) {
         this.apiKey = options.apiKey;
@@ -49,6 +52,7 @@ export class OrdiscanProvider implements ResourceProvider {
         this.timeout = options.timeout || 5000;
         this.baseUrl = baseUrl;
         this.batchSize = batchSize;
+        this.network = options.network || 'mainnet';
     }
 
     protected async fetchApi<T>(endpoint: string): Promise<OrdiscanApiResponse<T>> {
@@ -89,7 +93,8 @@ export class OrdiscanProvider implements ResourceProvider {
             id: response.data.inscription_id,
             sat: response.data.sat,
             content_type: response.data.content_type,
-            content_url: response.data.content_url
+            content_url: response.data.content_url,
+            timestamp: response.data.timestamp
         };
     }
 
@@ -152,17 +157,7 @@ export class OrdiscanProvider implements ResourceProvider {
     }
 
     transformInscriptionToResource(inscription: Inscription): LinkedResource {
-        const contentType = inscription.content_type || 'application/json';
-        return {
-            id: `did:btco:${inscription.sat}/${extractIndexFromInscription(inscription)}`,
-            type: contentType,
-            contentType: contentType,
-            content_url: inscription.content_url,
-            sat: inscription.sat,
-            inscriptionId: inscription.id,
-            inscriptionNumber: inscription.number,
-            didReference: `did:btco:${inscription.sat}`
-        };
+        return createLinkedResourceFromInscription(inscription, inscription.content_type || 'Unknown', this.network);
     }
 
     async *getAllResources(options: ResourceCrawlOptions = {}): AsyncGenerator<LinkedResource[]> {
@@ -229,14 +224,14 @@ export class OrdiscanProvider implements ResourceProvider {
         }
 
         const resources = response.data.map(inscription => {
-            const inscriptionObj = {
+            const inscriptionObj: Inscription = {
                 id: inscription.inscription_id,
-                number: inscription.inscription_number,
                 sat: inscription.sat,
                 content_type: inscription.content_type,
-                content_url: inscription.content_url
+                content_url: inscription.content_url || `${this.apiEndpoint}/content/${inscription.inscription_id}`,
+                timestamp: inscription.timestamp
             };
-            return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type);
+            return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type || 'Unknown', this.network);
         });
 
         // Check if there are more resources by looking at the last inscription number
@@ -256,7 +251,8 @@ export class OrdiscanProvider implements ResourceProvider {
             id: response.data.inscription_id,
             sat: response.data.sat,
             content_type: response.data.content_type,
-            content_url: response.data.content_url
+            content_url: response.data.content_url,
+            timestamp: response.data.timestamp
         };
     }
 

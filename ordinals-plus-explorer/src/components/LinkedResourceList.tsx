@@ -3,8 +3,9 @@ import { Loader2, AlertTriangle, Inbox } from 'lucide-react';
 import { LinkedResource } from 'ordinalsplus';
 import ResourceCard from './ResourceCard';
 import { useApi } from '../context/ApiContext';
+import { useNetwork } from '../context/NetworkContext';
 import { ApiResponse } from '../types/index';
-import Pagination from './Pagination';
+import Pagination from './Pagination.tsx';
 
 interface LinkedResourceListProps {
   did?: string;
@@ -30,18 +31,20 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
   const [totalItems, setTotalItems] = useState<number>(0);
 
   const { apiService } = useApi();
+  const { network } = useNetwork();
 
   useEffect(() => {
+    if (!apiService || !network?.id) {
+      return;
+    }
+
     const fetchDidResources = async (targetDid: string) => {
-      if (!apiService) return;
       setLoading(true);
       setError(null);
       setResources([]);
       setTotalItems(0);
       try {
-        console.log(`[LinkedResourceList] Fetching resources for DID: ${targetDid}`);
-        const fetchedResources = await apiService.getLinkedResources(targetDid);
-        console.log(`[LinkedResourceList] Fetched ${fetchedResources.length} resources for DID ${targetDid}.`);
+        const fetchedResources = await apiService.getLinkedResources(network.id, targetDid);
         setResources(fetchedResources || []);
         setTotalItems(fetchedResources.length);
       } catch (err) {
@@ -54,18 +57,12 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
     };
 
     const fetchAll = async () => {
-      if (!apiService) return;
       setLoading(true);
       setError(null);
       try {
-        console.log(`[LinkedResourceList] Fetching all resources. Page: ${currentPage}, Filter: ${contentTypeFilter}`);
-        const response: ApiResponse = await apiService.fetchAllResources(currentPage, itemsPerPage, contentTypeFilter);
-        console.log(`[LinkedResourceList] Fetched all resources response:`, response);
+        const response: ApiResponse = await apiService.fetchAllResources(network.id, currentPage, itemsPerPage, contentTypeFilter);
         setResources(response.linkedResources || []);
         setTotalItems(response.totalItems || 0);
-        if (response.error) {
-            setError(response.error);
-        }
       } catch (err) {
         console.error(`[LinkedResourceList] Error fetching all resources:`, err);
         const errorMsg = err instanceof Error ? err.message : 'Failed to load resources';
@@ -82,7 +79,7 @@ const LinkedResourceList: React.FC<LinkedResourceListProps> = ({
     } else {
       fetchAll();
     }
-  }, [did, currentPage, contentTypeFilter, apiService, itemsPerPage]);
+  }, [did, currentPage, contentTypeFilter, itemsPerPage, apiService, network?.id]);
 
   const handleCardClick = (resource: LinkedResource) => {
     setSelectedResourceId(resource.id);

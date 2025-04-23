@@ -2,7 +2,7 @@ import { Elysia, t, NotFoundError, ValidationError, ParseError } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { swagger } from '@elysiajs/swagger';
 // import { DidDocument } from 'did-resolver'; // REMOVED - Incorrect assumption
-import type { LinkedResource, Utxo } from 'ordinalsplus'; // Import Utxo type
+import type { LinkedResource, ResourceProvider, Utxo } from 'ordinalsplus'; // Import Utxo type
 // import { getFeeEstimates } from './services/mempoolService'; // REMOVED - Linter cannot find this module
 import { getInscriptionDetails, InscriptionNotFoundError } from './services/inscriptionService';
 // Import the controller function
@@ -130,7 +130,6 @@ const app = new Elysia()
     console.log('[Route] GET /api/networks');
     return [
       { id: 'mainnet', name: 'Bitcoin Mainnet' },
-      { id: 'testnet', name: 'Bitcoin Testnet' },
       { id: 'signet', name: 'Bitcoin Signet' },
       // Add others if relevant
     ];
@@ -142,33 +141,74 @@ const app = new Elysia()
     }
   })
 
-  // --- NEW: Explore All Resources Route ---
+  // --- Resource/Inscription Listing Routes ---
+  // Keep /api/explore for potential distinct exploration features?
   .get('/api/explore', async ({ query }) => {
       console.log(`[Route] GET /api/explore with query:`, query);
-      // Call the imported controller function, passing parsed query params
-      const result: ApiResponse = await getAllResources(
-          query.page,
-          query.limit,
-          query.contentType
-      );
-      return result; // Return the ApiResponse structure directly
+      // Pass query params as a single options object
+      const options = {
+          network: query.network,
+          page: query.page,
+          limit: query.limit,
+          contentType: query.contentType
+      };
+      const result: ApiResponse = await getAllResources(options);
+      return result; 
   }, {
       query: t.Object({
+          network: t.String({ default: 'mainnet', description: 'Network type (mainnet, signet)' }),
           page: t.Numeric({ default: 1, minimum: 1 }), 
           limit: t.Numeric({ default: 20, minimum: 1, maximum: 100 }), 
           contentType: t.Optional(t.String({ minLength: 1 }))
       }),
       response: {
+          // Define based on ApiResponse type from types/index.ts
           200: t.Object({
-              linkedResources: t.Array(t.Any()), 
-              page: t.Optional(t.Number()), 
-              totalItems: t.Optional(t.Number()),
-              itemsPerPage: t.Optional(t.Number())
+              linkedResources: t.Array(t.Any()), // Use t.Any() for now, refine if possible
+              page: t.Optional(t.Number()), // Make optional
+              totalItems: t.Optional(t.Number()), // Make optional
+              itemsPerPage: t.Optional(t.Number()), // Make optional
+              // error field removed
           }),
       },
       detail: {
-          summary: 'Explore All Linked Resources',
-          description: 'Retrieves a paginated list of all linked resources, optionally filtered by content type.',
+          summary: 'Explore All Linked Resources (Legacy)',
+          description: 'Retrieves a paginated list of all linked resources, optionally filtered by content type and network.',
+          tags: ['Resource Management', 'Exploration']
+      }
+  })
+  // NEW /api/resources endpoint - uses the same controller for now
+  .get('/api/resources', async ({ query }) => {
+      console.log(`[Route] GET /api/resources with query:`, query);
+      // Pass query params as a single options object
+      const options = {
+          network: query.network,
+          page: query.page,
+          limit: query.limit,
+          contentType: query.contentType
+      };
+      const result: ApiResponse = await getAllResources(options);
+      return result;
+  }, {
+      query: t.Object({
+          network: t.String({ default: 'mainnet', description: 'Network type (mainnet, signet)' }),
+          page: t.Numeric({ default: 1, minimum: 1 }),
+          limit: t.Numeric({ default: 20, minimum: 1, maximum: 100 }),
+          contentType: t.Optional(t.String({ minLength: 1 }))
+      }),
+      response: {
+          // Define based on ApiResponse type from types/index.ts
+          200: t.Object({
+              linkedResources: t.Array(t.Any()), // Use t.Any() for now, refine if possible
+              page: t.Optional(t.Number()), // Make optional
+              totalItems: t.Optional(t.Number()), // Make optional
+              itemsPerPage: t.Optional(t.Number()), // Make optional
+              // error field removed
+          }),
+      },
+      detail: {
+          summary: 'Fetch All Resources (Paginated)',
+          description: 'Retrieves a paginated list of all resources (inscriptions/linked resources), optionally filtered by content type and network.',
           tags: ['Resource Management', 'Exploration']
       }
   })
@@ -373,7 +413,7 @@ const app = new Elysia()
         console.log(`[API] Using provider: ${provider?.constructor?.name || 'Unknown Provider'}`);
 
         // --- Pass provider to getAddressUtxos ---
-        const utxos: Utxo[] = await getAddressUtxos(address, provider, network);
+        const utxos: Utxo[] = await getAddressUtxos(address, provider as ResourceProvider, network);
         
         console.log(`[API] Found ${utxos.length} UTXOs for address ${address}.`);
         set.status = 200;

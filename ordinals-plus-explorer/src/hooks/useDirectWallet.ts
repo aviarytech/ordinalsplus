@@ -91,6 +91,9 @@ export const useDirectWallet = (): DirectWalletHook => {
       let networkInfo: string | null = null;
       if (walletType === 'unisat' && hasUnisat) {
         networkInfo = await (window as any).unisat.getNetwork();
+        if (networkInfo === 'livenet') {
+          networkInfo = 'mainnet';
+        }
       } else if (walletType === 'xverse' && hasXverse) {
         // Xverse getNetwork might not be standard, often network is part of account info
         // Assuming it's derived during connection for now. Re-check if needed.

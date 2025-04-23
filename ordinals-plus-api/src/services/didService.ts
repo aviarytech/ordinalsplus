@@ -1,6 +1,7 @@
-import type { DID, LinkedResource, Inscription } from '../types';
+import type { LinkedResource, Inscription } from '../types';
 import { 
-  createLinkedResourceFromInscription as ordinalsPlusCreateLinkedResourceFromInscription
+  createLinkedResourceFromInscription as ordinalsPlusCreateLinkedResourceFromInscription,
+  type BitcoinNetwork
 } from 'ordinalsplus';
 
 // DID Prefixes we want to look for
@@ -24,9 +25,10 @@ export const buildDidSearchQuery = (): string => {
  * @param inscription The inscription data
  * @returns A DID object with proper DID format
  */
-export function createDidFromInscription(inscription: Inscription): DID {
+export function createDidFromInscription(inscription: Inscription): null {
   // Use the ordinalsplus package to create the DID
   // return ordinalsPlusCreateDidFromInscription(inscription);
+  return null;
 }
 
 /**
@@ -34,16 +36,19 @@ export function createDidFromInscription(inscription: Inscription): DID {
  * 
  * @param inscription The inscription data
  * @param type The resource type
+ * @param network The Bitcoin network
  * @param didReference Optional DID reference
  * @returns A LinkedResource object with proper format
  */
 export function createLinkedResourceFromInscription(
   inscription: Inscription, 
   type: string, 
-  didReference?: string
+  didReference?: string,
+  network: BitcoinNetwork = 'mainnet'
 ): LinkedResource | null {
   try {
-    return ordinalsPlusCreateLinkedResourceFromInscription(inscription, type);
+    console.log('here111')
+    return ordinalsPlusCreateLinkedResourceFromInscription(inscription, type, network);
   } catch (error) {
     console.error('Error creating linked resource:', error);
     return null;

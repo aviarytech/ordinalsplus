@@ -1,8 +1,11 @@
 import LinkedResourceCreator from '../components/LinkedResourceCreator';
 import LinkedResourceList from '../components/LinkedResourceList';
 import { useState, useEffect } from 'react';
-import { Filter, ListFilter, ImageIcon, FileText, List } from 'lucide-react';
+import { Filter, ListFilter, ImageIcon, FileText, List, Wifi } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useNetwork } from '../context/NetworkContext';
+import { useWallet } from '../context/WalletContext';
+import { NetworkInfo } from '../types';
 
 // Define constants for filters
 const FILTER_ALL = null;
@@ -14,6 +17,8 @@ const LinkedResourcesPage = () => {
   const [viewMode, setViewMode] = useState<'create' | 'browse'>('browse');
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { network, availableNetworks, setNetwork, loading: loadingNetworks } = useNetwork();
+  const { connected: walletConnected } = useWallet();
 
   // State for current page and filter, driven by URL search params
   const [currentPage, setCurrentPage] = useState<number>(() => parseInt(searchParams.get('page') || '1', 10));
@@ -55,6 +60,9 @@ const LinkedResourcesPage = () => {
     return `${baseClass} ${contentTypeFilter === filterType ? activeClass : inactiveClass}`;
   };
 
+  // Determine if network selection should be disabled
+  const isNetworkSelectionDisabled = loadingNetworks || walletConnected;
+
   return (
     <div className="max-w-7xl mx-auto p-5">
       {/* <header className="mb-8">
@@ -79,28 +87,63 @@ const LinkedResourcesPage = () => {
         </p>
       </header> */}
       
-      <div className="flex mb-6 space-x-2">
-        <button
-          onClick={() => handleFilterChange(FILTER_ALL)}
-          className={getButtonClass(FILTER_ALL)}
-        >
-          <List className="h-4 w-4 mr-2" />
-          All Resources
-        </button>
-        <button
-          onClick={() => handleFilterChange(FILTER_IMAGE)}
-          className={getButtonClass(FILTER_IMAGE)}
-        >
-          <ImageIcon className="h-4 w-4 mr-2" />
-          Images
-        </button>
-        <button
-          onClick={() => handleFilterChange(FILTER_TEXT)}
-          className={getButtonClass(FILTER_TEXT)}
-        >
-          <FileText className="h-4 w-4 mr-2" />
-          Text
-        </button>
+      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => handleFilterChange(FILTER_ALL)}
+            className={getButtonClass(FILTER_ALL)}
+          >
+            <List className="h-4 w-4 mr-2" />
+            All Resources
+          </button>
+          <button
+            onClick={() => handleFilterChange(FILTER_IMAGE)}
+            className={getButtonClass(FILTER_IMAGE)}
+          >
+            <ImageIcon className="h-4 w-4 mr-2" />
+            Images
+          </button>
+          <button
+            onClick={() => handleFilterChange(FILTER_TEXT)}
+            className={getButtonClass(FILTER_TEXT)}
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Text
+          </button>
+        </div>
+        
+        {/* Network Selection Dropdown */}
+        <div className="flex items-center text-sm">
+           <Wifi className={`w-4 h-4 mr-2 ${isNetworkSelectionDisabled ? 'text-gray-400 dark:text-gray-500' : 'text-orange-500'}`} />
+           <label htmlFor="network-resource-select" className="mr-2 text-gray-500 dark:text-gray-400">Network:</label>
+           <select
+             id="network-resource-select"
+             value={network?.id || ''} // Controlled by active network context
+             onChange={(e) => {
+               const selectedId = e.target.value;
+               // Find the full NetworkInfo object from the available list
+               const networkToSet = availableNetworks.find((n: NetworkInfo) => n.id === selectedId) || null;
+               // Call the context setter
+               setNetwork(networkToSet); 
+             }}
+             disabled={isNetworkSelectionDisabled}
+             className={`py-1 pl-2 pr-8 border rounded-md shadow-sm text-sm focus:ring-orange-500 focus:border-orange-500 
+                         ${isNetworkSelectionDisabled 
+                           ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-70 text-gray-500 dark:text-gray-400' 
+                           : 'bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300'}`}
+             aria-label="Select Network"
+           >
+            {/* Handle loading state */}
+            {loadingNetworks && <option>Loading...</option>}
+            
+            {/* Populate dropdown from availableNetworks */}
+            {!loadingNetworks && availableNetworks.map((net: NetworkInfo) => (
+              <option key={net.id} value={net.id}>
+                {net.name}
+              </option>
+            ))}
+           </select>
+         </div>
       </div>
       
       <main>

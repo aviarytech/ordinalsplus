@@ -162,7 +162,8 @@ export const extractLinkedResourceFromInscription = (inscription: Inscription): 
     // For JSON content
     if (inscription.content_type.includes('application/json')) {
       try {
-        content = JSON.parse(inscription.content);
+        // TODO properly handle content_url
+        content = JSON.parse(inscription.content_url);
         
         // Check if this is a linked resource
         if (isLinkedResource(content)) {
@@ -210,7 +211,7 @@ export const extractLinkedResourceFromInscription = (inscription: Inscription): 
       type: resourceType,
       inscriptionId: inscription.id,
       contentType: inscription.content_type,
-      content: inscription.content_url || '',
+      content_url: inscription.content_url,
       didReference: `did:btco:${inscription.sat}`,
       sat: typeof inscription.sat === 'string' ? parseInt(inscription.sat, 10) : inscription.sat || 0
     };
@@ -290,7 +291,7 @@ export function processInscriptionsForLinkedResources(
   
   for (const inscription of inscriptions) {
     // Skip inscriptions without content
-    if (!inscription.content) continue;
+    if (!inscription.content_url) continue;
     
     // Determine the content type for resource categorization
     const contentType = inscription.content_type || 'application/json';
@@ -303,7 +304,7 @@ export function processInscriptionsForLinkedResources(
     if (didReferences && didReferences.has(inscription.id)) {
       didReference = didReferences.get(inscription.id);
     }
-    
+    console.log('here222')
     // Create a properly formatted linked resource using our utility function
     const linkedResource = createLinkedResourceFromInscription(
       inscription,
