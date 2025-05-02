@@ -73,7 +73,8 @@ const expectedResults = {
         content_url: TEST_CONTENT_URL,
         sat: parseInt(TEST_SAT_NUMBER),
         inscriptionId: TEST_INSCRIPTION_ID,
-        didReference: `did:btco:${TEST_SAT_NUMBER}`
+        didReference: `did:btco:${TEST_SAT_NUMBER}`,
+        timestamp: TEST_TIMESTAMP
     },
     resourceInfo: {
         id: TEST_INSCRIPTION_ID,
@@ -154,7 +155,7 @@ describe('Provider System', () => {
                     id: mockResponses.ordiscan.inscription.data.inscription_id,
                     sat: mockResponses.ordiscan.inscription.data.sat,
                     content_url: mockResponses.ordiscan.inscription.data.content_url,
-                    content_type: mockResponses.ordiscan.inscription.data.content_type
+                    content_type: mockResponses.ordiscan.inscription.data.content_type,
                 };
 
                 const result = provider.transformInscriptionToResource(inscription);
@@ -165,7 +166,7 @@ describe('Provider System', () => {
                     content_url: mockResponses.ordiscan.inscription.data.content_url,
                     sat: mockResponses.ordiscan.inscription.data.sat,
                     inscriptionId: mockResponses.ordiscan.inscription.data.inscription_id,
-                    didReference: `did:btco:${mockResponses.ordiscan.inscription.data.sat}`
+                    didReference: `did:btco:${mockResponses.ordiscan.inscription.data.sat}`,
                 });
             });
 
@@ -174,7 +175,7 @@ describe('Provider System', () => {
                     id: mockResponses.ordiscan.inscription.data.inscription_id,
                     sat: mockResponses.ordiscan.inscription.data.sat,
                     content_url: mockResponses.ordiscan.inscription.data.content_url,
-                    content_type: 'text/plain'
+                    content_type: 'text/plain',
                 };
 
                 const result = provider.transformInscriptionToResource(inscription);
@@ -185,7 +186,7 @@ describe('Provider System', () => {
                     content_url: mockResponses.ordiscan.inscription.data.content_url,
                     sat: mockResponses.ordiscan.inscription.data.sat,
                     inscriptionId: mockResponses.ordiscan.inscription.data.inscription_id,
-                    didReference: `did:btco:${mockResponses.ordiscan.inscription.data.sat}`
+                    didReference: `did:btco:${mockResponses.ordiscan.inscription.data.sat}`,
                 });
             });
         });
@@ -245,7 +246,7 @@ describe('Provider System', () => {
 
         beforeEach(() => {
             provider = new OrdNodeProvider({
-                apiEndpoint: 'https://test.ordinalsplus.com',
+                nodeUrl: 'https://test.ordinalsplus.com',
                 timeout: 5000
             });
         });
@@ -306,7 +307,7 @@ describe('Provider System', () => {
                     id: mockResponses.ordNode.inscription.data.inscription_id,
                     sat: mockResponses.ordNode.inscription.data.sat,
                     content_type: mockResponses.ordNode.inscription.data.content_type,
-                    content_url: mockResponses.ordNode.inscription.data.content_url
+                    content_url: mockResponses.ordNode.inscription.data.content_url,
                 };
 
                 const result = provider.transformInscriptionToResource(inscription);
@@ -317,7 +318,7 @@ describe('Provider System', () => {
                     content_url: mockResponses.ordNode.inscription.data.content_url,
                     sat: mockResponses.ordNode.inscription.data.sat,
                     inscriptionId: mockResponses.ordNode.inscription.data.inscription_id,
-                    didReference: `did:btco:${mockResponses.ordNode.inscription.data.sat}`
+                    didReference: `did:btco:${mockResponses.ordNode.inscription.data.sat}`,
                 });
             });
 
@@ -326,7 +327,7 @@ describe('Provider System', () => {
                     id: mockResponses.ordNode.inscription.data.inscription_id,
                     sat: mockResponses.ordNode.inscription.data.sat,
                     content_type: mockResponses.ordNode.inscription.data.content_type,
-                    content_url: mockResponses.ordNode.inscription.data.content_url
+                    content_url: mockResponses.ordNode.inscription.data.content_url,
                 };
 
                 const result = provider.transformInscriptionToResource(inscription);
@@ -337,7 +338,7 @@ describe('Provider System', () => {
                     content_url: mockResponses.ordNode.inscription.data.content_url,
                     sat: mockResponses.ordNode.inscription.data.sat,
                     inscriptionId: mockResponses.ordNode.inscription.data.inscription_id,
-                    didReference: `did:btco:${mockResponses.ordNode.inscription.data.sat}`
+                    didReference: `did:btco:${mockResponses.ordNode.inscription.data.sat}`,
                 });
             });
         });

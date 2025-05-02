@@ -100,8 +100,7 @@ export class OrdNodeProvider implements ResourceProvider {
             id: response.inscription_id,
             sat: response.sat,
             content_type: response.content_type,
-            content_url: response.content_url,
-            timestamp: response.timestamp
+            content_url: response.content_url
         };
     }
 
@@ -219,8 +218,7 @@ export class OrdNodeProvider implements ResourceProvider {
                     id: inscriptionResponse.id,
                     sat: inscriptionResponse.sat,
                     content_type: inscriptionResponse.content_type,
-                    content_url: `${this.nodeUrl}/content/${inscriptionResponse.id}`,
-                    timestamp: inscriptionResponse.timestamp
+                    content_url: `${this.nodeUrl}/content/${inscriptionResponse.id}`
                 };
                 return createLinkedResourceFromInscription(inscriptionObj, inscriptionResponse.content_type || 'Unknown', this.network);
             })
@@ -239,8 +237,7 @@ export class OrdNodeProvider implements ResourceProvider {
             id: response.inscription_id,
             sat: response.sat,
             content_type: response.content_type,
-            content_url: response.content_url,
-            timestamp: response.timestamp
+            content_url: response.content_url
         };
     }
 

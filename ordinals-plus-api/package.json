@@ -5,9 +5,16 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "test:integration": "bun test src/integration-tests",
+    "test:e2e": "bun test src/e2e-tests"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@ljharb/tsconfig": "^0.3.2",
     "@types/body-parser": "^1.19.5",
     "@types/bun": "latest",
     "@types/express": "^5.0.1"
@@ -25,7 +32,7 @@
     "axios": "^1.8.4",
     "bitcoinjs-lib": "^6.1.7",
     "body-parser": "^2.2.0",
-    "ecpair": "^3.0.0",
+    "ecpair": "^2.1.0",
     "elysia": "^1.2.25",
     "express": "^5.1.0",
     "ordinalsplus": "file:../ordinalsplus",

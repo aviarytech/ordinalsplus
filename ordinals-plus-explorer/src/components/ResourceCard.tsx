@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Eye, Code, Image } from 'lucide-react';
-import ApiServiceProvider from '../services/ApiServiceProvider';
+import { FileText, Code, Image } from 'lucide-react';
 import { LinkedResource } from 'ordinalsplus';
 
 interface ResourceCardProps {
@@ -13,7 +12,6 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
-  const apiService = ApiServiceProvider.getInstance();
   
   useEffect(() => {
     // Try to fetch text content directly for any resource that could be text

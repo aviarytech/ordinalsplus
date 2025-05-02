@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll } from 'bun:test';
-import { createLinkedResourceFromInscription } from '../src/did/did-utils';
 import { Inscription } from '../src/types';
 import { extractSatNumber } from '../src/utils/validators.js';
+import { createLinkedResourceFromInscription } from '../src';
 
 // Fetch real inscription data from Ordiscan
 const ORDISCAN_API_KEY = process.env.ORDISCAN_API_KEY;
@@ -22,7 +22,7 @@ async function fetchRealInscriptions(): Promise<Inscription[]> {
     throw new Error(`Failed to fetch inscriptions: ${response.statusText}`);
   }
   
-  const data = await response.json();
+  const data = await response.json() as { inscriptions: Inscription[] };
   return data.inscriptions.map((inscription: any, index: number) => {
     if (!inscription.sat) {
       throw new Error(`Inscription ${inscription.id} is missing required sat number`);
@@ -75,7 +75,7 @@ describe('Resource Extraction with Real Data', () => {
   describe('Resource ID Generation', () => {
     it('should generate correct resource IDs for real inscriptions', () => {
       for (const inscription of realInscriptions) {
-        const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
+        const resource = createLinkedResourceFromInscription(inscription, 'TestResource', 'testnet');
         expect(resource.id).toBe(`did:btco:${inscription.sat}/${inscription.number}`);
         expect(resource.didReference).toBe(`did:btco:${inscription.sat}`);
       }
@@ -94,7 +94,7 @@ describe('Resource Extraction with Real Data', () => {
   describe('Resource Creation', () => {
     it('should create resources with correct content URLs', () => {
       for (const inscription of realInscriptions) {
-        const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
+        const resource = createLinkedResourceFromInscription(inscription, 'TestResource', 'testnet');
         if (inscription.content_url) {
           expect(resource.content_url).toBe(inscription.content_url);
         }

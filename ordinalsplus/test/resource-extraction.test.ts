@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { createLinkedResourceFromInscription } from '../src/did/did-utils';
 import { Inscription } from '../src/types';
 import { extractSatNumber } from '../src/utils/validators.js';
+import { createLinkedResourceFromInscription } from '../src';
 
 describe('Resource Extraction', () => {
   describe('Extracting resource IDs from different inscription formats', () => {
@@ -20,7 +20,7 @@ describe('Resource Extraction', () => {
           content_url: 'https://ordinalsplus.com/resource/1',
           number: testCase.expectedIndex
         };
-        const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
+        const resource = createLinkedResourceFromInscription(inscription, 'TestResource', 'testnet');
         expect(resource.id).toBe(`did:btco:87654321/${testCase.expectedIndex}`);
         expect(resource.didReference).toBe('did:btco:87654321');
       });
@@ -34,7 +34,7 @@ describe('Resource Extraction', () => {
         content_type: 'application/json',
         content_url: 'https://ordinalsplus.com/resource/2'
       };
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
+      const resource = createLinkedResourceFromInscription(inscription, 'TestResource', 'testnet');
       expect(resource.id).toBe('did:btco:87654321/123');
       expect(resource.didReference).toBe('did:btco:87654321');
     });
@@ -46,7 +46,7 @@ describe('Resource Extraction', () => {
         content_type: 'application/json',
         content_url: 'https://ordinalsplus.com/resource/3'
       };
-      expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource'))
+      expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource', 'testnet'))
         .toThrow('No valid index found in inscription');
     });
 
@@ -56,7 +56,7 @@ describe('Resource Extraction', () => {
         content_type: 'application/json',
         content_url: 'https://ordinalsplus.com/resource/4'
       };
-      expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource'))
+      expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource', 'testnet'))
         .toThrow('Sat number is required');
     });
 
@@ -69,7 +69,7 @@ describe('Resource Extraction', () => {
         content_url: 'https://ordinalsplus.com/resource/5',
         number: 0
       };
-      const resource = createLinkedResourceFromInscription(inscription, 'TestResource');
+      const resource = createLinkedResourceFromInscription(inscription, 'TestResource', 'testnet');
       expect(resource.id).toBe('did:btco:87654321/0');
       expect(resource.didReference).toBe('did:btco:87654321');
     });
@@ -82,7 +82,7 @@ describe('Resource Extraction', () => {
         content_url: 'https://ordinalsplus.com/resource/6',
         number: 0
       };
-      const resource1 = createLinkedResourceFromInscription(inscription1, 'TestResource');
+      const resource1 = createLinkedResourceFromInscription(inscription1, 'TestResource', 'testnet');
       expect(resource1.id).toBe('did:btco:12345678/0');
       expect(resource1.didReference).toBe('did:btco:12345678');
 
@@ -93,7 +93,7 @@ describe('Resource Extraction', () => {
         content_url: 'https://ordinalsplus.com/resource/7',
         number: 0
       };
-      const resource2 = createLinkedResourceFromInscription(inscription2, 'TestResource');
+      const resource2 = createLinkedResourceFromInscription(inscription2, 'TestResource', 'testnet');
       expect(resource2.id).toBe('did:btco:87654321/0');
       expect(resource2.didReference).toBe('did:btco:87654321');
     });
@@ -105,7 +105,7 @@ describe('Resource Extraction', () => {
         content_type: 'application/json',
         content_url: 'https://ordinalsplus.com/resource/8'
       };
-      expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource'))
+      expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'TestResource', 'testnet'))
         .toThrow('Sat number is required');
     });
   });

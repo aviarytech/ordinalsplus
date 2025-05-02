@@ -16,7 +16,7 @@ import { ResourceProvider, InscriptionRefWithLocation } from '../resources/provi
 export async function getAddressUtxos(
     address: string, 
     provider: ResourceProvider, // Accept provider as argument
-    network: 'mainnet' | 'testnet' = 'mainnet'
+    network: 'mainnet' | 'testnet' | 'signet' = 'mainnet'
 ): Promise<Utxo[]> {
     if (!address) {
         throw new Error('Address is required.');
@@ -37,7 +37,9 @@ export async function getAddressUtxos(
     // --- Use passed-in provider --- 
     const baseMempoolUrl = network === 'testnet'
         ? 'https://mempool.space/testnet/api'
-        : 'https://mempool.space/api';
+        : network === 'signet'
+            ? 'https://mempool.space/signet/api'
+            : 'https://mempool.space/api';
     const utxoListUrl = `${baseMempoolUrl}/address/${address}/utxo`;
 
     console.log(`[getAddressUtxos] Fetching base UTXO list from: ${utxoListUrl}`);
@@ -64,7 +66,7 @@ export async function getAddressUtxos(
             try { errorBody = await utxoResponse.text(); } catch {}
             throw new Error(`Mempool API error (UTXO list) ${utxoResponse.status}: ${errorBody || utxoResponse.statusText}`);
         }
-        const basicUtxos: { txid: string; vout: number; value: number; status: any }[] = await utxoResponse.json();
+        const basicUtxos = await utxoResponse.json() as { txid: string; vout: number; value: number; status: any }[];
 
         if (!basicUtxos || basicUtxos.length === 0) {
             console.log(`[getAddressUtxos] No basic UTXOs found for address ${address} on ${network}.`);
@@ -90,7 +92,8 @@ export async function getAddressUtxos(
                 }
                 const txDetails = await txResponse.json();
 
-                const output = txDetails?.vout?.[basicUtxo.vout];
+                const txDetailsTyped = txDetails as { vout: any[] };
+                const output = (txDetailsTyped && Array.isArray(txDetailsTyped.vout)) ? txDetailsTyped.vout[basicUtxo.vout] : undefined;
                 const scriptPubKey = output?.scriptpubkey;
 
                 if (scriptPubKey) {

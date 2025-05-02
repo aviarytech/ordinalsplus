@@ -93,6 +93,8 @@ export const useDirectWallet = (): DirectWalletHook => {
         networkInfo = await (window as any).unisat.getNetwork();
         if (networkInfo === 'livenet') {
           networkInfo = 'mainnet';
+        } else if (networkInfo === 'unknown') {
+          networkInfo = 'signet';
         }
       } else if (walletType === 'xverse' && hasXverse) {
         // Xverse getNetwork might not be standard, often network is part of account info
@@ -142,6 +144,11 @@ export const useDirectWallet = (): DirectWalletHook => {
           connectedAddress = accounts[0];
           try {
             connectedNetwork = await unisat.getNetwork();
+            if (connectedNetwork === 'livenet') {
+              connectedNetwork = 'mainnet';
+            } else if (connectedNetwork === 'unknown') {
+              connectedNetwork = 'signet';
+            }
             connectedPublicKey = await unisat.getPublicKey(); // Get public key
             logMessage(`Network: ${connectedNetwork}, PublicKey: ${connectedPublicKey}`);
           } catch (err) {
@@ -292,13 +299,13 @@ export const useDirectWallet = (): DirectWalletHook => {
         case 'unisat':
           if (!hasUnisat) throw new Error(logMessage('UniSat wallet not available.'));
           const unisat = (window as any).unisat;
-          logMessage('Calling unisat.signPsbt...');
+          logMessage('Calling unisat.signPsbt with autoFinalized: false...');
           // Unisat often returns the signed PSBT hex directly
-          // Check Unisat docs for specific options if needed (e.g., { autoFinalized: true } is common)
+          // Explicitly set autoFinalized to false to let our code handle finalization
           signedPsbtHex = await unisat.signPsbt(psbtHex, {
-            autoFinalized: options?.autoFinalized ?? true // Default to true if not specified
+            autoFinalized: false 
           });
-          logMessage('UniSat signing successful.');
+          logMessage('UniSat signing successful (PSBT should contain signature only).');
           break;
 
         case 'xverse':
@@ -367,11 +374,7 @@ export const useDirectWallet = (): DirectWalletHook => {
     }
 
     try {
-      // Determine network based on wallet connection
-      const currentNetwork = network === 'testnet' ? 'testnet' : 'mainnet';
-      
-      // Call the backend API via ApiService
-      const utxos = await apiService.getAddressUtxos(address, currentNetwork);
+      const utxos = await apiService.getAddressUtxos(network as string, address);
       
       logMessage(`Received ${utxos.length} UTXOs from backend API.`);
       return utxos;
@@ -382,7 +385,7 @@ export const useDirectWallet = (): DirectWalletHook => {
       setError(errorMsg);
       throw err;
     }
-  }, [connected, walletType, address, network, apiService, hasUnisat, hasXverse, hasMagicEden]); // Add apiService to dependencies
+  }, [connected, walletType, address, network, apiService]); // Add apiService to dependencies
 
   return {
     connect,

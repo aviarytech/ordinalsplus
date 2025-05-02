@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createLinkedResourceFromInscription } from '../src/did/did-utils';
+import { createLinkedResourceFromInscription } from '../src/resources/linked-resource';
 import { Inscription } from '../src/types';
 
 describe('createLinkedResourceFromInscription', () => {
@@ -8,10 +8,10 @@ describe('createLinkedResourceFromInscription', () => {
       id: '123i0',
       sat: 123456,
       content_type: 'application/json',
-      content_url: 'https://ordinalsplus.com/resource/1'
+      content_url: 'https://ordinalsplus.com/resource/1',
     };
 
-    const result = createLinkedResourceFromInscription(inscription, 'application/json');
+    const result = createLinkedResourceFromInscription(inscription, 'application/json', 'mainnet');
     expect(result).toEqual({
       id: 'did:btco:123456/0',
       type: 'application/json',
@@ -28,10 +28,10 @@ describe('createLinkedResourceFromInscription', () => {
       id: '',
       sat: 123456,
       content_type: 'application/json',
-      content_url: 'https://ordinalsplus.com/resource/1'
+      content_url: 'https://ordinalsplus.com/resource/1',
     };
 
-    expect(() => createLinkedResourceFromInscription(inscription, 'application/json')).toThrow('Invalid inscription');
+    expect(() => createLinkedResourceFromInscription(inscription, 'application/json', 'mainnet')).toThrow('Invalid inscription');
   });
 
   it('should handle missing content URL', () => {
@@ -39,10 +39,10 @@ describe('createLinkedResourceFromInscription', () => {
       id: '123i0',
       sat: 123456,
       content_type: 'application/json',
-      content_url: ''
+      content_url: '',
     };
 
-    const result = createLinkedResourceFromInscription(inscription, 'application/json');
+    const result = createLinkedResourceFromInscription(inscription, 'application/json', 'mainnet');
     expect(result.content_url).toBe('');
   });
 
@@ -51,10 +51,10 @@ describe('createLinkedResourceFromInscription', () => {
       id: '123i0',
       sat: 1000,
       content_type: 'application/json',
-      content_url: 'https://ordinalsplus.com/resource/1'
+      content_url: 'https://ordinalsplus.com/resource/1',
     };
 
-    const result = createLinkedResourceFromInscription(inscription, 'test-type');
+    const result = createLinkedResourceFromInscription(inscription, 'test-type', 'mainnet');
     expect(result).toEqual({
       content_url: 'https://ordinalsplus.com/resource/1',
       contentType: 'application/json',
@@ -71,10 +71,10 @@ describe('createLinkedResourceFromInscription', () => {
       id: '123i0',
       sat: 1000,
       content_type: 'text/plain',
-      content_url: 'https://ordinalsplus.com/resource/1'
+      content_url: 'https://ordinalsplus.com/resource/1',
     };
 
-    const result = createLinkedResourceFromInscription(inscription, 'test-type');
+    const result = createLinkedResourceFromInscription(inscription, 'test-type', 'mainnet');
     expect(result).toEqual({
       content_url: 'https://ordinalsplus.com/resource/1',
       contentType: 'text/plain',
@@ -91,10 +91,10 @@ describe('createLinkedResourceFromInscription', () => {
       id: '123i0',
       sat: 1000,
       content_type: 'application/json',
-      content_url: ''
+      content_url: '',
     };
 
-    const result = createLinkedResourceFromInscription(inscription, 'test-type');
+    const result = createLinkedResourceFromInscription(inscription, 'test-type', 'mainnet');
     expect(result).toEqual({
       content_url: '',
       contentType: 'application/json',
@@ -111,10 +111,10 @@ describe('createLinkedResourceFromInscription', () => {
       id: '123',
       sat: 1000,
       content_type: 'application/json',
-      content_url: 'https://ordinalsplus.com/resource/1'
+      content_url: 'https://ordinalsplus.com/resource/1',
     };
 
-    expect(() => createLinkedResourceFromInscription(inscription, 'test-type'))
+    expect(() => createLinkedResourceFromInscription(inscription, 'test-type', 'mainnet'))
       .toThrow('No valid index found in inscription');
   });
 
@@ -122,10 +122,11 @@ describe('createLinkedResourceFromInscription', () => {
     const inscription: any = {
       id: '123i0',
       content_type: 'application/json',
-      content_url: 'https://ordinalsplus.com/resource/1'
+      content_url: 'https://ordinalsplus.com/resource/1',
+      timestamp: new Date().toISOString()
     };
 
-    expect(() => createLinkedResourceFromInscription(inscription, 'test-type'))
+    expect(() => createLinkedResourceFromInscription(inscription, 'test-type', 'mainnet'))
       .toThrow('Sat number is required');
   });
 
@@ -133,10 +134,10 @@ describe('createLinkedResourceFromInscription', () => {
     const inscription: Partial<Inscription> = {
       sat: 1000,
       content_type: 'application/json',
-      content_url: 'https://ordinalsplus.com/resource/1'
+      content_url: 'https://ordinalsplus.com/resource/1',
     };
 
-    expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'test-type'))
+    expect(() => createLinkedResourceFromInscription(inscription as Inscription, 'test-type', 'mainnet'))
       .toThrow('Invalid inscription');
   });
 }); 

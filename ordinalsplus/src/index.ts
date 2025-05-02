@@ -16,14 +16,9 @@ export {
     ResourceResolver, 
     formatResourceContent 
 } from './resources/index';
-// Explicitly export provider types if needed, assuming they are in ./resources/providers/types
+
 export type { ResourceProvider, ResourceResolverOptions } from './resources/index';
 
-// --- Inscription Exports ---
-export { prepareInscriptionEnvelope } from './inscription/index';
-
-// --- Utility Exports ---
-// Avoid re-exporting things already exported above (like createDidFrom...)
 export { 
     isValidBtcoDid, 
     isValidResourceId, 
@@ -35,17 +30,54 @@ export {
     ERROR_CODES, 
     MAX_SAT_NUMBER 
 } from './utils/index';
-// Export the new address utilities
-export * from './utils/address-utils';
 
-// --- Specific Provider Exports (if needed beyond default) ---
+export * from './utils/address-utils';
+export { NETWORKS, getScureNetwork } from './utils/networks';
+
 export { OrdiscanProvider } from './resources/providers/ordiscan-provider';
 
-// --- Default Export Configuration ---
 export { OrdiscanProvider as default, OrdNodeProvider };
 
 export * from './utils/constants';
-export * from './utils/address-utils';
 
-// --- Transaction Utilities Export --- 
-export * from './transactions/inscription-utils';
+export {
+    calculateFee,
+    prepareResourceInscription, 
+    validateResourceCreationParams
+} from './transactions';
+export type { 
+    PreparedResourceInfo 
+} from './transactions';
+
+export {
+    // Old/Deprecated (Keep for now, maybe remove later)
+    createInscriptionScripts, // Deprecated
+    findCommitVout,           // Deprecated
+    createRevealPsbt,         // Deprecated
+    
+    // New flow functions
+    prepareInscriptionScripts, // Renamed from generateCommitDetails
+    estimateRevealFee,         // New function
+    constructFinalRevealTx,
+    createUnsignedCommitPsbt, // Added new function
+    
+    // Shared/Utility
+    deriveP2TR,
+    wifToPrivateKeyBytes,
+    
+    // Types (Export relevant ones used by new functions)
+    InscriptionData,
+    Utxo, // Added shared Utxo type
+    PreparedInscriptionScripts,
+    PrepareInscriptionScriptsParams,
+    CommitP2TRInfo,
+    EstimateRevealFeeParams,
+    CreateUnsignedCommitPsbtParams, // Added new type
+    CreateUnsignedCommitPsbtResult, // Added new type
+    ConstructFinalRevealTxParams,
+    FinalRevealTxResult,
+    // Deprecated types (Consider removing later)
+    // InscriptionScripts,
+    // CommitDetails, 
+    
+} from './inscription';

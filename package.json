@@ -5,12 +5,25 @@
     "ord:server": "ord --signet --bitcoin-rpc-url http://127.0.0.1:38332 --cookie-file /Users/brian/Projects/ordinalsplus/data/signet/.cookie --index-sats --data-dir=/Users/brian/Projects/ordinalsplus/data/signet server"
   },
   "devDependencies": {
+    "@ljharb/tsconfig": "^0.3.2",
+    "@types/chai": "^5.2.1",
     "@types/jest": "^29.5.14",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.15.0",
+    "chai": "^5.2.0",
+    "mocha": "^11.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
     "vite-plugin-node-polyfills": "^0.23.0",
     "vite-plugin-wasm": "^3.4.1"
   },
   "dependencies": {
+    "@scure/base": "^1.2.5",
+    "bitcoinjs-lib": "^6.1.7",
     "buffer": "^6.0.3",
-    "process": "^0.11.10"
+    "ecpair": "^3.0.0",
+    "micro-ordinals": "^0.2.2",
+    "process": "^0.11.10",
+    "tiny-secp256k1": "^2.2.3"
   }
 }

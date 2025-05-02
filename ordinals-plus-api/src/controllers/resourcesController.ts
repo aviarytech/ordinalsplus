@@ -5,6 +5,11 @@ import type {
   // Inscription
 } from '../types';
 import { getProvider } from '../services/providerService';
+// Import the resource creation types and functions from ordinalsplus
+import type { 
+  ResourceCreationParams, 
+  ResourceCreationResult 
+} from '../../../ordinalsplus/src/types';
 
 // Cache expiration time in milliseconds (5 minutes)
 const CACHE_EXPIRATION = 5 * 60 * 1000;
@@ -150,6 +155,28 @@ export const getResourcesByDid = async (didId: string): Promise<ApiResponse> => 
     throw error; 
   }
 }
+
+/**
+ * Create a resource transaction using the core ordinalsplus package
+ * 
+ * This implementation delegates to the createResourceTransaction function
+ * from the ordinalsplus package, which handles all the PSBT creation logic.
+ */
+// export const createResourcePsbt = async (params: ResourceCreationParams): Promise<ResourceCreationResult> => {
+//   console.log(`[createResourcePsbt] Creating resource PSBT for network: ${params.network}`);
+  
+//   try {
+//     // Delegate to the ordinalsplus package function
+//     const result = await createResourceTransaction(params);
+    
+//     console.log(`[createResourcePsbt] Successfully created resource PSBTs`);
+//     return result;
+//   } catch (error) {
+//     console.error(`[createResourcePsbt] Error creating resource PSBTs:`, error);
+//     // Re-throw the error to be handled by the Elysia onError handler
+//     throw error;
+//   }
+// }
 
 /* Commenting out unused/problematic helper functions - Start
 

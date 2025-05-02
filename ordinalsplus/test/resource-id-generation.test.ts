@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createDidFromInscriptionData } from '../src/utils/validators';
+import { createDidFromInscriptionData } from '../src/did/did-utils';
 import { Inscription } from '../src/types';
 
 describe('Resource ID Generation', () => {
@@ -10,10 +10,10 @@ describe('Resource ID Generation', () => {
         sat: 1234567890,
         content_url: 'https://ordinalsplus.com/resource/1',
         content_type: 'application/json',
-        number: 0
+        number: 0,
       };
 
-      const did = createDidFromInscriptionData(inscription);
+      const did = createDidFromInscriptionData(inscription, 'mainnet');
       expect(did).toBe('did:btco:1234567890');
     });
 
@@ -23,12 +23,12 @@ describe('Resource ID Generation', () => {
         number: 0
       };
 
-      expect(() => createDidFromInscriptionData(inscription as Inscription))
+      expect(() => createDidFromInscriptionData(inscription as Inscription, 'mainnet'))
         .toThrow('Sat number is required');
     });
 
     it('should throw error for empty inscription', () => {
-      expect(() => createDidFromInscriptionData({} as Inscription))
+      expect(() => createDidFromInscriptionData({} as Inscription, 'mainnet'))
         .toThrow('Sat number is required');
     });
   });
@@ -39,9 +39,9 @@ describe('Resource ID Generation', () => {
       content_url: 'https://ordinalsplus.com/resource/1',
       sat: 1234567890,
       content_type: 'application/json',
-      number: 0
+      number: 0,
     };
-    const result = createDidFromInscriptionData(inscription);
+    const result = createDidFromInscriptionData(inscription, 'mainnet');
     expect(result).toBe('did:btco:1234567890');
   });
 }); 

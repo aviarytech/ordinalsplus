@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNetwork } from '../context/NetworkContext';
+import { useWallet } from '../context/WalletContext';
 import { useApi } from '../context/ApiContext';
 import { FeeEstimateResponse } from '../types/index';
 
@@ -27,7 +27,7 @@ export const useFeeRates = (): UseFeeRatesResult => {
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   
-  const { network: activeNetwork } = useNetwork();
+  const { network: activeNetwork } = useWallet();
   const { apiService } = useApi();
 
   const refreshFees = useCallback(() => {
@@ -36,8 +36,8 @@ export const useFeeRates = (): UseFeeRatesResult => {
 
   useEffect(() => {
     const fetchFeeRates = async () => {
-      if (!activeNetwork?.type) {
-        setError('No active network selected.');
+      if (!activeNetwork) {
+        setError('Wallet not connected or network not determined.');
         setFeeRates(null);
         setLoading(false);
         return;
@@ -53,10 +53,10 @@ export const useFeeRates = (): UseFeeRatesResult => {
       setError(null);
       setFeeRates(null);
 
-      console.log(`[useFeeRates] Fetching fees for ${activeNetwork.id} via ApiService`);
+      console.log(`[useFeeRates] Fetching fees for ${activeNetwork} via ApiService`);
 
       try {
-        const response: FeeEstimateResponse = await apiService.getFeeEstimates(activeNetwork.id);
+        const response: FeeEstimateResponse = await apiService.getFeeEstimates(activeNetwork);
         
         if (response && typeof response.high === 'number' && typeof response.medium === 'number' && typeof response.low === 'number') {
           setFeeRates({

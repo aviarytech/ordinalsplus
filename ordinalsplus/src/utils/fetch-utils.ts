@@ -31,7 +31,7 @@ export async function fetchWithTimeout<T>(
         return {
             ok: true,
             status: response.status,
-            data
+            data: data as T
         };
     } catch (error) {
         if (error instanceof Error) {

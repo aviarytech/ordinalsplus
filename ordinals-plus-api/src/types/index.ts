@@ -1,17 +1,53 @@
-import type { 
-  // CuratedCollectionCredential, 
-  // ResourceMetadata,
-  // DID, 
-  LinkedResource, 
-  Inscription, 
-  // InscriptionResponse, 
-  // ExplorerApiResponse 
-} from "ordinalsplus";
+import * as bitcoin from 'bitcoinjs-lib';
 
-// Re-export core types
-export type { LinkedResource, Inscription }; // Removed DID, InscriptionResponse, ExplorerApiResponse
+/* // Commenting out problematic imports - Address later if needed
+import {
+    // Example types - adjust based on actual exports in ordinalsplus
+    // DidDocument, // Assuming this is a default or named export
+    // ResourceMetadata, // Example
+    Utxo, // Example
+    Inscription, // Example
+    LinkedResource, // Example
+    // Add other necessary types
+} from "ordinalsplus";
+*/
+
+// Re-export specific named types
+/* // Commenting out problematic re-exports
+export type {
+    LinkedResource, 
+    Inscription, 
+    ResourceProvider, 
+    Utxo,
+    // DIDDocumentResponse, // Assuming this might not exist or is named differently
+    // ResourceResponse // Assuming this might not exist or is named differently
+} from "ordinalsplus";
+*/
+
+// Keep specific re-exports if needed elsewhere, or remove if duplicates
+// export type { LinkedResource, ResourceProvider, Utxo } from 'ordinalsplus';
+
+// --- Define Utxo locally if import fails ---
+// Minimal Utxo definition needed for request types
+export interface Utxo {
+  txid: string;
+  vout: number;
+  value: number;
+  scriptPubKey: string; // Added based on usage in index.ts
+}
+
+// --- Define other placeholders locally if import fails ---
+export interface LinkedResource { 
+    // Define minimal properties based on usage, or use any
+    [key: string]: any; 
+}
+export interface Inscription { 
+    // Define minimal properties based on usage, or use any
+    [key: string]: any; 
+}
 
 export interface ApiConfig {
+  network: string;
   port: number;
   host: string;
   ordNodeUrl: string;
@@ -83,6 +119,9 @@ export interface GenericInscriptionRequest {
   feeRate: number;       // Fee rate in sats/vbyte
   recipientAddress: string; // Address to send the inscription
   // senderPublicKey: string; // REMOVED - Not needed for reveal PSBT generation
+  utxos?: Utxo[];         // Optional UTXOs for funding the transaction
+  changeAddress?: string; // Optional change address (defaults to recipient if not provided)
+  networkType?: NetworkType; // Optional network type (defaults to testnet if not provided)
 }
 
 // Specific request for DID inscription
@@ -98,12 +137,19 @@ export interface ResourceInscriptionRequest extends GenericInscriptionRequest {
 
 // --- Restore first PsbtResponse definition ---
 export interface PsbtResponse {
-  psbtBase64: string; // The partially signed transaction, base64 encoded
-  
-  // Fields relevant to the REVEAL PSBT returned by constructGenericPsbt
+  psbtBase64: string; // The partially signed reveal transaction, base64 encoded
   commitTxOutputValue: number; // The value (in sats) required for the commit transaction's P2TR output
   revealFee: number; // The estimated fee (in sats) for the reveal transaction itself
   revealSignerPrivateKeyWif: string; // The WIF private key needed to sign the reveal transaction input
+}
+
+// --- NEW: Combined Response for Commit + Reveal PSBTs --- 
+export interface CombinedPsbtResponse {
+  commitPsbtBase64: string;           // Base64 encoded unsigned commit PSBT
+  unsignedRevealPsbtBase64: string;  // Base64 encoded unsigned reveal PSBT (with placeholders)
+  revealSignerWif: string;           // WIF key to sign reveal input
+  commitTxOutputValue: number;       // Value required for commit transaction's P2TR output
+  revealFee: number;                 // Estimated fee for the reveal transaction
 }
 
 // --- Restore first FeeEstimateResponse definition ---
@@ -171,4 +217,31 @@ export interface NetworkInfo {
   id: string; // e.g., 'mainnet', 'testnet'
   name: string; // e.g., 'Bitcoin Mainnet', 'Bitcoin Testnet'
   // Add other relevant fields if needed, like explorer URLs, etc.
+}
+
+// --- Add NetworkType --- 
+export type NetworkType = 'mainnet' | 'signet' | 'testnet';
+
+// Define a placeholder type if DidDocument isn't available
+type PlaceholderDidDocument = { id: string; [key: string]: any };
+
+// --- UTXO Response --- 
+// Define UtxoApiResponse for the GET /api/addresses/:address/utxos endpoint
+export interface UtxoApiResponse {
+  status: 'success'; // Only success status includes data
+  data: Utxo[];
+} 
+// Error case is handled by ErrorResponse defined earlier
+
+// --- Transaction Broadcast Response --- 
+export interface BroadcastResponse {
+// ... existing code ...
+} 
+
+// --- NEW: Request type for createInscriptionPsbts service function ---
+export interface CreatePsbtsRequest extends GenericInscriptionRequest {
+    utxos: Utxo[];
+    changeAddress: string;
+    networkType: NetworkType; // Added networkType for network config selection
+    testMode?: boolean;  // Added testMode parameter for testing purposes
 } 

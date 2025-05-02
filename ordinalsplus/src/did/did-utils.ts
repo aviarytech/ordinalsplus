@@ -40,19 +40,19 @@ export function isBtcoDid(did: string): boolean {
 
 /**
  * Returns the appropriate DID prefix based on the Bitcoin network.
- * @param network The Bitcoin network ('mainnet' or 'signet').
+ * @param network The Bitcoin network ('mainnet', 'signet', or 'testnet').
  * @returns The corresponding DID prefix string.
  * @throws Error if the network is unsupported.
  */
 export function getDidPrefix(network: BitcoinNetwork): string {
-  switch (network) {
-    case 'mainnet':
-      return 'did:btco';
-    case 'signet':
-      return 'did:btco:sig';
-    default:
-      // Ensure exhaustive check at compile time
-      const exhaustiveCheck: never = network;
-      throw new Error(`Unsupported Bitcoin network: ${exhaustiveCheck}`);
-  }
+    switch (network) {
+        case 'mainnet':
+            return 'did:btco';
+        case 'signet':
+            return 'did:btco:sig';
+        case 'testnet':
+            return 'did:btco:test';
+        default:
+            throw new Error(`Unsupported Bitcoin network: ${network}`);
+    }
 }

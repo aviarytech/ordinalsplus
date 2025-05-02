@@ -93,8 +93,7 @@ export class OrdiscanProvider implements ResourceProvider {
             id: response.data.inscription_id,
             sat: response.data.sat,
             content_type: response.data.content_type,
-            content_url: response.data.content_url,
-            timestamp: response.data.timestamp
+            content_url: response.data.content_url
         };
     }
 
@@ -228,8 +227,7 @@ export class OrdiscanProvider implements ResourceProvider {
                 id: inscription.inscription_id,
                 sat: inscription.sat,
                 content_type: inscription.content_type,
-                content_url: inscription.content_url || `${this.apiEndpoint}/content/${inscription.inscription_id}`,
-                timestamp: inscription.timestamp
+                content_url: inscription.content_url || `${this.apiEndpoint}/content/${inscription.inscription_id}`
             };
             return createLinkedResourceFromInscription(inscriptionObj, inscription.content_type || 'Unknown', this.network);
         });
@@ -251,8 +249,7 @@ export class OrdiscanProvider implements ResourceProvider {
             id: response.data.inscription_id,
             sat: response.data.sat,
             content_type: response.data.content_type,
-            content_url: response.data.content_url,
-            timestamp: response.data.timestamp
+            content_url: response.data.content_url
         };
     }
 

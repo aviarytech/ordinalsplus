@@ -2,7 +2,6 @@ import { LinkedResource, Utxo } from 'ordinalsplus';
 // Import types from the local types/index file
 import type { 
     ApiResponse,
-    ExplorerState,
     GenericInscriptionRequest,
     DidInscriptionRequest,
     ResourceInscriptionRequest,
@@ -10,8 +9,32 @@ import type {
     FeeEstimateResponse,
     TransactionStatusResponse,
     InscriptionDetailsResponse,
-    NetworkInfo
+    NetworkInfo,
 } from '../types/index';
+
+// Define Request and Response types for Commit PSBT endpoint
+// Mirroring the backend schema definition
+interface CreateCommitRequest {
+  network: string;
+  contentType: string;
+  contentBase64: string;
+  feeRate: number;
+  recipientAddress: string;
+  changeAddress: string;
+  utxos: Utxo[]; // Use Utxo directly
+  parentDid?: string;
+  metadata?: Record<string, any>; 
+}
+
+// Export the interface
+export interface CreateCommitResponse {
+  commitPsbtBase64: string;
+  unsignedRevealPsbtBase64: string;
+  revealSignerWif: string;
+  commitTxOutputValue: number;
+  revealFee: number;
+  leafScriptHex?: string; 
+}
 
 // Helper function for handling API responses
 async function handleApiResponse<T>(response: Response): Promise<T> {
@@ -219,10 +242,18 @@ class ApiService {
    * Get Fee Estimates for a specific network
    */
   async getFeeEstimates(networkType: string): Promise<FeeEstimateResponse> {
-    const url = this.buildUrl('/api/fees', networkType); // Assuming path /api/fees
+    const url = this.buildUrl('/api/fees', networkType); 
     console.log(`[ApiService] Getting fee estimates: ${url}`);
     const response = await fetch(url);
-    return await handleApiResponse<FeeEstimateResponse>(response);
+    const data = await response.json(); 
+    if (!response.ok) {
+      throw new Error(`API error ${response.status}: ${data?.error || 'Failed to fetch fees'}`);
+    }
+    if (typeof data?.low !== 'number' || typeof data?.medium !== 'number' || typeof data?.high !== 'number') {
+        console.error('[ApiService] Invalid fee response structure:', data);
+        throw new Error('Invalid fee estimate data received from API');
+    }
+    return data as FeeEstimateResponse;
   }
 
   // Common handler for inscription creation
@@ -335,29 +366,72 @@ class ApiService {
 
 
   /**
-   * Get UTXOs for an address on a specific network
+   * Fetches UTXOs for an address on a specific network
    */
   async getAddressUtxos(networkType: string, address: string): Promise<Utxo[]> {
-    const url = this.buildUrl(`/api/address/${address}/utxos`, networkType); // Assuming path
+    const url = this.buildUrl(`/api/addresses/${address}/utxos`, networkType); 
     console.log(`[ApiService] Getting address UTXOs: ${url}`);
     const response = await fetch(url);
-    // Assuming backend returns { data: Utxo[] }
     return await handleApiResponse<Utxo[]>(response);
   }
 
+  // --- NEW Method for Commit PSBT ---
+  async createCommitPsbt(request: CreateCommitRequest): Promise<CreateCommitResponse> {
+      const path = '/api/inscriptions/commit';
+      // Network is in the body, not query params for this POST request
+      const url = `${this.baseUrl}${path}`;
+      console.log(`[ApiService] Creating commit PSBT at: ${url}`);
+      
+      const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+      });
+      
+      // Use a modified handler or inline logic as response isn't wrapped in { data: ... }
+      const data = await response.json();
+      if (!response.ok) {
+          throw new Error(`API error ${response.status}: ${data?.error || 'Failed to create commit PSBT'}`);
+      }
+      // Validate expected fields (remove leafScriptHex check)
+      if (
+        typeof data?.commitPsbtBase64 !== 'string' ||
+        typeof data?.unsignedRevealPsbtBase64 !== 'string' ||
+        typeof data?.revealSignerWif !== 'string' ||
+        typeof data?.commitTxOutputValue !== 'number' ||
+        typeof data?.revealFee !== 'number' 
+      ) {
+        console.error('[ApiService] Invalid commit response structure:', data);
+        throw new Error('Invalid commit PSBT data received from API');
+      }
+      return data as CreateCommitResponse;
+  }
+  // --- End NEW Method ---
 
   /**
    * Broadcast a transaction to a specific network
+   * Updated to accept network in body
    */
   async broadcastTransaction(networkType: string, txHex: string): Promise<{ txid: string }> {
-    const url = this.buildUrl('/api/transactions/broadcast', networkType); // Assuming path
+    const path = '/api/transactions/broadcast';
+    const url = `${this.baseUrl}${path}`;
     console.log(`[ApiService] Broadcasting transaction: ${url}`);
     const response = await fetch(url, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ txHex })
+        // Send network in body as per backend update
+        body: JSON.stringify({ txHex, network: networkType })
     });
-    return await handleApiResponse<{ txid: string }>(response);
+    // Use modified handler or inline logic as response is { status: 'success', txid: ... }
+    const data = await response.json();
+    if (!response.ok || data.status === 'error') {
+        throw new Error(`API error ${response.status}: ${data?.error || data?.message || 'Failed to broadcast transaction'}`);
+    }
+    if (typeof data?.txid !== 'string') {
+        console.error('[ApiService] Invalid broadcast response structure:', data);
+        throw new Error('Invalid broadcast response data received from API');
+    }
+    return { txid: data.txid };
   }
 }
 

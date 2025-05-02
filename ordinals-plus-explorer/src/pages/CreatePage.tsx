@@ -47,42 +47,7 @@ const CreatePage: React.FC = () => {
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-4 text-gray-800 dark:text-gray-200">Create Inscription</h1>
-      <p className="text-gray-600 dark:text-gray-400 mb-8">
-        Choose the type of inscription you want to create on the Bitcoin network.
-      </p>
-
-      {/* Tab Navigation */}
-      <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
-        <nav className="flex -mb-px space-x-4" aria-label="Tabs">
-          <TabButton 
-            tabId="generic" 
-            activeTab={activeTab} 
-            onClick={setActiveTab} 
-            icon={FileText} 
-            label="Generic Ordinal" 
-          />
-          <TabButton 
-            tabId="did" 
-            activeTab={activeTab} 
-            onClick={setActiveTab} 
-            icon={Fingerprint} 
-            label="DID (did:btco)" 
-          />
-          <TabButton 
-            tabId="resource" 
-            activeTab={activeTab} 
-            onClick={setActiveTab} 
-            icon={Link2} 
-            label="Linked Resource" 
-          />
-        </nav>
-      </div>
-
-      {/* Tab Content Area */}
-      <div className="mt-6">
-        {renderActiveForm()}
-      </div>
+      {renderActiveForm()}
     </div>
   );
 };

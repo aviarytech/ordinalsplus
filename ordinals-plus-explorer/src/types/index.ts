@@ -117,3 +117,12 @@ export interface ApiErrorResponse {
   error: string;
   details?: any;
 }
+
+// Add the API response type definition here
+export interface CreateCommitApiResponse {
+    commitPsbtBase64: string;
+    unsignedRevealPsbtBase64: string;
+    revealSignerWif: string;
+    commitTxOutputValue: number;
+    revealFee: number;
+}
