@@ -1,3 +1,11 @@
+/**
+ * DEPRECATED - This file contains legacy code and is being replaced by the commit-transaction.ts implementation.
+ * 
+ * Please use the new commit transaction and inscription modules instead:
+ * - transactions/commit-transaction.ts: For commit transaction preparation
+ * - inscription/index.ts: For inscription creation and handling
+ */
+
 import * as bitcoin from 'bitcoinjs-lib';
 import * as ecc from 'tiny-secp256k1';
 import ECPairFactory from 'ecpair';
@@ -10,12 +18,13 @@ const ECPair = ECPairFactory(ecc);
 const MIN_DUST_LIMIT = 546; // Define dust limit
 
 // --- Add simple fee calculation helper --- 
+// DEPRECATED: Use fee-calculation.ts instead
 const calculateFeeSimple = (vbytes: number, feeRate: number): number => {
     return Math.ceil(vbytes * feeRate);
 };
 
 // Helper: Select UTXOs (copied and adapted from frontend, assumes simple strategy)
-// TODO: Consider making this more robust or importing a dedicated coinselect library
+// DEPRECATED: Use utxo-selection.ts instead
 const selectUtxosForAmount = (utxos: Utxo[], amount: number, fee: number): Utxo[] | null => {
     let selected: Utxo[] = [];
     let totalValue = 0;
@@ -39,6 +48,7 @@ const selectUtxosForAmount = (utxos: Utxo[], amount: number, fee: number): Utxo[
 };
 
 // Helper: Get Taproot Output Script (copied from frontend)
+// DEPRECATED: Use the P2TR address utilities in inscription/p2tr/key-utils.ts instead
 const getTaprootOutputScript = (publicKeyHex: string, network: bitcoin.Network): Buffer => {
     const internalPubKey = Buffer.from(publicKeyHex, 'hex').slice(1); // x-only
     const { output } = bitcoin.payments.p2tr({ internalPubkey: internalPubKey, network });
@@ -48,6 +58,8 @@ const getTaprootOutputScript = (publicKeyHex: string, network: bitcoin.Network):
 
 
 /**
+ * DEPRECATED - Use prepareCommitTransaction from commit-transaction.ts instead
+ * 
  * Prepares the unsigned commit transaction PSBT.
  *
  * @param utxos Available UTXOs to fund the transaction.

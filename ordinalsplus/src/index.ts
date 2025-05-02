@@ -40,44 +40,23 @@ export { OrdiscanProvider as default, OrdNodeProvider };
 
 export * from './utils/constants';
 
+// --- Transaction Exports ---
 export {
     calculateFee,
     prepareResourceInscription, 
-    validateResourceCreationParams
-} from './transactions';
-export type { 
-    PreparedResourceInfo 
+    validateResourceCreationParams,
+    prepareCommitTransaction
 } from './transactions';
 
+export type { 
+    PreparedResourceInfo,
+    CommitTransactionParams,
+    CommitTransactionResult
+} from './transactions';
+
+// --- Inscription Exports ---
 export {
-    // Old/Deprecated (Keep for now, maybe remove later)
-    createInscriptionScripts, // Deprecated
-    findCommitVout,           // Deprecated
-    createRevealPsbt,         // Deprecated
-    
-    // New flow functions
-    prepareInscriptionScripts, // Renamed from generateCommitDetails
-    estimateRevealFee,         // New function
-    constructFinalRevealTx,
-    createUnsignedCommitPsbt, // Added new function
-    
-    // Shared/Utility
-    deriveP2TR,
-    wifToPrivateKeyBytes,
-    
-    // Types (Export relevant ones used by new functions)
-    InscriptionData,
-    Utxo, // Added shared Utxo type
-    PreparedInscriptionScripts,
-    PrepareInscriptionScriptsParams,
-    CommitP2TRInfo,
-    EstimateRevealFeeParams,
-    CreateUnsignedCommitPsbtParams, // Added new type
-    CreateUnsignedCommitPsbtResult, // Added new type
-    ConstructFinalRevealTxParams,
-    FinalRevealTxResult,
-    // Deprecated types (Consider removing later)
-    // InscriptionScripts,
-    // CommitDetails, 
-    
+    createInscription,
+    createTextInscription,
+    createJsonInscription
 } from './inscription';
