@@ -199,9 +199,11 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
   
   // Create P2TR address for commit transaction
   const p2tr = btc.p2tr(
-    internalKey, 
-    undefined, // Don't use scriptTree directly to avoid issues
-    btcNetwork
+    undefined as any, 
+    scriptTree,
+    btcNetwork,
+    false,
+    [ordinals.OutOrdinalReveal]
   );
   
   if (!p2tr.address) {

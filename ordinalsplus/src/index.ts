@@ -34,6 +34,13 @@ export {
 export * from './utils/address-utils';
 export { NETWORKS, getScureNetwork } from './utils/networks';
 
+// --- PSBT Utility Exports ---
+export { 
+    finalizePsbt, 
+    extractTransaction, 
+    finalizeAndExtractTransaction 
+} from './utils/psbt-utils';
+
 export { OrdiscanProvider } from './resources/providers/ordiscan-provider';
 
 export { OrdiscanProvider as default, OrdNodeProvider };
@@ -45,14 +52,34 @@ export {
     calculateFee,
     prepareResourceInscription, 
     validateResourceCreationParams,
-    prepareCommitTransaction
+    prepareCommitTransaction,
+    createRevealTransaction,
+    transactionTracker
 } from './transactions';
 
 export type { 
     PreparedResourceInfo,
     CommitTransactionParams,
-    CommitTransactionResult
+    CommitTransactionResult,
+    RevealTransactionParams,
+    RevealTransactionResult
 } from './transactions';
+
+// --- Transaction Status Tracking Exports ---
+export {
+    TransactionStatus,
+    TransactionType,
+    TransactionStatusTracker
+} from './transactions/transaction-status-tracker';
+
+export type {
+    TrackedTransaction,
+    TransactionError,
+    TransactionProgressEvent
+} from './transactions/transaction-status-tracker';
+
+// --- Component Exports ---
+export * from './components';
 
 // --- Inscription Exports ---
 export {

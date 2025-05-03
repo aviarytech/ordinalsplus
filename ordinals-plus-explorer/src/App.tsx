@@ -4,33 +4,42 @@ import LinkedResourcesPage from './pages/LinkedResourcesPage';
 import SettingsPage from './pages/SettingsPage';
 import CreatePage from './pages/CreatePage';
 import WalletConnector from './components/WalletConnector';
+import SimpleResourceCreationForm from './components/create/SimpleResourceCreationForm';
 import './index.css';
+import ErrorBoundary from './components/ui/ErrorBoundary';
+import { ToastProvider } from './contexts/ToastContext';
 
 function App() {
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
-        <nav className="bg-gradient-to-r from-orange-400 to-orange-600 text-white p-4 shadow-md">
-          <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center">
-            <div className="font-bold text-xl">Ordinals Plus Explorer</div>
-            <div className="flex items-center space-x-4">
-              <Link to="/explorer" className="text-white hover:text-orange-200 transition-colors">Explorer</Link>
-              <Link to="/" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
-              <Link to="/create" className="text-white hover:text-orange-200 transition-colors">Create</Link>
-              <Link to="/settings" className="text-white hover:text-orange-200 transition-colors">Settings</Link>
-              <WalletConnector compact showAddress />
-            </div>
+    <ErrorBoundary>
+      <ToastProvider>
+        <Router>
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
+            <nav className="bg-gradient-to-r from-orange-400 to-orange-600 text-white p-4 shadow-md">
+              <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center">
+                <div className="font-bold text-xl">Ordinals Plus Explorer</div>
+                <div className="flex items-center space-x-4">
+                  <Link to="/explorer" className="text-white hover:text-orange-200 transition-colors">Explorer</Link>
+                  <Link to="/" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
+                  <Link to="/create" className="text-white hover:text-orange-200 transition-colors">Create</Link>
+                  <Link to="/create-simple" className="text-white hover:text-orange-200 transition-colors">Create (Simple)</Link>
+                  <Link to="/settings" className="text-white hover:text-orange-200 transition-colors">Settings</Link>
+                  <WalletConnector compact showAddress />
+                </div>
+              </div>
+            </nav>
+            
+            <Routes>
+              <Route path="/" element={<LinkedResourcesPage />} />
+              <Route path="/explorer" element={<ExplorerPage />} />
+              <Route path="/create" element={<CreatePage />} />
+              <Route path="/create-simple" element={<SimpleResourceCreationForm />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
           </div>
-        </nav>
-        
-        <Routes>
-          <Route path="/" element={<LinkedResourcesPage />} />
-          <Route path="/explorer" element={<ExplorerPage />} />
-          <Route path="/create" element={<CreatePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </div>
-    </Router>
+        </Router>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -50,6 +50,7 @@ module.exports = {
       animation: {
         'spin': 'spin 1s linear infinite',
         'pulse': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'slide-in': 'slide-in 0.3s ease-out',
       },
       keyframes: {
         spin: {
@@ -59,6 +60,16 @@ module.exports = {
         pulse: {
           '0%, 100%': { opacity: 1 },
           '50%': { opacity: .5 },
+        },
+        'slide-in': {
+          from: {
+            transform: 'translateX(100%)',
+            opacity: '0'
+          },
+          to: {
+            transform: 'translateX(0)',
+            opacity: '1'
+          },
         },
       },
     },

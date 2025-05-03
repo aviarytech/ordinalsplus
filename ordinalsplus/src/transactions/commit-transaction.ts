@@ -6,13 +6,15 @@
  * commit address and preparation of the commit transaction.
  */
 
-import * as bitcoin from 'bitcoinjs-lib';
 import * as btc from '@scure/btc-signer';
 import { PreparedInscription } from '../inscription/scripts/ordinal-reveal';
 import { Utxo, BitcoinNetwork } from '../types';
 import { calculateFee } from './fee-calculation';
 import { selectUtxos, SimpleUtxoSelectionOptions } from './utxo-selection';
 import { getScureNetwork } from '../utils/networks';
+import { transactionTracker, TransactionStatus, TransactionType } from './transaction-status-tracker';
+import * as ordinals from 'micro-ordinals';
+import { createInscription } from '../inscription';
 
 // Define minimum dust limit (satoshis)
 const MIN_DUST_LIMIT = 546;
@@ -54,6 +56,8 @@ export interface CommitTransactionResult {
     /** Estimated fee for the commit transaction in satoshis */
     commit: number;
   };
+  /** Transaction ID in the tracker for status monitoring */
+  transactionId?: string;
 }
 
 /**
@@ -75,25 +79,6 @@ function estimateCommitTxSize(inputCount: number, outputCount: number): number {
   const changeOutputSize = outputCount > 1 ? 31 * (outputCount - 1) : 0; // P2WPKH outputs for change
   
   return Math.ceil(overhead + inputSize + commitOutputSize + changeOutputSize);
-}
-
-/**
- * Creates a P2WPKH output script from an address
- * 
- * @param address - The Bitcoin address
- * @param network - The Bitcoin network
- * @returns The output script bytes
- */
-function getOutputScriptForAddress(address: string, network: BitcoinNetwork): Uint8Array {
-  // Use bitcoinjs-lib to safely get the output script
-  const bitcoinNetwork = network === 'mainnet' 
-    ? bitcoin.networks.bitcoin 
-    : network === 'testnet' 
-      ? bitcoin.networks.testnet 
-      : bitcoin.networks.regtest;
-      
-  // Parse the address to get the output script
-  return bitcoin.address.toOutputScript(address, bitcoinNetwork);
 }
 
 /**
@@ -158,6 +143,36 @@ export async function prepareCommitTransaction(
     throw new Error('Insufficient funds to cover commit value and estimated fee.');
   }
   
+  // Create transaction tracker entry at the beginning
+  const transactionId = `commit-${new Date().getTime()}`;
+  
+  // Add to transaction tracker
+  transactionTracker.addTransaction({
+    id: transactionId,
+    txid: '', // Will be updated once broadcasted
+    type: TransactionType.COMMIT,
+    status: TransactionStatus.PENDING,
+    createdAt: new Date(),
+    lastUpdatedAt: new Date(),
+    metadata: {
+      commitAddress,
+      feeRate,
+      network,
+      selectedUtxos: selectedUtxos.map(utxo => ({
+        txid: utxo.txid,
+        vout: utxo.vout,
+        value: utxo.value
+      }))
+    }
+  });
+  
+  // Add progress event for UTXO selection
+  transactionTracker.addTransactionProgressEvent({
+    transactionId,
+    message: `Selected ${selectedUtxos.length} UTXOs with total value ${totalInputValue} sats`,
+    timestamp: new Date()
+  });
+  
   // Get the network configuration
   const scureNetwork = getScureNetwork(network);
   
@@ -185,10 +200,26 @@ export async function prepareCommitTransaction(
   const actualCommitVBytes = estimateCommitTxSize(tx.inputsLength, 2); // Assuming 2 outputs (commit + change)
   const recalculatedCommitFee = Number(calculateFee(actualCommitVBytes, feeRate));
   
-  // Add commit output - use the exact script from the prepared inscription
-  tx.addOutput({
-    script: inscription.commitAddress.script,
-    amount: BigInt(commitOutputValue)
+  // Add progress event for fee calculation
+  transactionTracker.addTransactionProgressEvent({
+    transactionId,
+    message: `Calculated fee: ${recalculatedCommitFee} sats (${feeRate} sat/vB)`,
+    timestamp: new Date()
+  });
+  
+  // Always add the commit output using the provided address
+  // Remove the complex conditional logic and P2TR derivation from this function
+  tx.addOutputAddress(
+    commitAddress, // Use the address directly from the inscription object
+    BigInt(commitOutputValue),
+    scureNetwork
+  );
+  
+  // Add progress event for adding the commit output
+  transactionTracker.addTransactionProgressEvent({
+    transactionId,
+    message: `Added commit output to address ${commitAddress} for ${commitOutputValue} sats`,
+    timestamp: new Date()
   });
   
   // Calculate change amount
@@ -196,17 +227,23 @@ export async function prepareCommitTransaction(
   
   // Add change output if above dust limit
   if (changeAmount >= MIN_DUST_LIMIT) {
-    // Get output script for the change address
-    const changeScript = getOutputScriptForAddress(changeAddress, network);
-    
-    tx.addOutput({
-      script: changeScript,
-      amount: BigInt(changeAmount)
-    });
+    // Add change output directly using the address
+    tx.addOutputAddress(
+      changeAddress,
+      BigInt(changeAmount),
+      scureNetwork
+    );
   } else {
     // If change is below dust limit, add it to the fee
     // This is effectively a fee increase, but necessary to avoid dust outputs
     console.log(`Change amount ${changeAmount} is below dust limit, adding to fee.`);
+    
+    // Add progress event for dust change
+    transactionTracker.addTransactionProgressEvent({
+      transactionId,
+      message: `Change amount ${changeAmount} is below dust limit, adding to fee`,
+      timestamp: new Date()
+    });
   }
   
   // Final fee calculation (includes any dust amount added to fee)
@@ -217,6 +254,19 @@ export async function prepareCommitTransaction(
   const txPsbt = tx.toPSBT();
   const commitPsbtBase64 = typeof txPsbt === 'string' ? txPsbt : Buffer.from(txPsbt).toString('base64');
   
+  // Update transaction status to ready for broadcast
+  transactionTracker.setTransactionStatus(transactionId, TransactionStatus.CONFIRMING);
+  
+  // Add progress event for transaction completion
+  transactionTracker.addTransactionProgressEvent({
+    transactionId,
+    message: 'Commit transaction prepared and ready for broadcast',
+    timestamp: new Date(),
+    data: {
+      commitPsbtBase64: commitPsbtBase64.slice(0, 20) + '...' // Truncated for logging
+    }
+  });
+  
   return {
     commitAddress,
     commitPsbtBase64,
@@ -225,6 +275,7 @@ export async function prepareCommitTransaction(
     selectedUtxos,
     fees: {
       commit: finalFee
-    }
+    },
+    transactionId
   };
 } 

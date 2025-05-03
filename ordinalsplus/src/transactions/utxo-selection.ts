@@ -1,4 +1,13 @@
-import { ResourceUtxo, UtxoSelectionOptions, UtxoSelectionResult } from '../types/ordinals';
+/**
+ * UTXO Selection for Ordinals Transactions
+ * 
+ * This module implements functions for selecting UTXOs for ordinals transactions.
+ * It provides a simple coin selection algorithm optimized for ordinals inscriptions.
+ */
+
+import { ResourceUtxo, UtxoSelectionOptions as ResourceUtxoSelectionOptions, UtxoSelectionResult as ResourceUtxoSelectionResult } from '../types/ordinals';
+import { Utxo } from '../types';
+import { calculateFee } from './fee-calculation';
 
 // Minimum dust limit for Bitcoin outputs (546 satoshis)
 const MIN_DUST_LIMIT = 546;
@@ -17,17 +26,6 @@ export function estimateTransactionSize(inputCount: number, outputCount: number)
   // Each input: ~68 vbytes (P2WPKH)
   // Each output: ~31 vbytes
   return 10 + (inputCount * 68) + (outputCount * 31);
-}
-
-/**
- * Calculates fee based on estimated transaction size and fee rate
- * 
- * @param vbytes Estimated transaction size in vbytes
- * @param feeRate Fee rate in satoshis per vbyte
- * @returns Estimated fee in satoshis
- */
-export function calculateFee(vbytes: number, feeRate: number): number {
-  return Math.ceil(vbytes * feeRate);
 }
 
 /**
@@ -53,6 +51,120 @@ export function tagResourceUtxos(
 }
 
 /**
+ * Options for simple UTXO selection
+ */
+export interface SimpleUtxoSelectionOptions {
+  /** Target amount to reach (in satoshis) */
+  targetAmount: number;
+  /** Optional maximum amount of UTXOs to use */
+  maxNumUtxos?: number;
+  /** Optional preference for UTXO selection strategy */
+  strategy?: 'minimize_change' | 'minimize_inputs' | 'optimize_size';
+}
+
+/**
+ * Result of simple UTXO selection
+ */
+export interface SimpleUtxoSelectionResult {
+  /** Selected UTXOs for the transaction */
+  selectedUtxos: Utxo[];
+  /** Total value of selected UTXOs */
+  totalInputValue: number;
+  /** Estimated change amount (if any) */
+  changeAmount: number;
+}
+
+/**
+ * Selects UTXOs to cover a target amount using a simplified approach.
+ * This version is used specifically for commit transactions where we 
+ * don't need the more complex resource-aware selection.
+ * 
+ * @param utxos - Available UTXOs
+ * @param options - Target amount or detailed options
+ * @returns Selected UTXOs and related information
+ */
+export function selectUtxos(
+  utxos: Utxo[],
+  options: number | SimpleUtxoSelectionOptions
+): SimpleUtxoSelectionResult {
+  // Handle simple number input
+  const targetAmount = typeof options === 'number' 
+    ? options 
+    : options.targetAmount;
+  
+  const maxNumUtxos = typeof options === 'number' 
+    ? undefined 
+    : options.maxNumUtxos;
+  
+  const strategy = typeof options === 'number' 
+    ? 'minimize_inputs' 
+    : options.strategy || 'minimize_inputs';
+  
+  // Validate inputs
+  if (!utxos || utxos.length === 0) {
+    throw new Error('No UTXOs provided for selection.');
+  }
+  
+  if (targetAmount <= 0) {
+    throw new Error(`Invalid target amount: ${targetAmount}`);
+  }
+  
+  // Sort UTXOs based on selected strategy
+  let sortedUtxos = [...utxos];
+  
+  if (strategy === 'minimize_inputs') {
+    // Sort by value descending to use fewest inputs
+    sortedUtxos.sort((a, b) => b.value - a.value);
+  } else if (strategy === 'minimize_change') {
+    // Sort by value ascending to minimize change
+    sortedUtxos.sort((a, b) => a.value - b.value);
+  } else if (strategy === 'optimize_size') {
+    // Sort by value/size ratio (value density) for optimal fee efficiency
+    // For now, just sort by value as a reasonable approximation
+    sortedUtxos.sort((a, b) => b.value - a.value);
+  }
+  
+  const selected: Utxo[] = [];
+  let totalValue = 0;
+  
+  // Add UTXOs until we reach the target amount
+  for (const utxo of sortedUtxos) {
+    // Skip invalid UTXOs
+    if (!utxo.txid || utxo.vout === undefined || !utxo.value) {
+      console.warn(`Skipping invalid UTXO: ${utxo.txid}:${utxo.vout}`);
+      continue;
+    }
+    
+    selected.push(utxo);
+    totalValue += utxo.value;
+    
+    // Check if we've reached the target
+    if (totalValue >= targetAmount) {
+      break;
+    }
+    
+    // Check if we've reached the maximum allowed number of UTXOs
+    if (maxNumUtxos && selected.length >= maxNumUtxos) {
+      break;
+    }
+  }
+  
+  // Check if we have enough funds
+  if (totalValue < targetAmount) {
+    throw new Error(`Insufficient funds. Required: ${targetAmount}, Available: ${totalValue} from ${utxos.length} UTXOs.`);
+  }
+  
+  // Calculate change amount
+  const changeAmount = totalValue - targetAmount;
+  
+  return {
+    selectedUtxos: selected,
+    totalInputValue: totalValue,
+    changeAmount
+  };
+}
+
+/**
  * Selects UTXOs for a transaction, excluding UTXOs with resources unless explicitly allowed
  * 
  * @param availableUtxos List of available UTXOs to select from
@@ -60,10 +172,10 @@ export function tagResourceUtxos(
  * @returns Selection result with chosen UTXOs and fee information
  * @throws Error if insufficient funds or if all available UTXOs contain resources
  */
-export function selectUtxos(
+export function selectResourceUtxos(
   availableUtxos: ResourceUtxo[],
-  options: UtxoSelectionOptions
-): UtxoSelectionResult {
+  options: ResourceUtxoSelectionOptions
+): ResourceUtxoSelectionResult {
   const {
     requiredAmount,
     feeRate,
@@ -72,6 +184,9 @@ export function selectUtxos(
     preferCloserAmount = false,
     avoidUtxoIds = []
   } = options;
+
+  // Convert requiredAmount to bigint for compatibility with fee calculations
+  const requiredAmountBigInt = BigInt(requiredAmount);
 
   // Filter out UTXOs to avoid and those with resources if not allowed
   let eligibleUtxos = availableUtxos.filter(utxo => {
@@ -123,28 +238,28 @@ export function selectUtxos(
   let estimatedFee = calculateFee(estimatedVbytes, feeRate);
   
   // Target amount including estimated fee
-  let targetAmount = requiredAmount + estimatedFee;
+  let targetAmount = requiredAmountBigInt + estimatedFee;
   
   // Select UTXOs
   const selectedUtxos: ResourceUtxo[] = [];
-  let totalSelectedValue = 0;
+  let totalSelectedValue = 0n;
   
   // First pass: try to find a single UTXO that covers the amount
-  const singleUtxo = eligibleUtxos.find(utxo => utxo.value >= targetAmount);
+  const singleUtxo = eligibleUtxos.find(utxo => BigInt(utxo.value) >= targetAmount);
   
   if (singleUtxo) {
     selectedUtxos.push(singleUtxo);
-    totalSelectedValue = singleUtxo.value;
+    totalSelectedValue = BigInt(singleUtxo.value);
   } else {
     // Second pass: accumulate UTXOs until we reach the target amount
     for (const utxo of eligibleUtxos) {
       selectedUtxos.push(utxo);
-      totalSelectedValue += utxo.value;
+      totalSelectedValue += BigInt(utxo.value);
       
       // Recalculate fee as we add more inputs
       estimatedVbytes = estimateTransactionSize(selectedUtxos.length, 2);
       estimatedFee = calculateFee(estimatedVbytes, feeRate);
-      targetAmount = requiredAmount + estimatedFee;
+      targetAmount = requiredAmountBigInt + estimatedFee;
       
       if (totalSelectedValue >= targetAmount) {
         break;
@@ -157,24 +272,24 @@ export function selectUtxos(
   estimatedFee = calculateFee(estimatedVbytes, feeRate);
   
   // Check if we have enough funds
-  if (totalSelectedValue < requiredAmount + estimatedFee) {
-    throw new Error(`Insufficient funds. Required: ${requiredAmount + estimatedFee}, Available: ${totalSelectedValue}`);
+  if (totalSelectedValue < requiredAmountBigInt + estimatedFee) {
+    throw new Error(`Insufficient funds. Required: ${requiredAmountBigInt + estimatedFee}, Available: ${totalSelectedValue}`);
   }
   
   // Calculate change
-  let changeAmount = totalSelectedValue - requiredAmount - estimatedFee;
+  let changeAmount = totalSelectedValue - requiredAmountBigInt - estimatedFee;
   
   // If change is less than dust limit, add it to the fee
-  if (changeAmount > 0 && changeAmount < MIN_DUST_LIMIT) {
+  if (changeAmount > 0n && changeAmount < BigInt(MIN_DUST_LIMIT)) {
     estimatedFee += changeAmount;
-    changeAmount = 0;
+    changeAmount = 0n;
   }
   
   return {
     selectedUtxos,
-    totalSelectedValue,
-    estimatedFee,
-    changeAmount
+    totalSelectedValue: Number(totalSelectedValue),
+    estimatedFee: Number(estimatedFee),
+    changeAmount: Number(changeAmount)
   };
 }
 
@@ -190,37 +305,10 @@ export function selectUtxosForPayment(
   availableUtxos: ResourceUtxo[],
   requiredAmount: number,
   feeRate: number
-): UtxoSelectionResult {
-  return selectUtxos(availableUtxos, {
+): ResourceUtxoSelectionResult {
+  return selectResourceUtxos(availableUtxos, {
     requiredAmount,
     feeRate,
     allowResourceUtxos: false // Never use resource UTXOs for payments
   });
-}
-
-/**
- * Selects UTXOs specifically containing resources (for when you want to use a specific resource)
- * 
- * @param availableUtxos List of available UTXOs
- * @param resourceId Optional specific resource ID to select
- * @returns The matching resource UTXO or null if not found
- */
-export function selectResourceUtxo(
-  availableUtxos: ResourceUtxo[],
-  resourceId?: string
-): ResourceUtxo | null {
-  // Filter to only include UTXOs with resources
-  const resourceUtxos = availableUtxos.filter(utxo => utxo.hasResource);
-  
-  if (resourceUtxos.length === 0) {
-    return null;
-  }
-  
-  // If a specific resource ID is requested, find that UTXO
-  if (resourceId) {
-    return resourceUtxos.find(utxo => utxo.resourceId === resourceId) || null;
-  }
-  
-  // Otherwise return the first resource UTXO
-  return resourceUtxos[0];
 } 

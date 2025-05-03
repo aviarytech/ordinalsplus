@@ -60,6 +60,83 @@ export function generateP2TRKeyPair(): P2TRKeyPair {
 }
 
 /**
+ * Generate a taproot key pair for testing
+ * 
+ * @returns A key pair with private and public keys
+ */
+export function generateTaprootKeyPair(): P2TRKeyPair {
+  // Generate a random private key
+  const privateKey = schnorr.utils.randomPrivateKey();
+  
+  // Derive public key from private key
+  const fullPublicKey = schnorr.getPublicKey(privateKey);
+  
+  // Convert to x-only public key (remove the y parity bit)
+  const publicKey = fullPublicKey.length === 33 ? fullPublicKey.slice(1) : fullPublicKey;
+  
+  // Return the key pair
+  return {
+    privateKey,
+    publicKey,
+    publicKeyHex: bytesToHex(publicKey)
+  };
+}
+
+/**
+ * Convert a private key to x-only format
+ * (For private keys, this is a no-op, but included for API symmetry)
+ * 
+ * @param privateKey - The private key to convert
+ * @returns The x-only private key
+ */
+export function privateKeyToXOnly(privateKey: Uint8Array | string): Uint8Array {
+  let privKeyBytes: Uint8Array;
+  
+  // Handle string input
+  if (typeof privateKey === 'string') {
+    privKeyBytes = hexToBytes(privateKey);
+  } else {
+    privKeyBytes = privateKey;
+  }
+  
+  // Validate key length
+  if (privKeyBytes.length !== 32) {
+    throw new Error(`Invalid private key length: ${privKeyBytes.length}`);
+  }
+  
+  // For private keys, "x-only" is just the same key
+  return privKeyBytes;
+}
+
+/**
+ * Convert a public key to x-only format
+ * 
+ * @param publicKey - The public key to convert
+ * @returns The x-only public key
+ */
+export function publicKeyToXOnly(publicKey: Uint8Array | string): Uint8Array {
+  let pubKeyBytes: Uint8Array;
+  
+  // Handle string input
+  if (typeof publicKey === 'string') {
+    pubKeyBytes = hexToBytes(publicKey);
+  } else {
+    pubKeyBytes = publicKey;
+  }
+  
+  // Handle different public key formats
+  if (pubKeyBytes.length === 33) {
+    // Compressed public key: remove the first byte (y-parity bit)
+    return pubKeyBytes.slice(1);
+  } else if (pubKeyBytes.length === 32) {
+    // Already x-only
+    return pubKeyBytes;
+  } else {
+    throw new Error(`Invalid public key length: ${pubKeyBytes.length}`);
+  }
+}
+
+/**
  * Creates a P2TR key pair from an existing private key
  * 
  * @param privateKey - The private key to use, either as bytes or hex string

@@ -3,11 +3,18 @@
  */
 
 import * as assert from 'assert';
-import { describe, it } from 'mocha';
-import * as ordinals from '../src/inscription/index-new';
+import { describe, it, test, expect } from 'bun:test';
+import * as ordinals from '../src/inscription';
 import { generateP2TRKeyPair } from '../src/inscription/p2tr/key-utils';
 import { createOrdinalInscription } from '../src/inscription/scripts/ordinal-reveal';
 import { prepareContent, MimeType } from '../src/inscription/content/mime-handling';
+import { hex, utf8 } from '@scure/base';
+import { bytesToHex } from '@noble/hashes/utils';
+import { 
+  createInscription,
+  createTextInscription,
+  createJsonInscription
+} from '../src/inscription';
 
 describe('Enhanced Ordinals Inscription', () => {
   describe('P2TR Key Utilities', () => {
@@ -149,6 +156,146 @@ describe('Enhanced Ordinals Inscription', () => {
       // Check that the reveal key matches what we provided
       assert.deepStrictEqual(result.revealPublicKey, keyPair.publicKey, 'Reveal public key should match provided key');
       assert.strictEqual(result.revealPrivateKey, undefined, 'Reveal private key should be undefined');
+    });
+  });
+});
+
+/**
+ * Test suite for Task 2: Enhanced Inscription Script Generation
+ * 
+ * These tests verify the high-level API functions that implement
+ * the inscription generation functionality.
+ */
+describe('Enhanced Inscription Generation', () => {
+  test('should create text inscriptions', () => {
+    // Create a simple text inscription
+    const textContent = 'Hello, Bitcoin!';
+    const result = createTextInscription(textContent, 'testnet');
+    
+    // Verify the result structure
+    expect(result).toBeDefined();
+    expect(result.commitAddress).toBeDefined();
+    expect(result.commitAddress.address.startsWith('tb1p')).toBe(true); // Testnet P2TR address
+    expect(result.inscriptionScript).toBeDefined();
+    
+    // Convert inscriptionScript to hex for inspection
+    const scriptHex = Buffer.from(result.inscriptionScript.script).toString('hex');
+    const contentBytes = Buffer.from(textContent);
+    const contentHex = contentBytes.toString('hex');
+    
+    // Verify the content is embedded in the inscription script
+    expect(scriptHex).toContain(contentHex);
+    
+    // Verify the content type is embedded as well
+    const contentTypeBytes = Buffer.from('text/plain');
+    const contentTypeHex = contentTypeBytes.toString('hex');
+    expect(scriptHex).toContain(contentTypeHex);
+  });
+  
+  test('should create JSON inscriptions', () => {
+    // Create a JSON inscription
+    const jsonData = { name: 'Test Inscription', value: 123 };
+    const result = createJsonInscription(jsonData, 'testnet');
+    
+    // Verify the result structure
+    expect(result).toBeDefined();
+    expect(result.commitAddress).toBeDefined();
+    expect(result.inscriptionScript).toBeDefined();
+    
+    // Convert inscriptionScript to hex for inspection
+    const scriptHex = Buffer.from(result.inscriptionScript.script).toString('hex');
+    const jsonString = JSON.stringify(jsonData);
+    const contentBytes = Buffer.from(jsonString);
+    const contentHex = contentBytes.toString('hex');
+    
+    // Verify the content is embedded in the inscription script
+    expect(scriptHex).toContain(contentHex);
+    
+    // Verify the content type is embedded as well
+    const contentTypeBytes = Buffer.from('application/json');
+    const contentTypeHex = contentTypeBytes.toString('hex');
+    expect(scriptHex).toContain(contentTypeHex);
+  });
+  
+  test('should accept binary content with proper mime type', () => {
+    // Create a mock binary content (PNG header)
+    const pngContent = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D]);
+    
+    // Create an inscription with binary content
+    const result = createInscription({
+      content: pngContent,
+      contentType: 'image/png',
+      network: 'testnet'
+    });
+    
+    // Verify the result structure
+    expect(result).toBeDefined();
+    expect(result.commitAddress).toBeDefined();
+    expect(result.inscriptionScript).toBeDefined();
+    
+    // Convert inscriptionScript to hex for inspection
+    const scriptHex = Buffer.from(result.inscriptionScript.script).toString('hex');
+    const contentHex = Buffer.from(pngContent).toString('hex');
+    
+    // Verify the content is embedded in the inscription script
+    expect(scriptHex).toContain(contentHex);
+    
+    // Verify the content type is embedded as well
+    const contentTypeBytes = Buffer.from('image/png');
+    const contentTypeHex = contentTypeBytes.toString('hex');
+    expect(scriptHex).toContain(contentTypeHex);
+  });
+  
+  test('should handle various content sizes', () => {
+    // Test with small content
+    const smallContent = 'Small test';
+    const smallResult = createTextInscription(smallContent, 'testnet');
+    
+    // Test with medium content
+    const mediumContent = 'A'.repeat(1000);
+    const mediumResult = createTextInscription(mediumContent, 'testnet');
+    
+    // Test with large content
+    const largeContent = 'A'.repeat(10000);
+    const largeResult = createTextInscription(largeContent, 'testnet');
+    
+    // All should produce valid inscriptions
+    expect(smallResult.inscriptionScript.script).toBeDefined();
+    expect(mediumResult.inscriptionScript.script).toBeDefined();
+    expect(largeResult.inscriptionScript.script).toBeDefined();
+    
+    // Script sizes should increase with content size
+    expect(largeResult.inscriptionScript.script.length).toBeGreaterThan(mediumResult.inscriptionScript.script.length);
+    expect(mediumResult.inscriptionScript.script.length).toBeGreaterThan(smallResult.inscriptionScript.script.length);
+  });
+  
+  test('should include metadata in inscriptions', () => {
+    // Create an inscription with metadata
+    const metadata = {
+      title: 'Test Title',
+      author: 'Test Author',
+      description: 'Test Description'
+    };
+    
+    const result = createInscription({
+      content: 'Content with metadata',
+      contentType: 'text/plain',
+      metadata,
+      network: 'testnet'
+    });
+    
+    // Verify the result structure
+    expect(result).toBeDefined();
+    expect(result.inscriptionScript).toBeDefined();
+    
+    // Check for metadata values in the script
+    const scriptHex = Buffer.from(result.inscriptionScript.script).toString('hex');
+    
+    // Convert each metadata value to hex and check if it's in the script
+    Object.values(metadata).forEach(value => {
+      const valueBytes = Buffer.from(value);
+      const valueHex = valueBytes.toString('hex');
+      expect(scriptHex).toContain(valueHex);
     });
   });
 }); 

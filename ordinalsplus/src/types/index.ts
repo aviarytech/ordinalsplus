@@ -52,8 +52,12 @@ export interface Utxo {
     txid: string;
     vout: number;
     value: number; // Amount in satoshis
-    scriptPubKey: string; // Hex-encoded script public key
+    scriptPubKey?: string; // Hex-encoded script public key
     status?: any; // Optional status field from block explorer APIs
+    script?: { // Script information including address
+        type?: string;
+        address?: string;
+    }
 }
 
 // Parameters for resource creation transaction

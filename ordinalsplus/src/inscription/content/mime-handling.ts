@@ -65,6 +65,114 @@ export interface InscriptionMetadata {
 }
 
 /**
+ * Extract file extension from a filename
+ * 
+ * @param filename - The filename to extract extension from
+ * @returns The file extension (without dot)
+ */
+export function getFileExtension(filename: string): string {
+  if (!filename) return '';
+  
+  const lastDotIndex = filename.lastIndexOf('.');
+  if (lastDotIndex === -1 || lastDotIndex === 0) {
+    // No dot or it's the first character (hidden file on Unix)
+    return lastDotIndex === 0 ? filename.slice(1) : '';
+  }
+  
+  return filename.slice(lastDotIndex + 1);
+}
+
+/**
+ * Detect content type from file extension or content
+ * 
+ * @param filename - The filename to extract extension from
+ * @param content - The content to analyze (optional)
+ * @param charset - The character set for text content (optional)
+ * @returns The detected MIME type
+ */
+export function detectContentType(
+  filename: string | null, 
+  content?: string | Uint8Array,
+  charset?: string
+): string {
+  // Get base MIME type
+  let mimeType: string;
+  
+  if (filename) {
+    const extension = getFileExtension(filename);
+    
+    // Detect from extension
+    switch (extension.toLowerCase()) {
+      case 'txt':
+        mimeType = MimeType.PLAIN_TEXT;
+        break;
+      case 'html':
+      case 'htm':
+        mimeType = MimeType.HTML;
+        break;
+      case 'json':
+        mimeType = MimeType.JSON;
+        break;
+      case 'js':
+        mimeType = MimeType.JAVASCRIPT;
+        break;
+      case 'png':
+        mimeType = MimeType.PNG;
+        break;
+      case 'jpg':
+      case 'jpeg':
+        mimeType = MimeType.JPEG;
+        break;
+      case 'svg':
+        mimeType = MimeType.SVG;
+        break;
+      case 'webp':
+        mimeType = MimeType.WEBP;
+        break;
+      case 'gif':
+        mimeType = MimeType.GIF;
+        break;
+      default:
+        mimeType = MimeType.BINARY;
+    }
+  } else if (content) {
+    // Try to detect from content
+    if (typeof content === 'string') {
+      if (content.trim().startsWith('{') && content.trim().endsWith('}')) {
+        try {
+          JSON.parse(content);
+          mimeType = MimeType.JSON;
+        } catch {
+          mimeType = MimeType.PLAIN_TEXT;
+        }
+      } else if (content.trim().startsWith('<html')) {
+        mimeType = MimeType.HTML;
+      } else {
+        mimeType = MimeType.PLAIN_TEXT;
+      }
+    } else {
+      // Binary content - hard to detect accurately without more analysis
+      mimeType = MimeType.BINARY;
+    }
+  } else {
+    // Default fallback
+    mimeType = MimeType.BINARY;
+  }
+  
+  // Add charset for text types if specified
+  if (charset && (
+    mimeType === MimeType.PLAIN_TEXT || 
+    mimeType === MimeType.HTML || 
+    mimeType === MimeType.JSON ||
+    mimeType === MimeType.JAVASCRIPT
+  )) {
+    return `${mimeType};charset=${charset}`;
+  }
+  
+  return mimeType;
+}
+
+/**
  * Guesses the MIME type based on file extension or content
  * 
  * @param filename - Filename or path to determine the MIME type

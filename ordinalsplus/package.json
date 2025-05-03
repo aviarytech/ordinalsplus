@@ -1,6 +1,6 @@
 {
   "name": "ordinalsplus",
-  "version": "0.1.0",
+  "version": "0.10.5",
   "description": "A JavaScript/TypeScript library for working with BTCO DIDs and DID Linked Resources on the Bitcoin blockchain",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,8 +1,6 @@
-import { expect, test, describe, beforeEach, afterEach, spyOn, vi } from 'bun:test';
+import { expect, test, describe } from 'bun:test';
 import { utf8 } from '@scure/base';
 import { bytesToHex } from '@noble/hashes/utils';
-import { schnorr } from '@noble/curves/secp256k1';
-import * as btc from '@scure/btc-signer';
 
 import { 
   createInscription,
@@ -12,7 +10,6 @@ import {
   prepareContent,
   generateP2TRKeyPair
 } from '../src/inscription';
-import { NETWORKS } from '../src/utils/networks';
 
 describe('Enhanced Inscription Module', () => {
   const content = 'Hello, Ordinals!';
