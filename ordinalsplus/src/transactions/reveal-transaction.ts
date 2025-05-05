@@ -206,7 +206,16 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       });
 
       // Estimate fee based on transaction size
-      const estimatedVsize = 200; // Approximate default size
+      // Instead of using a fixed size, calculate based on inscription size
+      const baseRevealTxSize = 200; // Base transaction overhead
+      const inscriptionSize = preparedInscription.inscription.body?.length || 0;
+      // Inscriptions have overhead in the transaction structure, adjust the multiplier accordingly
+      // The 1.02 multiplier accounts for witness data and script overhead
+      const estimatedVsize = baseRevealTxSize + Math.ceil(inscriptionSize * 1.02);
+
+      console.log(`[calculateFee] Inscription size: ${inscriptionSize} bytes`);
+      console.log(`[calculateFee] Estimated transaction vsize: ${estimatedVsize} vbytes`);
+
       const fee = BigInt(calculateFee(estimatedVsize, feeRate));
       
       // Add progress event for fee calculation

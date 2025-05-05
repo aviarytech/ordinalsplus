@@ -378,8 +378,15 @@ const ResourceCreationForm: React.FC = () => {
       const safetyBufferFeeRate = currentFeeRate + 0.1;
       console.log(`[PrepareInscription] Using fee rate with safety buffer: ${safetyBufferFeeRate} sats/vB (original: ${currentFeeRate} sats/vB)`);
 
-      // Using the exported calculateFee function
-      const revealFee = ordinalsplus.calculateFee(Buffer.from(content).length, safetyBufferFeeRate);
+      // Using the exported calculateFee function - FIX THE FEE CALCULATION
+      // Calculate proper vbytes for the transaction instead of just using content length
+      const contentSizeBytes = Buffer.from(content).length;
+      const baseRevealTxSize = 200; // Base size of the reveal transaction
+      // For large inscriptions, we need to account for extra witnesses and script overhead
+      const estimatedTotalVBytes = baseRevealTxSize + (contentSizeBytes * 1.02);
+      console.log(`[PrepareInscription] Content size: ${contentSizeBytes} bytes, estimated transaction vbytes: ${estimatedTotalVBytes}`);
+      
+      const revealFee = ordinalsplus.calculateFee(Math.ceil(estimatedTotalVBytes), safetyBufferFeeRate);
       
       console.log(`[PrepareInscription] Estimated reveal fee: ${revealFee} sats`);
       
