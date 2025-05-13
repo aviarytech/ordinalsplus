@@ -2,5 +2,9 @@
  * Indexer module exports
  */
 
-export { OrdinalsIndexer } from './ordinals-indexer';
-export { MemoryIndexerDatabase } from './memory-db'; 
+export * from './ordinals-indexer';
+export * from './memory-db';
+export * from './error-handling';
+
+// Export types
+export * from '../types/indexer'; 
