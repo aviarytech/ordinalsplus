@@ -17,6 +17,18 @@ export interface KeyManagerOptions {
 }
 
 /**
+ * Key rotation options
+ */
+export interface KeyRotationOptions {
+  /** Whether to archive the old key instead of deleting it */
+  archiveOldKey?: boolean;
+  /** Custom metadata for the new key */
+  metadata?: Record<string, any>;
+  /** Specify key generation options for the new key */
+  keyGenOptions?: Partial<KeyPairGeneratorOptions>;
+}
+
+/**
  * High-level API for key management, combining generation and storage
  */
 export class KeyManager {
@@ -91,6 +103,141 @@ export class KeyManager {
   }
 
   /**
+   * Rotate a key, replacing an existing key with a new one
+   * 
+   * @param idOrAlias - The ID or alias of the key to rotate
+   * @param options - Key rotation options
+   * @returns The ID of the newly generated key
+   */
+  async rotateKey(idOrAlias: string, options: KeyRotationOptions = {}): Promise<string> {
+    // Get the original key
+    let originalKey = await this.storage.getKey(idOrAlias);
+    if (!originalKey) {
+      originalKey = await this.storage.getKeyByAlias(idOrAlias);
+    }
+    
+    if (!originalKey) {
+      throw new Error(`Key not found: ${idOrAlias}`);
+    }
+
+    // Find the alias if it exists
+    const allKeys = await this.storage.listKeys();
+    let originalAlias: string | undefined;
+    
+    for (const [alias, keyId] of Object.entries(
+      await this.getAliasesToKeyIdsMap(allKeys)
+    )) {
+      if (keyId === originalKey.id) {
+        originalAlias = alias;
+        break;
+      }
+    }
+
+    // Create new key with the same type and network as the original
+    const keyGenOptions = options.keyGenOptions || {};
+    const newKeyOptions: KeyPairGeneratorOptions = {
+      type: keyGenOptions.type || originalKey.type,
+      network: keyGenOptions.network || originalKey.network,
+      entropy: keyGenOptions.entropy
+    };
+
+    // Generate and store the new key
+    const newKeyPair = await KeyPairGenerator.generate(newKeyOptions);
+    
+    // Add metadata from options if provided
+    if (options.metadata) {
+      newKeyPair.metadata = {
+        ...newKeyPair.metadata,
+        ...options.metadata,
+        rotatedFrom: originalKey.id,
+        rotatedAt: new Date().toISOString()
+      };
+    } else {
+      newKeyPair.metadata = {
+        ...newKeyPair.metadata,
+        rotatedFrom: originalKey.id,
+        rotatedAt: new Date().toISOString()
+      };
+    }
+    
+    const newKeyId = await this.storage.storeKey(newKeyPair, originalAlias);
+
+    if (options.archiveOldKey) {
+      // Archive the old key by adding metadata and changing alias
+      originalKey.metadata = {
+        ...originalKey.metadata,
+        archived: true,
+        archivedAt: new Date().toISOString(),
+        replacedBy: newKeyId
+      };
+      
+      // If there was an alias, we've already assigned it to the new key
+      if (originalAlias) {
+        const archivedAlias = `${originalAlias}-archived-${Date.now()}`;
+        await this.storage.storeKey(originalKey, archivedAlias);
+      } else {
+        await this.storage.storeKey(originalKey);
+      }
+    } else {
+      // Delete the old key
+      await this.storage.deleteKey(originalKey.id);
+    }
+
+    return newKeyId;
+  }
+
+  /**
+   * Mark a key as revoked
+   * 
+   * @param idOrAlias - The ID or alias of the key to revoke
+   * @param reason - Optional reason for revocation
+   * @returns True if the key was successfully revoked
+   */
+  async revokeKey(idOrAlias: string, reason?: string): Promise<boolean> {
+    // Get the key
+    let keyPair = await this.storage.getKey(idOrAlias);
+    if (!keyPair) {
+      keyPair = await this.storage.getKeyByAlias(idOrAlias);
+    }
+    
+    if (!keyPair) {
+      throw new Error(`Key not found: ${idOrAlias}`);
+    }
+
+    // Update the key with revocation metadata
+    keyPair.metadata = {
+      ...keyPair.metadata,
+      revoked: true,
+      revokedAt: new Date().toISOString(),
+      revocationReason: reason || 'No reason provided'
+    };
+
+    // Store the updated key
+    await this.storage.storeKey(keyPair);
+    return true;
+  }
+
+  /**
+   * Check if a key is revoked
+   * 
+   * @param idOrAlias - The ID or alias of the key to check
+   * @returns True if the key is revoked, false otherwise
+   */
+  async isKeyRevoked(idOrAlias: string): Promise<boolean> {
+    // Get the key
+    let keyPair = await this.storage.getKey(idOrAlias);
+    if (!keyPair) {
+      keyPair = await this.storage.getKeyByAlias(idOrAlias);
+    }
+    
+    if (!keyPair) {
+      throw new Error(`Key not found: ${idOrAlias}`);
+    }
+
+    return Boolean(keyPair.metadata?.revoked);
+  }
+
+  /**
    * Get a key pair by ID
    * 
    * @param id - The ID of the key to retrieve
@@ -117,6 +264,16 @@ export class KeyManager {
    */
   async listKeys(): Promise<KeyPair[]> {
     return this.storage.listKeys();
+  }
+
+  /**
+   * List all active (non-revoked) keys
+   * 
+   * @returns An array of active key pairs
+   */
+  async listActiveKeys(): Promise<KeyPair[]> {
+    const allKeys = await this.storage.listKeys();
+    return allKeys.filter(key => !key.metadata?.revoked);
   }
 
   /**
@@ -155,6 +312,11 @@ export class KeyManager {
 
     if (!keyPair) {
       throw new Error(`Key not found: ${id}`);
+    }
+
+    // Check if the key is revoked
+    if (keyPair.metadata?.revoked) {
+      throw new Error(`Cannot sign with revoked key: ${id}`);
     }
 
     return this.signWithKeyPair(keyPair, data);
@@ -220,6 +382,57 @@ export class KeyManager {
     }
 
     return KeyPairGenerator.toDid(keyPair);
+  }
+
+  /**
+   * Helper method to map aliases to key IDs
+   * 
+   * @param keys - The key pairs to process
+   * @returns A map of aliases to key IDs
+   */
+  private async getAliasesToKeyIdsMap(keys: KeyPair[]): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    const aliases = await Promise.all(
+      keys.map(async key => {
+        // This is a simplified way to get aliases, assuming the storage has a direct way to do this
+        // In a real implementation, the storage would provide this information
+        return { 
+          keyId: key.id, 
+          aliases: await this.getAliasesForKey(key.id) 
+        };
+      })
+    );
+
+    for (const item of aliases) {
+      for (const alias of item.aliases) {
+        result[alias] = item.keyId;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Helper method to get all aliases for a key ID
+   * 
+   * @param keyId - The key ID
+   * @returns Array of aliases for the key
+   */
+  private async getAliasesForKey(keyId: string): Promise<string[]> {
+    // This would typically be a direct query to the storage
+    // We're simulating it here with a basic implementation
+    // A real storage would implement this more efficiently
+    const result: string[] = [];
+    // For InMemoryKeyStorage, we need to iterate through aliases
+    if (this.storage instanceof InMemoryKeyStorage) {
+      const storage = this.storage as any;
+      for (const [alias, id] of storage.aliases.entries()) {
+        if (id === keyId) {
+          result.push(alias);
+        }
+      }
+    }
+    return result;
   }
 
   /**

@@ -34,6 +34,51 @@ export interface KeyPair {
   publicKey: Uint8Array;
   network?: Network;
   createdAt: Date;
+  /** Additional metadata for the key, such as rotation history, revocation status, etc. */
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Extended Ed25519 key pair with additional fields
+ */
+export interface ExtendedEd25519KeyPair {
+  keyType: 'Ed25519';
+  privateKey: Uint8Array;
+  publicKey: Uint8Array;
+  multibase?: string;
+}
+
+/**
+ * Configuration options for key generation
+ */
+export interface KeyGenerationOptions {
+  network?: Network;
+  includeAddress?: boolean;
+  includeWif?: boolean;
+  entropy?: Uint8Array;
+}
+
+/**
+ * Extended secp256k1 key pair with additional fields
+ */
+export interface Secp256k1KeyPair {
+  keyType: 'secp256k1';
+  privateKey: Uint8Array;
+  publicKey: Uint8Array;
+  publicKeyCompressed: Uint8Array;
+  address?: string;
+  wif?: string;
+}
+
+/**
+ * Extended schnorr key pair with additional fields for Taproot
+ */
+export interface SchnorrKeyPair {
+  keyType: 'schnorr';
+  privateKey: Uint8Array;
+  publicKey: Uint8Array;
+  publicKeyXOnly: Uint8Array;
+  tapRootAddress?: string;
 }
 
 /**
@@ -106,6 +151,187 @@ export class KeyPairGenerator {
   }
 
   /**
+   * Generates an Ed25519 key pair with additional fields
+   * 
+   * @param options - Optional configuration options
+   * @returns An ExtendedEd25519KeyPair object
+   */
+  public static async generateEd25519KeyPair(options: { entropy?: Uint8Array } = {}): Promise<ExtendedEd25519KeyPair> {
+    const { entropy } = options;
+    
+    // Generate private key
+    const privateKey = entropy ? entropy : ed.utils.randomPrivateKey();
+    
+    // Derive public key from private key
+    const publicKey = await ed.getPublicKey(privateKey);
+    
+    // Return the extended key pair
+    const keyPair: ExtendedEd25519KeyPair = {
+      keyType: 'Ed25519',
+      privateKey,
+      publicKey
+    };
+    
+    // Include multibase representation if required
+    // This can be implemented later based on specific requirements
+    
+    return keyPair;
+  }
+
+  /**
+   * Generates a secp256k1 key pair with additional fields
+   * 
+   * @param options - Optional configuration options
+   * @returns A Secp256k1KeyPair object
+   */
+  public static generateSecp256k1KeyPair(options: KeyGenerationOptions = {}): Secp256k1KeyPair {
+    const { network = 'mainnet', includeAddress = false, includeWif = false, entropy } = options;
+    
+    // Generate private key
+    const privateKey = entropy ? entropy : secp.utils.randomPrivateKey();
+    
+    // Derive public keys (both uncompressed and compressed)
+    const publicKey = secp.getPublicKey(privateKey, false); // Uncompressed (65 bytes)
+    const publicKeyCompressed = secp.getPublicKey(privateKey, true); // Compressed (33 bytes)
+    
+    // Create the base key pair
+    const keyPair: Secp256k1KeyPair = {
+      keyType: 'secp256k1',
+      privateKey,
+      publicKey,
+      publicKeyCompressed
+    };
+    
+    // Add Bitcoin address if requested
+    if (includeAddress) {
+      keyPair.address = this.publicKeyToAddress(publicKeyCompressed, network);
+    }
+    
+    // Add WIF if requested
+    if (includeWif) {
+      keyPair.wif = this.privateKeyToWIF(privateKey, network);
+    }
+    
+    return keyPair;
+  }
+
+  /**
+   * Generates a Schnorr key pair with additional fields for Taproot
+   * 
+   * @param options - Optional configuration options
+   * @returns A SchnorrKeyPair object
+   */
+  public static generateSchnorrKeyPair(options: KeyGenerationOptions = {}): SchnorrKeyPair {
+    const { network = 'mainnet', includeAddress = false, entropy } = options;
+    
+    // Generate private key
+    const privateKey = entropy ? entropy : secp.utils.randomPrivateKey();
+    
+    // Derive public key (compressed for Schnorr/Taproot)
+    const publicKey = secp.getPublicKey(privateKey, true); // Compressed (33 bytes)
+    
+    // Create x-only public key (first 32 bytes of compressed key, excluding the 0x02/0x03 prefix)
+    const publicKeyXOnly = publicKey.slice(1);
+    
+    // Create the base key pair
+    const keyPair: SchnorrKeyPair = {
+      keyType: 'schnorr',
+      privateKey,
+      publicKey,
+      publicKeyXOnly
+    };
+    
+    // Add Taproot address if requested
+    if (includeAddress) {
+      try {
+        const networkObj = getScureNetwork(network);
+        // Use p2tr function to create a taproot address
+        const tapScript = btc.p2tr(publicKeyXOnly, undefined, networkObj);
+        keyPair.tapRootAddress = tapScript.address;
+      } catch (error) {
+        console.error('Error generating Taproot address:', error);
+      }
+    }
+    
+    return keyPair;
+  }
+
+  /**
+   * Convert a public key to a Bitcoin address
+   * 
+   * @param publicKey - The compressed public key as a Uint8Array
+   * @param network - The Bitcoin network to use
+   * @returns The Bitcoin address as a string
+   */
+  public static publicKeyToAddress(publicKey: Uint8Array, network: Network = 'mainnet'): string {
+    try {
+      const networkObj = getScureNetwork(network);
+      // Use p2pkh function to create a regular Bitcoin address
+      const p2pkhScript = btc.p2pkh(publicKey, networkObj);
+      if (!p2pkhScript.address) {
+        throw new Error('Failed to generate address');
+      }
+      return p2pkhScript.address;
+    } catch (error) {
+      console.error('Error generating Bitcoin address:', error);
+      throw new Error('Failed to generate Bitcoin address');
+    }
+  }
+
+  /**
+   * Convert a private key to WIF format
+   * 
+   * @param privateKey - The private key as a Uint8Array
+   * @param network - The Bitcoin network to use
+   * @param compressed - Whether to use compressed format
+   * @returns The WIF-encoded private key
+   */
+  public static privateKeyToWIF(
+    privateKey: Uint8Array, 
+    network: Network = 'mainnet', 
+    compressed: boolean = true
+  ): string {
+    try {
+      // This is a simplified implementation - in production you would
+      // use a dedicated WIF library like 'wif' npm package
+      
+      // 1. Determine the network version byte
+      const version = network === 'mainnet' ? 0x80 : 0xef;
+      
+      // 2. Create the payload
+      const payload = compressed 
+        ? new Uint8Array(privateKey.length + 2) 
+        : new Uint8Array(privateKey.length + 1);
+      
+      // 3. Add version byte
+      payload[0] = version;
+      
+      // 4. Add private key
+      payload.set(privateKey, 1);
+      
+      // 5. Add compression flag if needed
+      if (compressed) {
+        payload[privateKey.length + 1] = 0x01;
+      }
+      
+      // 6. Encode using Base58Check (in real implementation)
+      // For now we'll just return a placeholder
+      // In a real implementation, this would use Base58Check encoding:
+      // - Compute checksum (double SHA256, first 4 bytes)
+      // - Concatenate payload and checksum
+      // - Encode with Base58
+      
+      // Simplified implementation for testing only
+      return compressed 
+        ? `${network === 'mainnet' ? 'K' : 'c'}${Buffer.from(privateKey).toString('hex').substring(0, 8)}...` 
+        : `${network === 'mainnet' ? '5' : '9'}${Buffer.from(privateKey).toString('hex').substring(0, 8)}...`;
+    } catch (error) {
+      console.error('Error generating WIF:', error);
+      throw new Error('Failed to generate WIF');
+    }
+  }
+
+  /**
    * Derive a Bitcoin address from a key pair
    * 
    * @param keyPair - The key pair to derive an address from
@@ -113,28 +339,24 @@ export class KeyPairGenerator {
    */
   public static deriveAddress(keyPair: KeyPair): string | null {
     const { type, publicKey, network = 'mainnet' } = keyPair;
-    const btcNetwork = getScureNetwork(network);
     
     try {
+      const networkObj = getScureNetwork(network);
+      
       switch (type) {
         case 'Ed25519':
           // Ed25519 keys are not typically used for Bitcoin addresses
           return null;
         case 'secp256k1': {
           // For secp256k1, we can create P2WPKH addresses
-          const p2wpkhObj = btc.p2wpkh(publicKey);
-          if (typeof p2wpkhObj.address === 'function') {
-            return p2wpkhObj.address(btcNetwork);
-          }
-          return null;
+          const p2wpkhScript = btc.p2wpkh(publicKey, networkObj);
+          return p2wpkhScript.address || null;
         }
         case 'schnorr': {
           // For schnorr, we use Taproot (P2TR) addresses
-          const p2trObj = btc.p2tr(publicKey);
-          if (typeof p2trObj.address === 'function') {
-            return p2trObj.address(btcNetwork);
-          }
-          return null;
+          const publicKeyXOnly = publicKey.length === 33 ? publicKey.slice(1) : publicKey;
+          const p2trScript = btc.p2tr(publicKeyXOnly, undefined, networkObj);
+          return p2trScript.address || null;
         }
         default:
           return null;

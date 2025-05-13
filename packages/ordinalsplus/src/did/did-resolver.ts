@@ -1,11 +1,26 @@
 import { DidDocument } from '../types/did';
-import { BTCO_METHOD, ERROR_CODES } from '../utils/constants';
+import { BTCO_METHOD, ERROR_CODES as ORIGINAL_ERROR_CODES } from '../utils/constants';
 import { isValidBtcoDid, parseBtcoDid } from '../utils/validators';
 import { validateDidDocument, deserializeDidDocument } from './did-document';
 import { BitcoinNetwork } from '../types';
 import { ResourceProvider } from '../resources/providers/types';
 import { ProviderFactory, ProviderType } from '../resources/providers/provider-factory';
 import { extractCborMetadata } from '../utils/cbor-utils';
+import { verifyTamperProtection } from '../utils/security';
+import { AuditCategory, AuditSeverity, logDidDocumentResolution, logSecurityEvent } from '../utils/audit-logger';
+import { checkRateLimit } from '../utils/security';
+
+// Additional error codes for DID resolution
+export const ADDITIONAL_ERROR_CODES = {
+  RATE_LIMIT_EXCEEDED: 'rateLimitExceeded',
+  UNTRUSTED: 'untrustedDocument'
+} as const;
+
+// Combine original and additional error codes
+export const ERROR_CODES = { 
+  ...ORIGINAL_ERROR_CODES, 
+  ...ADDITIONAL_ERROR_CODES 
+};
 
 /**
  * Options for DID resolution
@@ -40,6 +55,31 @@ export interface DidResolutionOptions {
    * Whether to bypass cache
    */
   noCache?: boolean;
+  
+  /**
+   * Accept resolution of DID Documents without tamper protection
+   */
+  acceptUntrusted?: boolean;
+  
+  /**
+   * Whether to log the resolution operation for auditing
+   */
+  enableAudit?: boolean;
+  
+  /**
+   * The actor performing the resolution (for auditing)
+   */
+  actor?: string;
+  
+  /**
+   * The IP address or other identifier for rate limiting
+   */
+  ipAddress?: string;
+  
+  /**
+   * Maximum number of resolution requests per minute per IP
+   */
+  maxResolutionsPerMinute?: number;
 }
 
 /**
@@ -174,6 +214,26 @@ interface CacheEntry {
 }
 
 /**
+ * DID Resolver options
+ */
+export interface DidResolverOptions {
+  /**
+   * Whether to enable caching
+   */
+  cacheEnabled?: boolean;
+  
+  /**
+   * Cache TTL in milliseconds
+   */
+  cacheTtl?: number;
+  
+  /**
+   * Maximum number of resolution requests per minute per IP
+   */
+  maxResolutionsPerMinute?: number;
+}
+
+/**
  * Resolver for BTCO DIDs
  */
 export class DidResolver {
@@ -182,6 +242,9 @@ export class DidResolver {
   private readonly cacheEnabled: boolean;
   private readonly cacheTtl: number;
   private readonly cache: Map<string, CacheEntry>;
+  
+  // Rate limiting defaults
+  private readonly maxResolutionsPerMinute: number = 100;
   
   /**
    * Creates a new DidResolver
@@ -203,6 +266,11 @@ export class DidResolver {
     this.cacheEnabled = true; // Default to enabled
     this.cacheTtl = 300000; // Default to 5 minutes
     this.cache = new Map<string, CacheEntry>();
+    
+    // Initialize with custom rate limits if provided
+    if (options.maxResolutionsPerMinute) {
+      this.maxResolutionsPerMinute = options.maxResolutionsPerMinute;
+    }
   }
   
   /**
@@ -214,9 +282,35 @@ export class DidResolver {
    */
   async resolve(didUrl: string, options: DidResolutionOptions = {}): Promise<DidResolutionResult> {
     try {
+      // Apply rate limiting if an IP address is provided
+      if (options.ipAddress) {
+        const isUnderLimit = await checkRateLimit(
+          options.ipAddress,
+          'did_resolution',
+          this.maxResolutionsPerMinute
+        );
+        
+        if (!isUnderLimit) {
+          return this.createErrorResult(
+            ERROR_CODES.RATE_LIMIT_EXCEEDED,
+            'Rate limit exceeded for DID resolution'
+          );
+        }
+      }
+      
       // Parse the DID URL
       const parsed = this.parseDidUrl(didUrl);
       if (!parsed) {
+        // Log invalid DID URL if auditing is enabled
+        if (options.enableAudit) {
+          await logSecurityEvent(
+            'invalid_did_url',
+            AuditSeverity.WARNING,
+            didUrl,
+            options.actor,
+            { error: 'Invalid DID URL format' }
+          );
+        }
         return this.createErrorResult(ERROR_CODES.INVALID_DID, 'Invalid DID URL format');
       }
       
@@ -225,11 +319,21 @@ export class DidResolver {
         return this.createErrorResult(ERROR_CODES.METHOD_NOT_SUPPORTED, `DID method '${parsed.method}' is not supported`);
       }
       
+      // Create cache key based on the DID and version path (if any)
+      const cacheKey = `${parsed.did}${parsed.versionIndex ? `/${parsed.versionIndex}` : ''}`;
+      
       // Check cache if enabled and not bypassed
-      const cacheKey = didUrl;
       if (this.cacheEnabled && !options.noCache) {
         const cached = this.cache.get(cacheKey);
         if (cached && (Date.now() - cached.timestamp) < this.cacheTtl) {
+          // Log cache hit if auditing is enabled
+          if (options.enableAudit) {
+            await logDidDocumentResolution(
+              parsed.did,
+              options.actor,
+              { fromCache: true, cacheKey }
+            );
+          }
           return cached.result;
         }
       }
@@ -243,12 +347,35 @@ export class DidResolver {
       // Query indexer for inscription
       const satInfo = await this.provider.getSatInfo(satNumber);
       if (!satInfo || !satInfo.inscription_ids || satInfo.inscription_ids.length === 0) {
+        // Log resolution failure if auditing is enabled
+        if (options.enableAudit) {
+          await logSecurityEvent(
+            'resolution_failed_no_inscriptions',
+            AuditSeverity.WARNING,
+            parsed.did,
+            options.actor,
+            { satNumber }
+          );
+        }
         return this.createErrorResult(ERROR_CODES.NOT_FOUND, `No inscriptions found for satoshi ${satNumber}`);
       }
       
       // Determine which inscription to use based on version index
       const versionIndex = parsed.versionIndex !== undefined ? parsed.versionIndex : 0;
       if (versionIndex >= satInfo.inscription_ids.length) {
+        // Log resolution failure if auditing is enabled
+        if (options.enableAudit) {
+          await logSecurityEvent(
+            'resolution_failed_version_not_found',
+            AuditSeverity.WARNING,
+            parsed.did,
+            options.actor,
+            { 
+              requestedVersion: versionIndex,
+              availableVersions: satInfo.inscription_ids.length 
+            }
+          );
+        }
         return this.createErrorResult(ERROR_CODES.NOT_FOUND, `No inscription found at index ${versionIndex} for satoshi ${satNumber}`);
       }
       
@@ -267,14 +394,68 @@ export class DidResolver {
             try {
               // Try to interpret it as a DID Document
               const didDocString = JSON.stringify(decodedMetadata);
-              didDocument = deserializeDidDocument(didDocString);
+              didDocument = await deserializeDidDocument(didDocString, options.actor);
               
               // If we have a document, validate that its ID matches the requested DID
               if (didDocument && didDocument.id !== parsed.did) {
+                // Log security issue if auditing is enabled
+                if (options.enableAudit) {
+                  await logSecurityEvent(
+                    'did_mismatch',
+                    AuditSeverity.ERROR,
+                    parsed.did,
+                    options.actor,
+                    { 
+                      requestedDid: parsed.did,
+                      documentDid: didDocument.id 
+                    }
+                  );
+                }
+                
                 console.warn(`DID mismatch: Document ID ${didDocument.id} does not match requested DID ${parsed.did}`);
                 return this.createErrorResult(ERROR_CODES.INVALID_DID, 'DID Document ID does not match requested DID');
               }
+              
+              // If tamper protection is required, verify it
+              if (
+                didDocument && 
+                !options.acceptUntrusted && 
+                (!('tamperProtection' in didDocument) || !didDocument.tamperProtection)
+              ) {
+                // Log security issue if auditing is enabled
+                if (options.enableAudit) {
+                  await logSecurityEvent(
+                    'missing_tamper_protection',
+                    AuditSeverity.WARNING,
+                    parsed.did,
+                    options.actor,
+                    { inscriptionId }
+                  );
+                }
+                
+                // Only return an error if untrusted documents are not accepted
+                if (!options.acceptUntrusted) {
+                  return this.createErrorResult(
+                    ERROR_CODES.UNTRUSTED,
+                    'DID Document does not have tamper protection and acceptUntrusted is not enabled'
+                  );
+                }
+              }
             } catch (error) {
+              // Log deserialization error if auditing is enabled
+              if (options.enableAudit) {
+                await logSecurityEvent(
+                  'deserialization_error',
+                  AuditSeverity.ERROR,
+                  parsed.did,
+                  options.actor,
+                  { 
+                    error: error instanceof Error ? error.message : String(error),
+                    inscriptionId 
+                  }
+                );
+              }
+              
               console.error('Error deserializing DID Document:', error);
               return this.createErrorResult(ERROR_CODES.INVALID_DID, 'Invalid DID Document format');
             }
@@ -308,8 +489,34 @@ export class DidResolver {
         });
       }
       
+      // Log successful resolution if auditing is enabled
+      if (options.enableAudit) {
+        await logDidDocumentResolution(
+          parsed.did,
+          options.actor,
+          {
+            inscriptionId,
+            versionId: versionIndex.toString(),
+            isLatest: versionIndex === satInfo.inscription_ids.length - 1,
+            hasTamperProtection: Boolean(didDocument && 'tamperProtection' in didDocument),
+            deactivated: didDocument?.deactivated || false
+          }
+        );
+      }
+      
       return result;
     } catch (error) {
+      // Log resolution error if auditing is enabled
+      if (options.enableAudit) {
+        await logSecurityEvent(
+          'resolution_error',
+          AuditSeverity.ERROR,
+          didUrl.startsWith('did:') ? didUrl : 'unknown',
+          options.actor,
+          { error: error instanceof Error ? error.message : String(error) }
+        );
+      }
+      
       console.error('[DidResolver] Error resolving DID:', error);
       return this.createErrorResult(ERROR_CODES.RESOLUTION_FAILED, error instanceof Error ? error.message : 'Unknown error during resolution');
     }
