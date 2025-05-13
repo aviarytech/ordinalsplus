@@ -182,14 +182,20 @@ const MetadataForm: React.FC<MetadataFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="metadata-form">
+      <p style={{ fontSize: '0.9em', color: 'gray', marginBottom: '16px' }}>
+        Please ensure all information is accurate. Metadata will be permanently stored on the blockchain.
+      </p>
+      
       <div>
-        <label htmlFor="title">Title (Required)</label>
+        <Tooltip title="A concise and descriptive title for your inscription.">
+          <label htmlFor="title">Title (Required)</label>
+        </Tooltip>
         <TextField
           id="title"
           value={title}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(setTitle, 'title', e.target.value)}
-          maxLength={MAX_TITLE_LENGTH} // Enforce character limit
+          maxLength={MAX_TITLE_LENGTH}
           aria-invalid={!!formErrors.title}
           aria-describedby={formErrors.title ? "title-error" : undefined}
         />
@@ -197,21 +203,24 @@ const MetadataForm: React.FC<MetadataFormProps> = ({
       </div>
 
       <div>
-        <label htmlFor="description">Description (Required)</label>
-        <TextField // Should ideally be a textarea for multiline
+        <Tooltip title="A more detailed explanation of your inscription.">
+          <label htmlFor="description">Description (Required)</label>
+        </Tooltip>
+        <TextField
           id="description"
           value={description}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(setDescription, 'description', e.target.value)}
-          maxLength={MAX_DESCRIPTION_LENGTH} // Enforce character limit
+          maxLength={MAX_DESCRIPTION_LENGTH}
           aria-invalid={!!formErrors.description}
           aria-describedby={formErrors.description ? "description-error" : undefined}
-          // multiline={true}
         />
         {formErrors.description && <span id="description-error" style={{ color: 'red' }}>{formErrors.description}</span>}
       </div>
 
       <div>
-        <label htmlFor="creationDate">Creation Date</label>
+        <Tooltip title="The date this content was originally created. Optional.">
+          <label htmlFor="creationDate">Creation Date</label>
+        </Tooltip>
         <TextField
           id="creationDate"
           type="date"
@@ -224,61 +233,65 @@ const MetadataForm: React.FC<MetadataFormProps> = ({
       </div>
 
       <div>
-        <label htmlFor="creator">Creator/Artist Name or DID</label>
+        <Tooltip title="Name or Decentralized Identifier of the creator. Optional.">
+          <label htmlFor="creator">Creator/Artist Name or DID</label>
+        </Tooltip>
         <TextField
           id="creator"
           value={creator}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(setCreator, 'creator', e.target.value)}
-          // No specific validation yet for creator beyond being optional
         />
       </div>
       
       <div>
-        <label htmlFor="contentType">Content Type</label>
+        <Tooltip title="The MIME type of the content being inscribed (e.g., image/jpeg, text/plain). Optional.">
+          <label htmlFor="contentType">Content Type</label>
+        </Tooltip>
         <TextField
           id="contentType"
           value={contentType}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(setContentType, 'contentType', e.target.value)}
-           // No specific validation yet for contentType beyond being optional
         />
       </div>
 
       <div>
-        <label>Custom Properties</label>
+        <Tooltip title="Add custom key-value pairs for additional metadata. Both key and value are required if a pair is added.">
+          <label>Custom Properties</label>
+        </Tooltip>
         {properties.map((prop, index) => (
           <div key={index} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
             <TextField
-              placeholder="Property Key"
+              placeholder="Key"
               value={prop.key}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePropertyFieldChange(index, 'key', e.target.value)}
+              style={{ marginRight: '8px' }}
+              aria-label={`Property Key ${index + 1}`}
               aria-invalid={!!formErrors[`property_key_${index}`]}
               aria-describedby={formErrors[`property_key_${index}`] ? `prop-key-error-${index}` : undefined}
             />
-            {formErrors[`property_key_${index}`] && <span id={`prop-key-error-${index}`} style={{ color: 'red', marginLeft: '8px' }}>{formErrors[`property_key_${index}`]}</span>}
             <TextField
-              style={{ marginLeft: '8px' }}
-              placeholder="Property Value"
+              placeholder="Value"
               value={prop.value}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => handlePropertyFieldChange(index, 'value', e.target.value)}
+              style={{ marginRight: '8px' }}
+              aria-label={`Property Value ${index + 1}`}
               aria-invalid={!!formErrors[`property_value_${index}`]}
               aria-describedby={formErrors[`property_value_${index}`] ? `prop-value-error-${index}` : undefined}
             />
-            {formErrors[`property_value_${index}`] && <span id={`prop-value-error-${index}`} style={{ color: 'red', marginLeft: '8px' }}>{formErrors[`property_value_${index}`]}</span>}
             {properties.length > 1 && (
-              <Button type="button" onClick={() => removePropertyField(index)} style={{ marginLeft: '8px' }}>
-                Remove
-              </Button>
+              <Button type="button" onClick={() => removePropertyField(index)}>Remove</Button>
             )}
+            {formErrors[`property_key_${index}`] && <span id={`prop-key-error-${index}`} style={{ color: 'red', marginLeft: '8px' }}>{formErrors[`property_key_${index}`]}</span>}
+            {formErrors[`property_value_${index}`] && <span id={`prop-value-error-${index}`} style={{ color: 'red', marginLeft: '8px' }}>{formErrors[`property_value_${index}`]}</span>}
           </div>
         ))}
-         <Button type="button" onClick={addPropertyField}>
-          Add Property
-        </Button>
+        <Button type="button" onClick={addPropertyField}>Add Property</Button>
       </div>
-      
 
       <div>
-        <label htmlFor="includeAuthenticity">Include Authenticity Certificate</label>
+        <Tooltip title="Check this to include an authenticity certificate with your inscription (details TBD).">
+          <label htmlFor="includeAuthenticity">Include Authenticity Certificate</label>
+        </Tooltip>
         <Switch
           id="includeAuthenticity"
           checked={includeAuthenticity}
@@ -288,40 +301,39 @@ const MetadataForm: React.FC<MetadataFormProps> = ({
 
       {userDids && userDids.length > 0 && (
         <div>
-          <label htmlFor="useDid">Use Existing DID</label>
+          <Tooltip title="Select one of your existing DIDs to associate with this inscription.">
+            <label htmlFor="useDid">Use Existing DID</label>
+          </Tooltip>
           <Select
             id="useDid"
-            value={useDid}
+            value={useDid || ''}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
               setUseDid(e.target.value || undefined);
               if (e.target.value) setCreateNewDid(false); // Uncheck create new if existing is selected
             }}
+            disabled={createNewDid}
           >
             <option value="">Select DID</option>
-            {userDids.map(did => (
-              <option key={did} value={did}>{did}</option>
-            ))}
+            {userDids.map(did => <option key={did} value={did}>{did}</option>)}
           </Select>
         </div>
       )}
 
       <div>
-        <label htmlFor="createNewDid">Create New DID</label>
+        <Tooltip title="Check this to create and associate a new DID with this inscription (if no existing DID is selected).">
+          <label htmlFor="createNewDid">Create New DID</label>
+        </Tooltip>
         <Switch
           id="createNewDid"
           checked={createNewDid}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
             setCreateNewDid(e.target.checked);
-            if (e.target.checked) setUseDid(undefined); // Unselect existing DID if create new is checked
+            if (e.target.checked) setUseDid(undefined); // Clear selected DID if create new is checked
           }}
-          disabled={!!useDid} // Disable if an existing DID is selected
+          disabled={!!useDid && userDids.length > 0}
         />
       </div>
       
-      {/* Tooltips and warning about data permanence will be added as per parent task details */}
-      {/* Character limits will be part of validation in subtask 1.2 */}
-      {/* Metadata preview will be a separate feature/enhancement */}
-
       <Button type="submit" disabled={isLoading}>
         {isLoading ? 'Submitting...' : 'Submit Metadata'}
       </Button>
