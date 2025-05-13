@@ -1,15 +1,23 @@
 /**
- * Verifiable Credential Module
+ * Verifiable Credentials Module
  * 
- * This module provides functionality for working with W3C Verifiable Credentials
- * following the W3C VC Data Model 2.0 specification, with integration for the Aces VC API.
+ * This module exports components for working with W3C Verifiable Credentials,
+ * including types, formatters, validators, and API client for the Aces VC API.
  * 
  * @see https://www.w3.org/TR/vc-data-model-2.0/
  */
 
-// Export core types
+// Export types
 export * from './types';
 
-// Export formatters and validators
+// Export formatters
 export * from './formatters';
-export * from './validators'; 
+
+// Export validators
+export * from './validators';
+
+// Export API client
+export * from './api-client';
+
+// Export service
+export * from './service'; 
