@@ -24,12 +24,17 @@ import {
   DataParsingError
 } from './error-handling';
 
+import { CacheManager } from './cache-manager';
+import { MemoryCache } from './cache/memory-cache';
+
 /**
  * Default configuration for the indexer client
  */
 const DEFAULT_CONFIG: Partial<OrdinalsIndexerConfig> = {
   timeout: 30000, // 30 seconds
-  maxRetries: 3
+  maxRetries: 3,
+  cacheTTL: 3600000, // 1 hour
+  enableCaching: true
 };
 
 /**
@@ -42,6 +47,7 @@ export class OrdinalsIndexer {
   private logger: Logger;
   private errorHandler: ErrorHandler;
   private dlq: DeadLetterQueue;
+  private cacheManager?: CacheManager;
   
   /**
    * Creates a new OrdinalsIndexer instance
@@ -51,13 +57,15 @@ export class OrdinalsIndexer {
    * @param logger - Optional custom logger
    * @param errorHandler - Optional custom error handler
    * @param dlq - Optional custom DLQ
+   * @param cacheManager - Optional custom cache manager
    */
   constructor(
     config: OrdinalsIndexerConfig,
     db?: IndexerDatabase,
     logger?: Logger,
     errorHandler?: ErrorHandler,
-    dlq?: DeadLetterQueue
+    dlq?: DeadLetterQueue,
+    cacheManager?: CacheManager
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.db = db;
@@ -79,6 +87,18 @@ export class OrdinalsIndexer {
       defaultServiceKey: 'ordinalsIndexer'
     });
     
+    // Initialize caching if enabled
+    if (this.config.enableCaching) {
+      this.cacheManager = cacheManager || new CacheManager({
+        defaultTTL: this.config.cacheTTL,
+        logLevel: LogLevel.INFO
+      });
+      
+      this.logger.info('Caching enabled for indexer client', {
+        cacheTTL: this.config.cacheTTL
+      });
+    }
+    
     // Initialize axios client
     const axiosConfig: AxiosRequestConfig = {
       baseURL: this.config.indexerUrl,
@@ -98,7 +118,8 @@ export class OrdinalsIndexer {
     
     this.logger.info('Initialized OrdinalsIndexer', { 
       indexerUrl: this.config.indexerUrl,
-      hasDatabase: !!this.db
+      hasDatabase: !!this.db,
+      hasCacheManager: !!this.cacheManager
     });
   }
   

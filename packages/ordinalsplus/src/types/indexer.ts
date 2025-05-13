@@ -38,6 +38,21 @@ export interface OrdinalsIndexerConfig {
    * Maximum number of retries for failed requests
    */
   maxRetries?: number;
+  
+  /**
+   * Whether to enable caching for indexer requests
+   */
+  enableCaching?: boolean;
+  
+  /**
+   * Time-to-live for cached items in milliseconds
+   */
+  cacheTTL?: number;
+  
+  /**
+   * Maximum number of items to store in memory cache
+   */
+  cacheMaxItems?: number;
 }
 
 /**
