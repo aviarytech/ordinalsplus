@@ -5,7 +5,7 @@
  * caching, retries, and CBOR metadata handling.
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
 import { decode } from 'cbor';
 import { 
   OrdinalsIndexerConfig, 
@@ -212,50 +212,72 @@ export class OrdinalsIndexer {
    * @returns Decoded metadata object or null if no metadata exists
    */
   async getInscriptionMetadata(inscriptionId: string): Promise<any | null> {
+    if (!this.db) {
+      this.logError('Database not configured. Cannot get/store inscription metadata.');
+      return null;
+    }
     try {
-      // Try local cache first if database is provided
-      if (this.db) {
-        const cached = await this.db.getInscriptionMetadata(inscriptionId);
-        if (cached) {
-          return cached;
-        }
+      const cached = await this.db.getInscriptionMetadata(inscriptionId);
+      if (cached) {
+        this.log(`Cache hit for metadata: ${inscriptionId}`);
+        return cached;
       }
-      
-      // Get the inscription to check if it has metadata
+      this.log(`Cache miss for metadata: ${inscriptionId}, fetching from indexer.`);
+
       const inscription = await this.getInscriptionById(inscriptionId);
-      if (!inscription || !inscription.hasMetadata) {
+      if (!inscription) {
+        this.logError(`Inscription ${inscriptionId} not found when trying to fetch metadata.`);
         return null;
       }
-      
-      // Query indexer for raw metadata
-      const response = await this.client.get(
-        `/inscription/${inscriptionId}/metadata`,
-        { responseType: 'arraybuffer' }
+      if (!inscription.hasMetadata) {
+        this.log(`Inscription ${inscriptionId} has no metadata flag. Not fetching metadata.`);
+        return null;
+      }
+
+      this.log(`Fetching raw metadata for inscription: ${inscriptionId}`);
+      const response = await axios.get(
+        `${this.config.indexerUrl}/inscription/${inscriptionId}/metadata`,
+        { responseType: 'arraybuffer' },
       );
-      
-      if (!response.data) {
+
+      if (!response.data || response.data.byteLength === 0) {
+        this.logError(`No metadata content returned for inscription ${inscriptionId}.`);
+        if (this.db) await this.db.storeInscriptionMetadata(inscriptionId, null);
         return null;
       }
-      
-      // Decode CBOR metadata
+
       const metadataBuffer = Buffer.from(response.data);
       let metadata;
-      
       try {
         metadata = decode(metadataBuffer);
-      } catch (decodeError) {
-        console.error('Error decoding CBOR metadata:', decodeError);
+        this.log(`Successfully decoded CBOR metadata for ${inscriptionId}.`);
+      } catch (decodingError: any) {
+        this.logError(
+          `CBOR decoding failed for ${inscriptionId}: ${decodingError.message || decodingError}`,
+        );
+        if (this.db) await this.db.storeInscriptionMetadata(inscriptionId, { undecodable: true, raw: metadataBuffer.toString('hex') });
         return null;
       }
-      
-      // Cache decoded metadata if database is provided
-      if (this.db) {
-        await this.db.storeInscriptionMetadata(inscriptionId, metadata);
-      }
-      
+
+      if (this.db) await this.db.storeInscriptionMetadata(inscriptionId, metadata);
+      this.log(`Stored decoded metadata for ${inscriptionId}.`);
       return metadata;
-    } catch (error) {
-      console.error('Error fetching inscription metadata:', error);
+    } catch (error: any) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError;
+        if (axiosError.response?.status === 404) {
+          this.log(`Metadata not found (404) for inscription ${inscriptionId}. Caching as null.`);
+          if (this.db) await this.db.storeInscriptionMetadata(inscriptionId, null);
+        } else {
+          this.logError(
+            `Axios error fetching metadata for ${inscriptionId}: ${axiosError.message}`,
+          );
+        }
+      } else {
+        this.logError(
+          `Unexpected error fetching metadata for ${inscriptionId}: ${error.message || error}`,
+        );
+      }
       return null;
     }
   }
@@ -415,46 +437,65 @@ export class OrdinalsIndexer {
    */
   private async processInscriptionMetadata(inscriptionId: string): Promise<void> {
     if (!this.db) {
-      console.log('Database not configured. Skipping metadata processing.');
+      this.logError('Database not configured. Skipping metadata processing.');
       return;
     }
-    
-    console.log(`Processing metadata for inscription ID: ${inscriptionId}`);
-    // Get and decode metadata
-    const metadata = await this.getInscriptionMetadata(inscriptionId); // This already handles caching
-    
-    if (!metadata) {
-      console.log(`No metadata found or failed to decode for inscription ID: ${inscriptionId}.`);
-      return;
-    }
-    
-    console.log(`Successfully decoded metadata for inscription ID: ${inscriptionId}`);
+    this.log(`Processing metadata for inscription: ${inscriptionId}`);
+    const metadata = await this.getInscriptionMetadata(inscriptionId);
 
-    // Check if this is a DID Document
-    // Ensure robust checking for didDocument structure and ID format
-    if (metadata.didDocument && 
-        typeof metadata.didDocument.id === 'string' && 
-        metadata.didDocument.id.startsWith('did:btco:')) {
-      try {
-        await this.db.storeDIDDocument(metadata.didDocument.id, metadata.didDocument);
-        console.log(`Stored DID Document: ${metadata.didDocument.id} from inscription ID: ${inscriptionId}`);
-      } catch (dbError) {
-        console.error(`Error storing DID Document ${metadata.didDocument.id} from inscription ID: ${inscriptionId}:`, dbError);
+    if (!metadata) {
+      this.log(`No metadata found or failed to decode for ${inscriptionId}. Skipping further processing.`);
+      return;
+    }
+
+    if (metadata.undecodable) {
+        this.log(`Metadata for ${inscriptionId} was marked as undecodable. Skipping further processing.`);
+        return;
+    }
+
+    // Check for DID Document
+    if (metadata.didDocument) {
+      if (
+        typeof metadata.didDocument === 'object' &&
+        metadata.didDocument !== null &&
+        typeof metadata.didDocument.id === 'string' &&
+        metadata.didDocument.id.startsWith('did:btco:')
+      ) {
+        this.log(`Storing DID Document: ${metadata.didDocument.id}`);
+        if (this.db) await this.db.storeDIDDocument(
+          metadata.didDocument.id,
+          metadata.didDocument,
+        );
+      } else {
+        this.logWarn(
+          `Malformed DID Document structure for inscription ${inscriptionId}. ID: ${metadata.didDocument.id}`,
+        );
       }
     }
-    
-    // Check if this is a verifiable credential
-    // Ensure robust checking for verifiableCredential structure and type
-    if (metadata.verifiableCredential &&
+
+    // Check for Verifiable Credential
+    if (metadata.verifiableCredential) {
+      if (
+        typeof metadata.verifiableCredential === 'object' &&
+        metadata.verifiableCredential !== null &&
         Array.isArray(metadata.verifiableCredential.type) &&
-        metadata.verifiableCredential.type.includes('VerifiableCredential')) {
-      try {
-        await this.db.storeCredential(inscriptionId, metadata.verifiableCredential);
-        console.log(`Stored Verifiable Credential from inscription ID: ${inscriptionId}`);
-      } catch (dbError) {
-        console.error(`Error storing Verifiable Credential from inscription ID: ${inscriptionId}:`, dbError);
+        metadata.verifiableCredential.type.includes('VerifiableCredential') &&
+        typeof metadata.verifiableCredential.issuer === 'string'
+      ) {
+        this.log(
+          `Storing Verifiable Credential for inscription ${inscriptionId}`,
+        );
+        if (this.db) await this.db.storeCredential(
+          inscriptionId,
+          metadata.verifiableCredential,
+        );
+      } else {
+        this.logWarn(
+          `Malformed Verifiable Credential structure for inscription ${inscriptionId}.`,
+        );
       }
     }
+    this.log(`Finished processing metadata for inscription: ${inscriptionId}`);
   }
   
   /**
@@ -476,5 +517,18 @@ export class OrdinalsIndexer {
       txid: data.genesis_tx || data.txid || '',
       contentLength: data.content_length || data.contentLength || 0
     };
+  }
+
+  private log(message: string) {
+    // In a real app, you'd use a proper logger
+    console.log(`[OrdinalsIndexer] [INFO] ${new Date().toISOString()}: ${message}`);
+  }
+
+  private logWarn(message: string) {
+    console.warn(`[OrdinalsIndexer] [WARN] ${new Date().toISOString()}: ${message}`);
+  }
+
+  private logError(message: string) {
+    console.error(`[OrdinalsIndexer] [ERROR] ${new Date().toISOString()}: ${message}`);
   }
 } 
