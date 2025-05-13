@@ -35,6 +35,22 @@ export class KeyManager {
   private storage: KeyStorage;
   private defaultKeyType: KeyType;
   private defaultNetwork: string;
+  
+  // Singleton instance
+  private static instance: KeyManager;
+
+  /**
+   * Get the singleton instance of KeyManager
+   * 
+   * @param options - Optional configuration options
+   * @returns The singleton instance
+   */
+  public static getInstance(options?: KeyManagerOptions): KeyManager {
+    if (!KeyManager.instance) {
+      KeyManager.instance = new KeyManager(options);
+    }
+    return KeyManager.instance;
+  }
 
   /**
    * Create a new KeyManager instance
@@ -54,7 +70,7 @@ export class KeyManager {
    * @param alias - Optional alias for the key
    * @returns The ID of the generated key
    */
-  async createKey(options: Partial<KeyPairGeneratorOptions> = {}, alias?: string): Promise<string> {
+  async createKey(options: Partial<KeyPairGeneratorOptions & { aliases?: string[] }> = {}, alias?: string): Promise<string> {
     const keyPairOptions: KeyPairGeneratorOptions = {
       type: options.type || this.defaultKeyType,
       network: options.network || this.defaultNetwork as any,
@@ -62,7 +78,20 @@ export class KeyManager {
     };
 
     const keyPair = await KeyPairGenerator.generate(keyPairOptions);
-    return this.storage.storeKey(keyPair, alias);
+    
+    // Store with main alias if provided
+    const keyId = await this.storage.storeKey(keyPair, alias);
+    
+    // Store additional aliases if provided
+    if (options.aliases && options.aliases.length > 0) {
+      for (const additionalAlias of options.aliases) {
+        if (additionalAlias !== alias) { // Skip the main alias if it's duplicated
+          await this.storage.storeKey(keyPair, additionalAlias);
+        }
+      }
+    }
+    
+    return keyId;
   }
 
   /**
@@ -471,14 +500,14 @@ export class KeyManager {
       case 'secp256k1': {
         const secp = await import('@noble/secp256k1');
         const signature = secp.sign(data, keyPair.privateKey);
-        return new Uint8Array(signature);
+        return new Uint8Array(Buffer.from(signature.toCompactRawBytes()));
       }
       case 'schnorr': {
         // Currently, schnorr signing is not directly supported in @noble/secp256k1
         // For schnorr, we'll use the same method as secp256k1 but note this is a simplification
         const secp = await import('@noble/secp256k1');
         const signature = secp.sign(data, keyPair.privateKey);
-        return new Uint8Array(signature);
+        return new Uint8Array(Buffer.from(signature.toCompactRawBytes()));
       }
       default:
         throw new Error(`Unsupported key type: ${keyPair.type}`);
