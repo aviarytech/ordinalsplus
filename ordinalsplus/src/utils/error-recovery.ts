@@ -8,7 +8,6 @@
 
 import { ErrorCode, InscriptionError, errorHandler } from './error-handler';
 import { Utxo } from '../types';
-import { transactionTracker } from '../transactions/commit-transaction';
 
 /**
  * Maximum number of automatic retry attempts

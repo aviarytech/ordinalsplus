@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { bytesToHex } from '@noble/hashes/utils';
-import { Loader2, AlertCircle, CheckCircle, Copy, ExternalLink, Bitcoin } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, Copy, ExternalLink, Bitcoin, Upload, FileText, X, Check } from 'lucide-react';
 import * as ordinalsplus from 'ordinalsplus';
 import * as btc from '@scure/btc-signer';
 import { useWallet, Utxo as WalletUtxo } from '../../context/WalletContext';
@@ -15,20 +15,13 @@ import { utils as secpUtils } from '@noble/secp256k1';
 import { schnorr } from '@noble/curves/secp256k1';
 import { OrdinalInscription } from '../../../../ordinalsplus/src/inscription/scripts/ordinal-reveal';
 
-// --- Local Definitions (Fallback for utils not exported from library) ---
-const getNetworkLabel = (network: string | null | undefined): string => {
-  if (!network) return 'Unknown';
-  if (network === 'testnet') return 'Testnet';
-  if (network === 'signet') return 'Signet';
-  return 'Mainnet';
-};
+
 const truncateMiddle = (str: string | null, length = 10): string => {
   if (!str) return '';
   if (str.length <= length * 2 + 3) return str;
   return `${str.substring(0, length)}...${str.substring(str.length - length)}`;
 };
 
-// Define supported content types
 const supportedContentTypes = [
   { mime: 'text/plain', label: 'Text', isText: true },
   { mime: 'application/json', label: 'JSON', isText: true },
@@ -39,7 +32,6 @@ const supportedContentTypes = [
 
 // Define constants locally
 const POSTAGE_VALUE = 1000n; // Use bigint
-const DUST_LIMIT = 546n;    // Use bigint
 
 // Define more specific flow states
 type FlowState =
@@ -83,39 +75,6 @@ interface OrdinalsPlusUtxo {
   scriptPubKey?: string;
 }
 
-interface PrepareInscriptionScriptsParams {
-  recoveryPublicKey: Uint8Array;
-  inscriptionData: {
-    contentType: string;
-    content: string;
-    metadata?: Record<string, string>;
-  };
-  network: any;
-}
-
-interface CommitP2TRDetails {
-  script: Uint8Array;
-  address: string;
-}
-
-interface PreparedInscriptionScripts {
-  commitP2TRDetails: CommitP2TRDetails;
-  inscriptionLeafScript: Uint8Array;
-}
-
-interface FinalRevealTxResult {
-  txid: string;
-  txHex: string;
-}
-
-interface CreateUnsignedCommitPsbtParams {
-  selectedUtxos: OrdinalsPlusUtxo[];
-  commitAddress: string;
-  requiredCommitAmount: bigint;
-  changeAddress: string;
-  feeRate: number;
-  network: any;
-}
 
 /**
  * ResourceCreationForm orchestrates the resource creation flow using modular subcomponents.
@@ -153,11 +112,13 @@ const ResourceCreationForm: React.FC = () => {
   const [revealComplete, setRevealComplete] = useState<boolean>(false);
   const [inscriptionPrepComplete, setInscriptionPrepComplete] = useState<boolean>(false);
   const [extractedCommitTx, setExtractedCommitTx] = useState<string | null>(null);
+  const [showDirectTextEditor, setShowDirectTextEditor] = useState<boolean>(false);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     connected: walletConnected,
     address: walletAddress,
-    publicKey: walletPublicKey,
     signPsbt,
     getUtxos,
     network: walletNetwork,
@@ -176,8 +137,6 @@ const ResourceCreationForm: React.FC = () => {
   // Add the BTC_NETWORK constant here where walletNetwork is available
   const BTC_NETWORK = walletNetwork ? getOrdinalsPlusNetwork(walletNetwork) : 'mainnet';
   
-  const scureNetwork = walletNetwork ? ordinalsplus.getScureNetwork(walletNetwork as any) : ordinalsplus.NETWORKS.bitcoin;
-  const networkLabel = walletNetwork ? getNetworkLabel(walletNetwork) : 'Mainnet';
   const blockExplorerUrl = walletNetwork === 'testnet'
     ? 'https://mempool.space/testnet'
     : 'https://mempool.space';
@@ -260,6 +219,8 @@ const ResourceCreationForm: React.FC = () => {
     setRevealComplete(false);
     setInscriptionPrepComplete(false);
     setExtractedCommitTx(null);
+    setShowDirectTextEditor(false);
+    setUploadedFileName(null);
   };
 
   const handleCopy = (text: string) => {
@@ -352,7 +313,6 @@ const ResourceCreationForm: React.FC = () => {
       const parsedMeta = parseMetadata(metadata);
       
       console.log("[PrepareInscription] Preparing inscription data using createInscription...");
-      const network = ordinalsplus.NETWORKS.bitcoin;
       
       // Use the properly exported createInscription function
       const preparedInscription = ordinalsplus.createInscription({
@@ -921,6 +881,76 @@ const ResourceCreationForm: React.FC = () => {
     }
   };
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setUploadedFileName(file.name);
+    setErrorMessage(null);
+    
+    // Update content type based on the file MIME type
+    const fileType = file.type;
+    if (fileType) {
+      // For text files, add charset
+      if (fileType.startsWith('text/')) {
+        setContentType(`${fileType};charset=utf-8`);
+      } else {
+        setContentType(fileType);
+      }
+    } else {
+      // Fallback to guessing by extension
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (extension === 'json') {
+        setContentType('application/json;charset=utf-8');
+      } else if (extension === 'txt') {
+        setContentType('text/plain;charset=utf-8');
+      } else if (extension === 'png') {
+        setContentType('image/png');
+      } else if (extension === 'jpg' || extension === 'jpeg') {
+        setContentType('image/jpeg');
+      } else if (extension === 'svg') {
+        setContentType('image/svg+xml');
+      }
+    }
+    
+    // Read file content
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result;
+      if (typeof result === 'string') {
+        // For text files, use the content directly
+        if (fileType.startsWith('text/') || fileType === 'application/json') {
+          setContent(result);
+        } else {
+          // For binary files, convert to base64 data URL
+          setContent(result);
+        }
+      } else if (result instanceof ArrayBuffer) {
+        // Handle binary data
+        const base64 = btoa(
+          new Uint8Array(result)
+            .reduce((data, byte) => data + String.fromCharCode(byte), '')
+        );
+        setContent(`data:${fileType};base64,${base64}`);
+      }
+    };
+    
+    // Read as text or data URL based on file type
+    if (fileType.startsWith('text/') || fileType === 'application/json') {
+      reader.readAsText(file);
+    } else {
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const clearUploadedFile = () => {
+    setUploadedFileName(null);
+    setContent('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const renderCurrentStep = () => {
     // Get existing content (same as before)
     let stepContent;
@@ -965,7 +995,10 @@ const ResourceCreationForm: React.FC = () => {
                   <button
                     key={type.mime}
                     type="button"
-                    onClick={() => setContentType(type.isText ? `${type.mime};charset=utf-8` : type.mime)}
+                    onClick={() => {
+                      setContentType(type.isText ? `${type.mime};charset=utf-8` : type.mime);
+                      setUploadedFileName(null);
+                    }}
                     className={`px-3 py-2 text-sm border rounded-md ${
                       contentType.startsWith(type.mime)
                         ? 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-700'
@@ -978,29 +1011,86 @@ const ResourceCreationForm: React.FC = () => {
               </div>
             </div>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {/* File Upload Area - Main Interaction Point */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                 <Tooltip
                   content={
                     <div>
-                      <p>The actual content to be inscribed on the Bitcoin blockchain.</p>
-                      <p className="mt-1">For text and JSON, enter the content directly. For images, paste a Data URL or Base64 string.</p>
-                      <p className="mt-1">Note that larger inscriptions will require more fees.</p>
+                      <p>Upload the file you want to inscribe on Bitcoin.</p>
+                      <p className="mt-1">Supported types: text files, JSON, images (PNG, JPEG, SVG).</p>
                     </div>
                   }
                   position="top"
                   showIcon={true}
                 >
-                  Content
+                  Upload File
                 </Tooltip>
               </label>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={contentType.startsWith('text/plain') ? "Enter text..." : contentType.startsWith('application/json') ? "Enter JSON..." : "Paste base64 or data URL..."}
-                className="w-full h-32 p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 dark:bg-gray-700"
-              />
+              
+              {uploadedFileName ? (
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 border-dashed rounded-lg flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Check className="h-6 w-6 text-green-500 mr-3" />
+                    <div>
+                      <p className="font-medium text-green-700 dark:text-green-300">{uploadedFileName}</p>
+                      <p className="text-sm text-green-600 dark:text-green-400">File uploaded successfully</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={clearUploadedFile}
+                    className="ml-2 p-1 hover:bg-green-100 dark:hover:bg-green-800/30 rounded-full"
+                    aria-label="Clear uploaded file"
+                  >
+                    <X className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center w-full h-40 bg-gray-50 dark:bg-gray-800/50 border-2 border-gray-300 dark:border-gray-700 border-dashed rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <Upload className="w-10 h-10 mb-3 text-gray-400 dark:text-gray-500" />
+                    <p className="mb-2 text-sm text-gray-500 dark:text-gray-400"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">SVG, PNG, JPG, Text or JSON</p>
+                  </div>
+                  <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    className="hidden" 
+                    onChange={handleFileUpload} 
+                    accept=".txt,.json,.svg,.png,.jpg,.jpeg,text/plain,application/json,image/svg+xml,image/png,image/jpeg"
+                  />
+                </label>
+              )}
+              
+              {/* Subtle way to create text content directly */}
+              <div className="mt-3 flex items-center justify-center">
+                <button 
+                  type="button"
+                  onClick={() => setShowDirectTextEditor(!showDirectTextEditor)}
+                  className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 focus:outline-none flex items-center"
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  {showDirectTextEditor ? 'Hide text editor' : 'Or create text directly'}
+                </button>
+              </div>
             </div>
+
+            {showDirectTextEditor && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Direct Text Input
+                </label>
+                <textarea
+                  value={content}
+                  onChange={(e) => {
+                    setContent(e.target.value);
+                    setUploadedFileName(null);
+                  }}
+                  placeholder={contentType.startsWith('text/plain') ? "Enter text..." : contentType.startsWith('application/json') ? "Enter JSON..." : "Paste base64 or data URL..."}
+                  className="w-full h-32 p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                />
+              </div>
+            )}
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
