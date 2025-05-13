@@ -1,5 +1,24 @@
 import React, { useState } from 'react';
 
+// MetadataForm Integration Notes for Subtask 1.4:
+// This component is designed to be integrated into a larger inscription flow.
+// A parent component will be responsible for:
+// 1. Providing the `onSubmit` callback function. This function will receive the validated
+//    `VerifiableMetadata` object when the user submits the form. The parent should handle
+//    API calls for DID creation (if `createNewDid` is true), metadata storage, and
+//    initiating the inscription process.
+// 2. Passing the `userDids` prop (an array of strings) if the user has existing DIDs
+//    to select from. If not provided, the option to use an existing DID will be hidden.
+// 3. Managing the `isLoading` boolean prop. This should be set to true when the parent
+//    is performing asynchronous operations (e.g., API calls after form submission)
+//    to disable the submit button and provide user feedback.
+// 4. Handling any overall application state related to form data persistence if required
+//    beyond what `onSubmit` handles (e.g., saving drafts to local storage or a backend).
+//    The `MetadataForm` itself is self-contained regarding its internal field states.
+//
+// See the conceptual example of a parent component in the development chat/documentation
+// for how `MetadataForm` might be used.
+
 // Assuming ui-components is a resolvable module path
 // If not, this will need adjustment based on actual project structure
 // import { TextField, Switch, Select, Button, Tooltip } from 'ui-components';
