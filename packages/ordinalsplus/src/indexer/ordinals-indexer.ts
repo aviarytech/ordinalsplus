@@ -326,52 +326,84 @@ export class OrdinalsIndexer {
    * @returns Number of new inscriptions processed
    */
   async syncRecentInscriptions(): Promise<number> {
+    console.log('Starting recent inscriptions sync...');
     try {
       // Get last synced height from database
       let lastSyncedHeight = 0;
       
       if (this.db) {
         lastSyncedHeight = (await this.db.getLastSyncedHeight()) || 0;
+        console.log(`Last synced block height: ${lastSyncedHeight}`);
       }
       
+      // Prepare query parameters for fetching inscriptions since the last synced height
+      const queryParams = new URLSearchParams();
+      // Assuming the indexer supports a 'fromBlock' or 'since' parameter.
+      // Adjust if the API uses a different parameter name or mechanism (e.g., timestamp).
+      queryParams.append('fromBlock', lastSyncedHeight.toString());
+      // Add a limit to control batch size, if appropriate for the API
+      // queryParams.append('limit', '100'); 
+
+      console.log(`Querying indexer for inscriptions from block: ${lastSyncedHeight}`);
       // Query indexer for new inscriptions
-      const response = await this.client.get(`/inscriptions?fromBlock=${lastSyncedHeight}`);
+      const response = await this.client.get(`/inscriptions?${queryParams.toString()}`);
       
       if (!response.data || !Array.isArray(response.data.items)) {
+        console.log('No new inscriptions found or invalid response format.');
         return 0;
       }
       
       const paginatedResponse = response.data as PaginatedResponse<any>;
       const inscriptions = paginatedResponse.items.map(item => this.parseInscriptionData(item));
       
-      // Get current block height
-      const currentHeight = response.data.currentHeight || lastSyncedHeight;
+      // Get current block height from the response, or use lastSyncedHeight if not provided
+      // The actual field name for current height might vary depending on the indexer API
+      const currentChainHeight = response.data.currentHeight || response.data.chainTip || lastSyncedHeight;
       
+      console.log(`Fetched ${inscriptions.length} inscriptions. Current chain height (or equivalent): ${currentChainHeight}`);
+
       // Process new inscriptions
       let processedCount = 0;
       
       for (const inscription of inscriptions) {
+        console.log(`Processing inscription ID: ${inscription.id}, Number: ${inscription.number}`);
         // Cache the inscription
         if (this.db) {
           await this.db.storeInscription(inscription);
+          console.log(`Stored inscription ID: ${inscription.id}`);
         }
         
         // Check if this inscription has metadata we care about
         if (inscription.hasMetadata) {
+          console.log(`Inscription ID: ${inscription.id} has metadata. Processing...`);
           await this.processInscriptionMetadata(inscription.id);
         }
         
         processedCount++;
       }
       
-      // Update last synced height
-      if (this.db && currentHeight > lastSyncedHeight) {
-        await this.db.setLastSyncedHeight(currentHeight);
+      // Update last synced height only if new inscriptions were processed and chain height advanced
+      if (this.db && processedCount > 0 && currentChainHeight > lastSyncedHeight) {
+        await this.db.setLastSyncedHeight(currentChainHeight);
+        console.log(`Updated last synced block height to: ${currentChainHeight}`);
+      } else if (processedCount === 0) {
+        console.log('No new inscriptions processed. Last synced height remains unchanged.');
+      } else if (currentChainHeight <= lastSyncedHeight) {
+        console.log(`Current chain height (${currentChainHeight}) not greater than last synced height (${lastSyncedHeight}). Last synced height remains unchanged.`);
       }
       
+      console.log(`Sync completed. Processed ${processedCount} new inscriptions.`);
       return processedCount;
     } catch (error) {
-      console.error('Error syncing recent inscriptions:', error);
+      console.error('Error syncing recent inscriptions:', error instanceof Error ? error.message : error);
+      if (axios.isAxiosError(error)) {
+        console.error('Axios error details:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+      }
       return 0;
     }
   }
@@ -382,21 +414,46 @@ export class OrdinalsIndexer {
    * @param inscriptionId - The ID of the inscription to process
    */
   private async processInscriptionMetadata(inscriptionId: string): Promise<void> {
-    if (!this.db) return;
+    if (!this.db) {
+      console.log('Database not configured. Skipping metadata processing.');
+      return;
+    }
     
+    console.log(`Processing metadata for inscription ID: ${inscriptionId}`);
     // Get and decode metadata
-    const metadata = await this.getInscriptionMetadata(inscriptionId);
-    if (!metadata) return;
+    const metadata = await this.getInscriptionMetadata(inscriptionId); // This already handles caching
     
+    if (!metadata) {
+      console.log(`No metadata found or failed to decode for inscription ID: ${inscriptionId}.`);
+      return;
+    }
+    
+    console.log(`Successfully decoded metadata for inscription ID: ${inscriptionId}`);
+
     // Check if this is a DID Document
-    if (metadata.didDocument && metadata.didDocument.id?.startsWith('did:btco:')) {
-      await this.db.storeDIDDocument(metadata.didDocument.id, metadata.didDocument);
+    // Ensure robust checking for didDocument structure and ID format
+    if (metadata.didDocument && 
+        typeof metadata.didDocument.id === 'string' && 
+        metadata.didDocument.id.startsWith('did:btco:')) {
+      try {
+        await this.db.storeDIDDocument(metadata.didDocument.id, metadata.didDocument);
+        console.log(`Stored DID Document: ${metadata.didDocument.id} from inscription ID: ${inscriptionId}`);
+      } catch (dbError) {
+        console.error(`Error storing DID Document ${metadata.didDocument.id} from inscription ID: ${inscriptionId}:`, dbError);
+      }
     }
     
     // Check if this is a verifiable credential
+    // Ensure robust checking for verifiableCredential structure and type
     if (metadata.verifiableCredential &&
-        metadata.verifiableCredential.type?.includes('VerifiableCredential')) {
-      await this.db.storeCredential(inscriptionId, metadata.verifiableCredential);
+        Array.isArray(metadata.verifiableCredential.type) &&
+        metadata.verifiableCredential.type.includes('VerifiableCredential')) {
+      try {
+        await this.db.storeCredential(inscriptionId, metadata.verifiableCredential);
+        console.log(`Stored Verifiable Credential from inscription ID: ${inscriptionId}`);
+      } catch (dbError) {
+        console.error(`Error storing Verifiable Credential from inscription ID: ${inscriptionId}:`, dbError);
+      }
     }
   }
   
