@@ -8,6 +8,21 @@ export * from './types';
 // --- DID Exports ---
 export { BtcoDid, createDidFromInscriptionData, isBtcoDid } from './did/index';
 
+// --- Key Management Exports ---
+export {
+    KeyManager,
+    defaultKeyManager,
+    KeyPairGenerator,
+    KeyType,
+    KeyPair,
+    Secp256k1KeyPair,
+    SchnorrKeyPair,
+    ExtendedEd25519KeyPair,
+    generateEd25519KeyPair,
+    generateSecp256k1KeyPair,
+    generateSchnorrKeyPair
+} from './key-management';
+
 // --- Resource Exports ---
 // Note: createLinkedResourceFromInscription is exported from both ./did and ./resources
 // We need to choose one or rename/alias. Let's pick the one from ./resources for now.

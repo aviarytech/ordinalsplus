@@ -1,1 +1,46 @@
- 
+- **Ed25519 Key Pair Generation**
+  - **Preferred Library**: Use `@noble/curves` for Ed25519 operations.
+    - Import specific curve modules, e.g., `import { ed25519 } from '@noble/curves/ed25519';`
+  - **Private Key Generation**: Generate private keys (seeds) using `ed25519.utils.randomPrivateKey()` from `@noble/curves/ed25519`.
+    - This produces a cryptographically secure 32-byte `Uint8Array`.
+  - **Public Key Derivation**: Derive public keys from the 32-byte private key seed using `ed25519.getPublicKey(privateKeySeed)`.
+    - This is a synchronous operation.
+  - **Key Pair Structure**: When returning or storing key pairs, use a clear interface, for example:
+    ```typescript
+    export interface Ed25519KeyPair {
+      publicKeyHex: string;    // 32-byte public key, hex-encoded
+      privateKeyHex: string;   // 32-byte private key seed, hex-encoded
+      publicKeyBytes: Uint8Array; // 32-byte public key
+      privateKeyBytes: Uint8Array; // 32-byte private key seed
+    }
+    ```
+  - **Example Implementation (`src/utils/keyUtils.ts`)**:
+    ```typescript
+    import { ed25519 } from '@noble/curves/ed25519';
+    // import { randomBytes } from 'crypto'; // Note: ed25519.utils.randomPrivateKey uses crypto.randomBytes or equivalent internally
+
+    export function generateEd25519KeyPair(): Ed25519KeyPair {
+      const privateKeySeed: Uint8Array = ed25519.utils.randomPrivateKey();
+      const publicKeyBytes: Uint8Array = ed25519.getPublicKey(privateKeySeed);
+      return {
+        publicKeyHex: Buffer.from(publicKeyBytes).toString('hex'),
+        privateKeyHex: Buffer.from(privateKeySeed).toString('hex'),
+        publicKeyBytes,
+        privateKeyBytes: privateKeySeed,
+      };
+    }
+    ```
+
+- **Secure Randomness**
+  - For generating seeds or other cryptographic random data directly (if not using a library function like `ed25519.utils.randomPrivateKey()`), use `randomBytes` from Node.js's built-in `crypto` module.
+    - `import { randomBytes } from 'crypto';`
+
+- **Multibase Encoding**
+  - For encoding public keys or other data into multibase formats (e.g., base58btc for DIDs), use the `multiformats` library.
+    - `import { base58btc } from 'multiformats/bases/base58';`
+    - Example: `base58btc.encode(publicKeyBytes);`
+
+- **General Principles**
+  - Prefer synchronous cryptographic operations when available and appropriate for the use case, as provided by `@noble/curves`.
+  - Ensure clear typing and interfaces for cryptographic keys and structures.
+  - Document security considerations and choices within JSDoc comments or related documentation. 

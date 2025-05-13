@@ -18,6 +18,7 @@
         *   If the selected unit of work appears too complex or lacks clear actionable steps, consider using the `expand_task` tool (or `task-master expand --id [ID] [--research]`) to break it down further. If new subtasks are created, select the first 'pending' one as the new unit of work.
 
     *   **B. Plan Implementation:**
+        *   Verify the target sub-package or directory for the task. Ensure all subsequent operations (e.g., file edits, code generation, terminal commands) are correctly scoped to this location within the repository.
         *   Based on the details of the current unit of work, formulate a precise implementation plan. This plan should include:
             *   Specific files to be created or modified.
             *   Key functions, classes, or components to be implemented or changed.
@@ -47,3 +48,4 @@
 *   When using AI-powered Taskmaster tools/commands (like `expand_task`, `update_task`, `add_task`), remember they can be long-running.
 *   Prefer Taskmaster MCP tools if available in your environment; otherwise, use the equivalent `task-master` CLI commands.
 *   If at any point a task's requirements are unclear, or if you require additional context or user input, clearly state what information is needed before proceeding.
+*   Always prioritize the creation of maintainable, scalable, and well-documented software, reflecting on these aspects after each unit of work as per step 3.D.1.
