@@ -11,6 +11,7 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.15.0",
     "@types/uuid": "^10.0.0",
+    "bun-types": "^1.2.13",
     "chai": "^5.2.0",
     "mocha": "^11.1.0",
     "ts-node": "^10.9.2",
@@ -19,11 +20,13 @@
     "vite-plugin-wasm": "^3.4.1"
   },
   "dependencies": {
+    "@noble/curves": "^1.9.0",
     "@scure/base": "^1.2.5",
     "bitcoinjs-lib": "^6.1.7",
     "buffer": "^6.0.3",
     "ecpair": "^3.0.0",
     "micro-ordinals": "^0.2.2",
+    "multiformats": "^13.3.3",
     "process": "^0.11.10",
     "tiny-secp256k1": "^2.2.3"
   }
