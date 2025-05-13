@@ -102,3 +102,9 @@ export {
     createTextInscription,
     createJsonInscription
 } from './inscription';
+
+// --- Indexer Exports ---
+export {
+  OrdinalsIndexer,
+  MemoryIndexerDatabase
+} from './indexer';
