@@ -1,0 +1,37 @@
+- **Define Constants for Protocol Values:**
+  - All "magic numbers" or fixed values related to the Bitcoin protocol (e.g., vbyte sizes, dust limits, script opcodes, standard fee rates if used as defaults) MUST be defined as named constants.
+  - This improves code readability, maintainability, and reduces the risk of errors from typos.
+
+- **Location of Constants:**
+  - Constants should be grouped logically.
+  - For utility modules like `txSizeEstimator.ts`, constants directly related to its calculations can reside within that file.
+  - For more general Bitcoin protocol constants that might be used across multiple services or utilities, consider creating a central `packages/ordinals-plus-api/src/constants/bitcoin.ts` or similar.
+
+- **Naming Conventions:**
+  - Use `UPPER_SNAKE_CASE` for constant names (e.g., `P2TR_OUTPUT_VBYTES`, `DUST_LIMIT_SATS`).
+
+- **Examples:**
+
+  ```typescript
+  // ✅ DO: packages/ordinals-plus-api/src/utils/txSizeEstimator.ts
+  export const BASE_TX_OVERHEAD_VBYTES = 10.5;
+  export const P2TR_OUTPUT_VBYTES = 31;
+  export const P2TR_KEY_PATH_INPUT_VBYTES = 58;
+
+  // ✅ DO: packages/ordinals-plus-api/src/services/bitcoinRpc.ts or a central constants file
+  export const P2TR_DUST_LIMIT_SATS = 330; 
+
+  // ❌ DON'T:
+  // function calculateFee(inputs, outputs) {
+  //   const baseSize = 10.5; // Magic number
+  //   const outputSize = numOutputs * 31; // Magic number
+  //   // ...
+  // }
+  // if (change < 330) { // Magic number
+  //   // ...
+  // }
+  ```
+
+- **Rationale:**
+  - Using constants makes the code self-documenting to some extent.
+  - Centralizing these values makes updates easier if protocol parameters change or if different values are needed for testnets vs. mainnet. 
