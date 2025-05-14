@@ -13,6 +13,46 @@ export const DID_PREFIX = 'did';
 const DID_REGEX = /^did:btco:(\d+)\/(\d+)$/i;
 
 /**
+ * DID Service for DID-related operations
+ */
+export class DIDService {
+  /**
+   * Resolves a DID to a DID Document
+   * 
+   * @param did - The DID to resolve
+   * @returns The resolved DID document or error
+   */
+  async resolveDID(did: string): Promise<{ didDocument?: any; error?: string }> {
+    // For now, this is a mock implementation
+    // In a real implementation, this would:
+    // 1. Validate the DID format
+    // 2. Determine the DID method
+    // 3. Call the appropriate resolver for that method
+    // 4. Return the resolved DID document or error
+    
+    if (!isValidDid(did)) {
+      return { error: `Invalid DID format: ${did}` };
+    }
+    
+    // Mock DID document for testing
+    return {
+      didDocument: {
+        id: did,
+        verificationMethod: [
+          {
+            id: `${did}#key-1`,
+            type: 'Ed25519VerificationKey2020',
+            controller: did,
+            publicKeyMultibase: 'zH3C2AVvLMv6gmMNam3uVAjZpfkcJCwDwnZn6z3wXmqPV'
+          }
+        ],
+        authentication: [`${did}#key-1`]
+      }
+    };
+  }
+}
+
+/**
  * Function to search for DID-related inscriptions using regex
  */
 export const buildDidSearchQuery = (): string => {
