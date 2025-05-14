@@ -174,6 +174,8 @@ export interface CredentialIssuanceParams {
     creationDate?: string;
     /** Additional attributes */
     attributes?: Record<string, any>;
+    /** Inscription ID associated with this credential */
+    inscriptionId?: string;
   };
   /** Content information */
   contentInfo: ContentInfo;

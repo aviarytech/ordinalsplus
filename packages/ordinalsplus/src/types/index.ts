@@ -2,6 +2,7 @@ export * from './did';
 // Assuming ./resource.ts and ./provider.ts exist or will be created
 export * from './resource'; 
 export * from './ordinals';
+export * from './indexer'; // Add export for indexer types
 // export * from './provider';
 
 // Define supported Bitcoin networks

@@ -2,7 +2,7 @@ import type { LinkedResource, Inscription } from '../types';
 import { 
   createLinkedResourceFromInscription as ordinalsPlusCreateLinkedResourceFromInscription,
   type BitcoinNetwork
-} from 'ordinalsplus';
+} from '../../../ordinalsplus/src';
 
 // DID Prefixes we want to look for
 export const DID_BTCO_PREFIX = 'did:btco';
