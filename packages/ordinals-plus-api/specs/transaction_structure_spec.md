@@ -82,10 +82,70 @@ OP_ENDIF
 
 ## 4. Data Encoding
 
-*   **Metadata (DID Document + VC):** Encoded using Concise Binary Object Representation (CBOR). This results in a single byte string that is then pushed into the `metadata` field (tag 5).
-*   **Content Type:** UTF-8 string, as per MIME standards.
-*   **Metaprotocol Identifier:** UTF-8 string.
-*   **Content:** Raw byte string.
+This section details the encoding schemes for various data components within an Ordinals Plus inscription.
+
+*   **Overall Metadata Field (Tag 5):** The entire metadata payload (containing both DID Document and VC) is encoded as a single Concise Binary Object Representation (CBOR) byte string. This byte string is then pushed into the `metadata` field (tag 5) of the Ordinals envelope, potentially in chunks if it exceeds 520 bytes.
+*   **Content Type (Tag 1):** UTF-8 string, as per MIME standards (e.g., `"text/plain;charset=utf-8"`).
+*   **Metaprotocol Identifier (Tag 7):** UTF-8 string (e.g., `"ordplus/v0.1"`).
+*   **Content (Body):** Raw byte string of the inscription's primary content.
+
+### 4.1. Internal Structure of CBOR Metadata Payload (from `metadata` field - tag 5)
+
+The CBOR byte string stored in the `metadata` field (tag 5) is an encoding of a single CBOR map (object). This map has precisely two keys:
+
+1.  **`didDocument`**: The value associated with this key is the DID Document. This is typically a JSON object representing the DID Document, which is then encoded by CBOR. Example:
+    ```json
+    // Example structure of the value for 'didDocument' key
+    {
+      "@context": ["https://www.w3.org/ns/did/v1"],
+      "id": "did:example:123456789abcdefghi",
+      "verificationMethod": [/* ... */],
+      "authentication": [/* ... */]
+      // ... other DID document properties
+    }
+    ```
+
+2.  **`verifiableCredential`**: The value associated with this key is the Verifiable Credential. This can be either:
+    *   A JSON object representing the VC (which CBOR then encodes).
+    *   A JWT string representing the VC (which CBOR encodes as a string).
+    Example (JSON object VC structure):
+    ```json
+    // Example structure of the value for 'verifiableCredential' key (if JSON)
+    {
+      "@context": ["https://www.w3.org/2018/credentials/v1"],
+      "id": "urn:uuid:some-credential-id",
+      "type": ["VerifiableCredential", "ExampleDegreeCredential"],
+      "issuer": "did:example:issuer",
+      "issuanceDate": "2023-10-26T12:00:00Z",
+      "credentialSubject": {
+        "id": "did:example:holder",
+        "degree": {
+          "type": "BachelorDegree",
+          "name": "Bachelor of Science and Arts"
+        }
+      }
+      // ... other VC properties, including proof
+    }
+    ```
+
+**Combined CBOR Structure Example (Conceptual JavaScript Object before CBOR encoding):**
+```javascript
+{
+  didDocument: {
+    "@context": ["https://www.w3.org/ns/did/v1"],
+    "id": "did:example:123456789abcdefghi",
+    // ... more did properties
+  },
+  verifiableCredential: {
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    "type": ["VerifiableCredential"],
+    "issuer": "did:example:issuer",
+    // ... more vc properties
+  } // or verifiableCredential: "eyJhbgciOiJFZERTQSIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..exampleVCJTWSignature"
+}
+```
+
+The utility function `encodeOrdinalsPlusMetadata` (located in `packages/ordinals-plus-api/src/utils/metadataEncoder.ts`) is responsible for creating this map and encoding it into the final CBOR byte string. The service constructing the Bitcoin transaction script must take the `Buffer` returned by this function and, if its length exceeds 520 bytes, split it into multiple chunks, each pushed via a separate `OP_PUSH` opcode. The `getEncodedMetadataSize` function can be used for prior size estimation.
 
 ## 5. Size Considerations and Limitations
 

@@ -33,7 +33,7 @@
     // Output directory
     "outDir": "dist",
 
-    "types": ["bun-types"],
+    "types": ["bun-types", "jest"],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
