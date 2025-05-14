@@ -16,7 +16,13 @@ export enum TransactionStatus {
   PENDING = 'PENDING',
   CONFIRMING = 'CONFIRMING',
   CONFIRMED = 'CONFIRMED',
-  FAILED = 'FAILED'
+  FAILED = 'FAILED',
+  PENDING_CONFIRMATION = 'PENDING_CONFIRMATION',
+  MEMPOOL = 'MEMPOOL',
+  FINALIZED = 'FINALIZED',
+  DROPPED_OR_REPLACED = 'DROPPED_OR_REPLACED',
+  UNWATCHED = 'UNWATCHED',
+  ERROR = 'ERROR'
 }
 
 /**
@@ -62,6 +68,28 @@ export interface TransactionProgressEvent {
   message: string;
   timestamp: Date;
   data?: any;
+}
+
+/**
+ * Events that can be emitted by status tracker or related services regarding a transaction's lifecycle.
+ */
+export enum TransactionEvent {
+  CREATED = 'CREATED',
+  SIGNED = 'SIGNED',
+  BROADCAST_ATTEMPT = 'BROADCAST_ATTEMPT',
+  BROADCAST_SUCCESS = 'BROADCAST_SUCCESS',
+  BROADCAST_FAILED = 'BROADCAST_FAILED',
+  CONFIRMATION_CHECK_ATTEMPT = 'CONFIRMATION_CHECK_ATTEMPT',
+  CONFIRMATION_CHECK_FAILED = 'CONFIRMATION_CHECK_FAILED',
+  CONFIRMED_ONCE = 'CONFIRMED_ONCE',
+  CONFIRMATIONS_UPDATED = 'CONFIRMATIONS_UPDATED',
+  FINALIZED_PERSISTENCE = 'FINALIZED_PERSISTENCE',
+  ERROR_ENCOUNTERED = 'ERROR_ENCOUNTERED',
+  RETRY_ATTEMPT = 'RETRY_ATTEMPT',
+  CANCELLED = 'CANCELLED',
+  STATUS_CHANGE = 'STATUS_CHANGE',
+  REORG_DETECTED_TRACKER = 'REORG_DETECTED_TRACKER',
+  DROPPED_FROM_MEMPOOL = 'DROPPED_FROM_MEMPOOL',
 }
 
 /**
@@ -243,6 +271,26 @@ export class TransactionStatusTracker extends EventEmitter {
       this.transactions.delete(id);
       this.progressEvents.delete(id);
       this.emit('transactionRemoved', transaction);
+    }
+  }
+  
+  /**
+   * Update the TXID for a transaction
+   * This is useful when a transaction is first created with a placeholder TXID
+   * and then updated once the actual TXID is available after broadcast
+   */
+  updateTransactionTxid(id: string, txid: string): void {
+    const transaction = this.transactions.get(id);
+    
+    if (transaction) {
+      transaction.txid = txid;
+      transaction.lastUpdatedAt = new Date();
+      this.transactions.set(id, transaction);
+      
+      this.emit('txidUpdated', {
+        id,
+        txid
+      });
     }
   }
   

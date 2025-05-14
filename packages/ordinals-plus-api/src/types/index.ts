@@ -1,4 +1,5 @@
 import * as bitcoin from 'bitcoinjs-lib';
+import type { Inscription, LinkedResource } from '../../../ordinalsplus/src';
 
 /* // Commenting out problematic imports - Address later if needed
 import {
@@ -34,16 +35,6 @@ export interface Utxo {
   vout: number;
   value: number;
   scriptPubKey: string; // Added based on usage in index.ts
-}
-
-// --- Define other placeholders locally if import fails ---
-export interface LinkedResource { 
-    // Define minimal properties based on usage, or use any
-    [key: string]: any; 
-}
-export interface Inscription { 
-    // Define minimal properties based on usage, or use any
-    [key: string]: any; 
 }
 
 export interface ApiConfig {

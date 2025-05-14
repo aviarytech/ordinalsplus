@@ -5,7 +5,9 @@ export * from './utxo-selection';
 export * from './resource-creation';
 export * from './reveal-transaction';
 export * from './transaction-status-tracker';
+export * from './transaction-signing';
+export * from './transaction-broadcasting';
+export * from './transaction-confirmation';
 
 // Export other relevant transaction functions here if created, e.g.:
-// export * from './transaction-broadcasting'; 
 // export * from './utxo-management'; 

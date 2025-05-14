@@ -50,6 +50,8 @@ export enum ErrorCode {
   INVALID_ADDRESS = 'invalid_address',
   INVALID_TRANSACTION = 'invalid_transaction',
   INVALID_FEE_RATE = 'invalid_fee_rate',
+  INVALID_TRANSACTION_HEX = 'invalid_transaction_hex',
+  INVALID_RESPONSE = 'invalid_response',
   
   // System errors
   UNEXPECTED_ERROR = 'unexpected_error',
@@ -63,20 +65,62 @@ export enum ErrorCode {
   TRANSACTION_TIMEOUT = 'transaction_timeout',
   COMMIT_TX_FAILED = 'commit_tx_failed',
   REVEAL_TX_FAILED = 'reveal_tx_failed',
+  
+  // Transaction broadcasting errors
+  TRANSACTION_BROADCAST_FAILED = 'transaction_broadcast_failed',
+  TRANSACTION_BROADCAST_TIMEOUT = 'transaction_broadcast_timeout',
+  TRANSACTION_BROADCAST_CANCELLED = 'transaction_broadcast_cancelled',
+  NO_ACTIVE_NODES = 'no_active_nodes',
+
+  // Confirmation service specific errors
+  TRANSACTION_ALREADY_WATCHED = 'transaction_already_watched',
+  CONFIGURATION_ERROR = 'configuration_error',
+  EXTERNAL_API_ERROR = 'external_api_error', // More specific than API_ERROR
+  RPC_ERROR = 'rpc_error',
+  TRANSACTION_CONFIRMATION_ERROR = 'transaction_confirmation_error',
 }
 
 /**
- * Structured error object with detailed information
+ * Interface for error constructor parameters
  */
-export interface InscriptionError {
+export interface InscriptionErrorParams {
   code: ErrorCode;
   message: string;
+  details?: unknown;
+  suggestion?: string;
+}
+
+/**
+ * Structured error class with detailed information
+ */
+export class InscriptionError extends Error {
+  code: ErrorCode;
   category: ErrorCategory;
   severity: ErrorSeverity;
   timestamp: Date;
   details?: unknown;
   suggestion?: string;
   recoverable: boolean;
+
+  constructor(params: InscriptionErrorParams) {
+    super(params.message);
+    
+    this.name = 'InscriptionError';
+    this.code = params.code;
+    this.details = params.details;
+    
+    // Get error metadata from mapping
+    const errorMeta = ERROR_MESSAGES[this.code] || ERROR_MESSAGES[ErrorCode.UNEXPECTED_ERROR];
+    
+    this.category = errorMeta.category;
+    this.severity = errorMeta.severity;
+    this.recoverable = errorMeta.recoverable;
+    this.suggestion = params.suggestion || errorMeta.suggestion;
+    this.timestamp = new Date();
+    
+    // Log the error
+    ErrorHandler.getInstance().logError(this);
+  }
 }
 
 /**
@@ -270,6 +314,87 @@ const ERROR_MESSAGES: Record<
     severity: ErrorSeverity.ERROR,
     category: ErrorCategory.WALLET,
   },
+  
+  // Transaction broadcasting errors
+  [ErrorCode.TRANSACTION_BROADCAST_FAILED]: {
+    message: "Failed to broadcast transaction.",
+    suggestion: "Please try again. If the problem persists, check your network connection.",
+    recoverable: true,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.NETWORK,
+  },
+  [ErrorCode.TRANSACTION_BROADCAST_TIMEOUT]: {
+    message: "Transaction broadcast timed out.",
+    suggestion: "The broadcast operation took too long. Please try again.",
+    recoverable: true,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.NETWORK,
+  },
+  [ErrorCode.TRANSACTION_BROADCAST_CANCELLED]: {
+    message: "Transaction broadcast was cancelled.",
+    suggestion: "The broadcast was cancelled. You can try again if needed.",
+    recoverable: true,
+    severity: ErrorSeverity.INFO,
+    category: ErrorCategory.NETWORK,
+  },
+  [ErrorCode.NO_ACTIVE_NODES]: {
+    message: "No active Bitcoin nodes available for broadcasting.",
+    suggestion: "Please try again later or contact support if the issue persists.",
+    recoverable: false,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.SYSTEM,
+  },
+  [ErrorCode.INVALID_TRANSACTION_HEX]: {
+    message: "Invalid transaction hex format.",
+    suggestion: "The transaction format is invalid. Please verify the transaction data.",
+    recoverable: false,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.VALIDATION,
+  },
+  [ErrorCode.INVALID_RESPONSE]: {
+    message: "Invalid response from server.",
+    suggestion: "Received an unexpected response. Please try again.",
+    recoverable: true,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.NETWORK,
+  },
+
+  // Confirmation service specific error messages
+  [ErrorCode.TRANSACTION_ALREADY_WATCHED]: {
+    message: "Transaction is already being watched.",
+    suggestion: "No action needed if this is not causing issues. If re-watching is intended, unwatch first.",
+    recoverable: false,
+    severity: ErrorSeverity.WARNING,
+    category: ErrorCategory.SYSTEM,
+  },
+  [ErrorCode.CONFIGURATION_ERROR]: {
+    message: "Service configuration error.",
+    suggestion: "Please check the service configuration and ensure all required parameters are set correctly.",
+    recoverable: false,
+    severity: ErrorSeverity.CRITICAL,
+    category: ErrorCategory.SYSTEM,
+  },
+  [ErrorCode.EXTERNAL_API_ERROR]: {
+    message: "Error communicating with an external API.",
+    suggestion: "The external service may be temporarily unavailable. Please try again later.",
+    recoverable: true,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.NETWORK,
+  },
+  [ErrorCode.RPC_ERROR]: {
+    message: "Error communicating with the Bitcoin RPC node.",
+    suggestion: "Ensure the RPC node is accessible and configured correctly. Check RPC logs for more details.",
+    recoverable: true,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.NETWORK,
+  },
+  [ErrorCode.TRANSACTION_CONFIRMATION_ERROR]: {
+    message: "An error occurred while trying to confirm the transaction status.",
+    suggestion: "This could be due to network issues or problems with the data provider. Retrying may resolve the issue.",
+    recoverable: true,
+    severity: ErrorSeverity.ERROR,
+    category: ErrorCategory.NETWORK,
+  },
 };
 
 /**
@@ -301,30 +426,18 @@ export class ErrorHandler {
     
     if (!errorInfo) {
       // Fallback for unknown error codes
-      return {
+      return new InscriptionError({
         code,
         message: customMessage || "Unknown error",
-        category: ErrorCategory.SYSTEM,
-        severity: ErrorSeverity.ERROR,
-        timestamp: new Date(),
         details,
-        recoverable: false,
-      };
+      });
     }
     
-    const error: InscriptionError = {
+    const error = new InscriptionError({
       code,
       message: customMessage || errorInfo.message,
-      category: errorInfo.category,
-      severity: errorInfo.severity,
-      timestamp: new Date(),
-      suggestion: errorInfo.suggestion,
-      recoverable: errorInfo.recoverable,
       details,
-    };
-    
-    // Log the error
-    this.logError(error);
+    });
     
     return error;
   }
@@ -332,8 +445,7 @@ export class ErrorHandler {
   /**
    * Log an error for debugging and tracking
    */
-  private logError(error: InscriptionError): void {
-    // Add to internal log
+  public logError(error: InscriptionError): void {
     this.errorLog.push(error);
     
     // Also log to console for debugging

@@ -49,3 +49,4 @@
 *   Prefer Taskmaster MCP tools if available in your environment; otherwise, use the equivalent `task-master` CLI commands.
 *   If at any point a task's requirements are unclear, or if you require additional context or user input, clearly state what information is needed before proceeding.
 *   Always prioritize the creation of maintainable, scalable, and well-documented software, reflecting on these aspects after each unit of work as per step 3.D.1.
+*   Always make sure you are not writing code for something that already exists

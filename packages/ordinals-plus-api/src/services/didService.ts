@@ -1,4 +1,4 @@
-import type { LinkedResource, Inscription } from '../types';
+import type { Inscription, LinkedResource } from '../../../ordinalsplus/src';
 import { 
   createLinkedResourceFromInscription as ordinalsPlusCreateLinkedResourceFromInscription,
   type BitcoinNetwork
