@@ -5,11 +5,10 @@
  * implementing secure communication, authentication, and request/response handling.
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
+import { createFetchClient, FetchRequestConfig, FetchError } from '../utils/fetchUtils';
 import { 
   VerifiableCredential, 
   AcesApiResponse,
-  CredentialProof,
   ProofType
 } from './types';
 
@@ -97,7 +96,7 @@ export interface CheckStatusParams {
  * Client for interacting with the Aces VC API
  */
 export class AcesApiClient {
-  private client: AxiosInstance;
+  private client: ReturnType<typeof createFetchClient>;
   private config: AcesApiClientConfig;
   
   /**
@@ -114,7 +113,7 @@ export class AcesApiClient {
       ...config
     };
     
-    const axiosConfig: AxiosRequestConfig = {
+    const fetchConfig: FetchRequestConfig = {
       baseURL: this.config.apiUrl,
       timeout: this.config.timeout,
       headers: {
@@ -123,7 +122,7 @@ export class AcesApiClient {
       }
     };
     
-    this.client = axios.create(axiosConfig);
+    this.client = createFetchClient(fetchConfig);
   }
   
   /**
@@ -290,17 +289,17 @@ export class AcesApiClient {
    */
   private isRetryableError(error: any): boolean {
     // Network errors and certain HTTP status codes are retryable
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
+    if (this.client.isFetchError(error)) {
+      const fetchError = error as FetchError;
       
       // Network errors
-      if (!axiosError.response) {
+      if (fetchError.isNetworkError || !fetchError.response) {
         return true;
       }
       
       // Retryable status codes: 408 (Request Timeout), 429 (Too Many Requests),
       // 500, 502, 503, 504 (Server Errors)
-      const status = axiosError.response.status;
+      const status = fetchError.status || 0;
       return status === 408 || status === 429 || (status >= 500 && status <= 504);
     }
     
@@ -315,21 +314,21 @@ export class AcesApiClient {
    * @param message - Message describing the operation
    */
   private handleApiError(error: any, message: string): void {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError;
+    if (this.client.isFetchError(error)) {
+      const fetchError = error as FetchError;
       
-      if (axiosError.response) {
+      if (fetchError.response) {
         // API responded with an error status
-        console.error(`${message}: ${axiosError.response.status} - ${JSON.stringify(axiosError.response.data)}`);
-      } else if (axiosError.request) {
+        console.error(`${message}: ${fetchError.status} - ${JSON.stringify(fetchError.data)}`);
+      } else if (fetchError.request) {
         // Request was made but no response received
-        console.error(`${message}: No response received from API`, axiosError.request);
+        console.error(`${message}: No response received from API`, fetchError.request);
       } else {
         // Request setup error
-        console.error(`${message}: Request setup error`, axiosError.message);
+        console.error(`${message}: Request setup error`, fetchError.message);
       }
     } else {
-      // Non-axios error
+      // Non-fetch error
       console.error(`${message}: ${error.message || error}`);
     }
   }

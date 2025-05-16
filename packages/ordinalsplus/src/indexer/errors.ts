@@ -2,7 +2,7 @@
  * Error definitions and handling utilities for Ordinals Indexer
  */
 
-import { AxiosError } from 'axios';
+import { FetchError } from '../utils/fetchUtils';
 
 /**
  * Base error class for all indexer-related errors
@@ -178,27 +178,27 @@ export function transformError(
     return error.addContext(context);
   }
   
-  // Handle Axios errors
-  if (isAxiosError(error)) {
-    const statusCode = error.response?.status;
-    const responseData = error.response?.data;
-    
-    // Network error (no response)
-    if (!error.response) {
+  // Handle Fetch errors
+  if (isFetchError(error)) {
+    // Handle network errors (no response or explicit network error)
+    if (error.isNetworkError || !error.response) {
       return new NetworkError(
         `Network error: ${error.message}`, 
         { 
           cause: error, 
           context: { 
             ...context,
-            config: error.config,
-            code: error.code
+            url: error.request?.url,
+            method: error.request?.method
           }
         }
       );
     }
     
     // API error (with response)
+    const statusCode = error.status;
+    const responseData = error.data;
+    
     return new IndexerAPIError(
       `API error: ${error.message}`,
       {
@@ -208,8 +208,8 @@ export function transformError(
           ...context,
           statusCode,
           responseData,
-          url: error.config?.url,
-          method: error.config?.method
+          url: error.request?.url,
+          method: error.request?.method
         }
       }
     );
@@ -246,10 +246,10 @@ export function transformError(
 }
 
 /**
- * Type guard for Axios errors
+ * Type guard for Fetch errors
  */
-function isAxiosError(error: any): error is AxiosError {
-  return error && error.isAxiosError === true;
+function isFetchError(error: any): error is FetchError {
+  return error && error.isNetworkError !== undefined;
 }
 
 /**

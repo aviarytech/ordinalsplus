@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog } from 'av1-c';
 import { ApiProviderType, ApiServiceConfig } from '../services/ApiServiceProvider';
-import axios from 'axios';
+import fetchClient from '../utils/fetchUtils';
 
 interface ApiProvider {
   available: boolean;
@@ -45,7 +45,7 @@ const ApiConfigForm: React.FC<ApiConfigFormProps> = ({
       const fetchProviders = async () => {
         try {
           setLoading(true);
-          const response = await axios.get<ApiConfigResponse>('http://localhost:3000/api/config');
+          const response = await fetchClient.get<ApiConfigResponse>('http://localhost:3000/api/config');
           setAvailableProviders(response.data.providers);
           
           // If current provider is not available, switch to an available one
@@ -101,7 +101,7 @@ const ApiConfigForm: React.FC<ApiConfigFormProps> = ({
   const fetchApiConfig = async () => {
     try {
       setLoading(true);
-      const response = await axios.get<ApiConfigResponse>('http://localhost:3000/api/config');
+      const response = await fetchClient.get<ApiConfigResponse>('http://localhost:3000/api/config');
       setAvailableProviders(response.data.providers);
       
       // If current provider is not available, switch to an available one

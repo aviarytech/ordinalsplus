@@ -1,9 +1,11 @@
 import { Elysia } from 'elysia';
 import { inscriptionRouter } from './inscriptionRouter';
 import { resourceRouter } from './resourceRouter';
+import { resourceInscriptionRouter } from './resourceInscriptionRouter';
 import { exploreRouter } from './exploreRouter';
 import { utxoRouter } from './utxoRouter';
 import { transactionRouter } from './transactionRouter';
+import { verificationRouter } from './verificationRouter';
 
 // Set up basic routes
 export const setupBaseRoutes = (app: Elysia) => {
@@ -38,7 +40,9 @@ export const registerRouters = (app: Elysia) => {
     return baseApp
         .use(inscriptionRouter)
         .use(resourceRouter)
+        .use(resourceInscriptionRouter)
         .use(exploreRouter)
         .use(utxoRouter)
-        .use(transactionRouter);
+        .use(transactionRouter)
+        .use(verificationRouter);
 }; 

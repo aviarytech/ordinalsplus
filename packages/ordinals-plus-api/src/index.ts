@@ -1,5 +1,6 @@
 import { configureApi, PORT, HOST } from './config/apiConfig';
 import { registerRouters } from './routers';
+import { vcApiRoutes } from './routes/vcApiRoutes';
 
 /**
  * Main API entry point
@@ -17,6 +18,9 @@ const app = configureApi();
 
 // Register all routers for different API endpoints
 const apiWithRoutes = registerRouters(app);
+
+// Register VC API routes
+apiWithRoutes.use(vcApiRoutes);
 
 // Start the server
 console.log(`API starting on ${HOST}:${PORT}`);

@@ -22,6 +22,6 @@ export const defaultKeyManager = new KeyManager();
 // Re-export from key-pair-generator for backward compatibility
 export { 
   generateEd25519KeyPair,
-  generateSecp256k1KeyPair, 
-  generateSchnorrKeyPair
-} from './key-compatibility'; 
+  generateSecp256k1KeyPair,
+  generateSchnorrKeyPair,
+} from './key-compatibility';

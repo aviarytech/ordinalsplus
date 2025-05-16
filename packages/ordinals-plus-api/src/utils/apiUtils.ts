@@ -5,8 +5,8 @@
  * and circuit breaker pattern implementation for API clients.
  */
 
-import axios, { AxiosError } from 'axios';
-import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
+import fetchClient, { createFetchClient } from './fetchUtils';
+import type { FetchError, FetchRequestConfig, FetchResponse } from './fetchUtils';
 
 // ===========================================
 // Error Classes
@@ -210,73 +210,51 @@ export async function withRetry<T>(
 }
 
 // ===========================================
-// Axios Error Handling
+// Fetch Error Handling
 // ===========================================
 
 /**
- * Classify an Axios error into our custom error types
+ * Classify a Fetch error into our custom error types
  * 
  * @param error The error to classify
  * @param defaultMessage Default message to use if none can be extracted
  * @returns A classified ApiError
  */
-export function classifyAxiosError(error: unknown, defaultMessage = 'API request failed'): ApiError {
-  if (axios.isAxiosError(error)) {
-    const axiosError = error as AxiosError;
+export function classifyFetchError(error: unknown, defaultMessage = 'API request failed'): ApiError {
+  if (fetchClient.isFetchError(error)) {
+    const fetchError = error as FetchError;
     
-    // Network errors (no response received)
-    if (!axiosError.response) {
-      return new NetworkError(
-        axiosError.message || 'Network connection error',
-        axiosError
-      );
+    if (fetchError.response) {
+      // API responded with an error status
+      const status = fetchError.status || 0;
+      const data = fetchError.data;
+      
+      // Extract error message from response data if possible
+      const message = extractErrorMessage(data) || fetchError.message || defaultMessage;
+      
+      // Classify by status code
+      if (status === 401 || status === 403) {
+        return new AuthenticationError(message, error);
+      } else if (status === 400 || status === 422) {
+        return new ValidationError(message, error);
+      } else if (status === 429) {
+        return new RateLimitError(message, error);
+      } else if (status >= 500) {
+        return new ServerError(message, error);
+      }
+      
+      // Default case for other status codes
+      return new ApiError(message, `HTTP_${status}`, error);
+    } else if (fetchError.request) {
+      // Request was made but no response received (network error)
+      return new NetworkError(`Network error: ${fetchError.message || defaultMessage}`, error);
+    } else if (fetchError.isNetworkError) {
+      return new NetworkError(`Network error: ${fetchError.message || defaultMessage}`, error);
     }
-    
-    const { status, data } = axiosError.response;
-    const errorMessage = extractErrorMessage(data) || axiosError.message || defaultMessage;
-    
-    // Authentication errors (401, 403)
-    if (status === 401 || status === 403) {
-      return new AuthenticationError(
-        `Authentication failed: ${errorMessage}`,
-        axiosError
-      );
-    }
-    
-    // Validation errors (400, 422)
-    if (status === 400 || status === 422) {
-      return new ValidationError(
-        `Validation failed: ${errorMessage}`,
-        axiosError
-      );
-    }
-    
-    // Rate limiting (429)
-    if (status === 429) {
-      return new RateLimitError(
-        `Rate limit exceeded: ${errorMessage}`,
-        axiosError
-      );
-    }
-    
-    // Server errors (500+)
-    if (status >= 500) {
-      return new ServerError(
-        `Server error: ${errorMessage}`,
-        axiosError
-      );
-    }
-    
-    // Other HTTP errors
-    return new ApiError(
-      `HTTP error ${status}: ${errorMessage}`,
-      `HTTP_${status}`,
-      axiosError
-    );
   }
   
-  // Non-Axios errors
   if (error instanceof Error) {
+    // Non-Fetch errors
     return new ApiError(
       error.message || defaultMessage,
       'UNKNOWN_ERROR',
@@ -532,8 +510,11 @@ export class CircuitBreaker {
 }
 
 // ===========================================
-// Create Axios Client with Retry and Circuit Breaker
+// Create Fetch Client with Retry and Circuit Breaker
 // ===========================================
+
+// Node environments might need to import fetch if not available globally
+// import fetch from 'node-fetch';
 
 /**
  * Options for creating a resilient API client
@@ -541,7 +522,7 @@ export class CircuitBreaker {
 export interface ResilientClientOptions {
   /** Base URL for API requests */
   baseURL: string;
-  /** Optional API key for authentication */
+  /** API key for authentication */
   apiKey?: string;
   /** Request timeout in milliseconds */
   timeout?: number;
@@ -554,14 +535,14 @@ export interface ResilientClientOptions {
 }
 
 /**
- * Creates an Axios client with retry and circuit breaker capabilities
+ * Creates an Fetch client with retry and circuit breaker capabilities
  * 
  * @param options Client configuration
- * @returns Configured Axios instance
+ * @returns Configured Fetch instance
  */
-export function createResilientClient(options: ResilientClientOptions): AxiosInstance {
-  // Create base axios config
-  const axiosConfig: AxiosRequestConfig = {
+export function createResilientClient(options: ResilientClientOptions) {
+  // Create base fetch config
+  const fetchConfig: FetchRequestConfig = {
     baseURL: options.baseURL,
     timeout: options.timeout || 30000,
     headers: {
@@ -572,14 +553,14 @@ export function createResilientClient(options: ResilientClientOptions): AxiosIns
   
   // Add API key if provided
   if (options.apiKey) {
-    axiosConfig.headers = {
-      ...axiosConfig.headers,
+    fetchConfig.headers = {
+      ...fetchConfig.headers,
       'Authorization': `Bearer ${options.apiKey}`
     };
   }
   
-  // Create the axios instance
-  const client = axios.create(axiosConfig);
+  // Create the fetch client instance
+  const client = createFetchClient(fetchConfig);
   
   // Initialize circuit breaker
   const circuitBreakerOptions: CircuitBreakerOptions = {
@@ -594,11 +575,13 @@ export function createResilientClient(options: ResilientClientOptions): AxiosIns
     ...options.retry
   };
   
-  // Create request interceptor for logging
-  client.interceptors.request.use(config => {
+  // We can't use interceptors with our fetch client, but we can wrap the methods
+  // to add logging functionality
+  const originalRequest = client.request;
+  client.request = async <T = any>(config: FetchRequestConfig): Promise<FetchResponse<T>> => {
     // Log request details (sanitizing sensitive headers)
     const sanitizedHeaders = { ...config.headers };
-    if (sanitizedHeaders.Authorization) {
+    if (sanitizedHeaders && sanitizedHeaders.Authorization) {
       sanitizedHeaders.Authorization = '**REDACTED**';
     }
     
@@ -607,46 +590,42 @@ export function createResilientClient(options: ResilientClientOptions): AxiosIns
       params: config.params
     });
     
-    return config;
-  });
-  
-  // Create response interceptor for logging and error handling
-  client.interceptors.response.use(
-    response => {
+    try {
+      const response = await originalRequest(config);
+      
       // Log successful response
       console.log(`Response: ${response.status} ${response.config.url}`, {
         data: response.data
       });
       
       return response;
-    },
-    async error => {
+    } catch (error) {
       // Log error response
-      console.error(`Error: ${error.message}`, {
-        config: error.config,
-        response: error.response
+      console.error(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, {
+        config,
+        error
       });
       
       // Classify the error
-      const apiError = classifyAxiosError(error);
+      const apiError = classifyFetchError(error);
       
       // Re-throw the classified error
       throw apiError;
     }
-  );
+  };
   
-  // Return an enhanced client with circuit breaker and retry capabilities
-  return {
-    ...client,
-    async request<T = any>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
-      // Use circuit breaker to protect the request
-      return circuitBreaker.execute(async () => {
-        // Use retry logic for the request
-        return withRetry(
-          async () => client.request<T>(config),
-          retryOptions
-        );
-      });
-    }
-  } as AxiosInstance;
+  // Add circuit breaker and retry capabilities
+  const wrappedRequest = client.request;
+  client.request = async <T = any>(config: FetchRequestConfig): Promise<FetchResponse<T>> => {
+    // Use circuit breaker to protect the request
+    return circuitBreaker.execute(async () => {
+      // Use retry logic for the request
+      return withRetry(
+        async () => wrappedRequest<T>(config),
+        retryOptions
+      );
+    });
+  };
+  
+  return client;
 } 

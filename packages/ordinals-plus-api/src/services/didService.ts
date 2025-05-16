@@ -10,7 +10,7 @@ export const DID_PREFIX = 'did';
 
 // Regular expression to match BTCO DIDs
 // Format: did:btco:<sat>/<index>
-const DID_REGEX = /^did:btco:(\d+)\/(\d+)$/i;
+export const DID_REGEX = /^did:btco:(\d+)\/(\d+)$/i;
 
 /**
  * DID Service for DID-related operations

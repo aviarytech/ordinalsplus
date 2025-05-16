@@ -1,0 +1,129 @@
+.collection-verification-details {
+  background-color: var(--color-background-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.collection-verification-details.expanded {
+  max-height: 800px;
+}
+
+.collection-verification-details.collapsed {
+  max-height: 60px;
+  overflow: hidden;
+}
+
+.toggle-details-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.toggle-details-button:hover {
+  color: var(--color-primary);
+}
+
+.toggle-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+}
+
+.toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.verification-details-content {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.verification-details-content h4 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.detail-row {
+  display: flex;
+  margin-bottom: 12px;
+  align-items: baseline;
+}
+
+.detail-label {
+  flex: 0 0 140px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.detail-value {
+  flex: 1;
+  word-break: break-all;
+}
+
+.detail-value.link {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.detail-value.link:hover {
+  text-decoration: underline;
+}
+
+.detail-value.verified {
+  color: var(--color-success);
+  font-weight: 500;
+}
+
+.detail-value.pending {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+.detail-value.failed {
+  color: var(--color-error);
+  font-weight: 500;
+}
+
+.detail-value.unverified {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.verification-message {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 6px;
+  background-color: var(--color-background-tertiary);
+  font-size: 0.9rem;
+}
+
+.verification-message.error {
+  background-color: rgba(var(--color-error-rgb), 0.1);
+  border-left: 4px solid var(--color-error);
+}
+
+@media (max-width: 768px) {
+  .detail-row {
+    flex-direction: column;
+  }
+  
+  .detail-label {
+    flex: 0 0 auto;
+    margin-bottom: 4px;
+  }
+}

@@ -1,91 +1,123 @@
 export * from './did';
-// Assuming ./resource.ts and ./provider.ts exist or will be created
-export * from './resource'; 
+export * from './resource';
 export * from './ordinals';
-export * from './indexer'; // Add export for indexer types
-// export * from './provider';
+export * from './indexer';
+// export * from './provider'; // Will be implemented later if needed
 
 // Define supported Bitcoin networks
 export type BitcoinNetwork = 'mainnet' | 'signet' | 'testnet';
 
-// TODO: Consider adding 'testnet', 'regtest' if needed in the future
+// TODO: Consider adding 'regtest' if needed in the future
 
+/**
+ * Represents an ordinal inscription
+ */
 export interface Inscription {
-    id: string;
-    number?: number;
-    sat: number;
-    sat_ordinal?: string;
-    content_type?: string;
-    content_url: string;
-    timestamp?: number; // Timestamp of when the inscription was created
-    metadata?: Uint8Array; // CBOR encoded metadata
+    id: string;                 // Inscription ID (txid:vout)
+    number?: number;            // Inscription number
+    sat: number;                // Satoshi number
+    sat_ordinal?: string;       // Ordinal representation of the sat
+    content_type?: string;      // MIME type of the content
+    content_url: string;        // URL to fetch the content
+    timestamp?: number;         // Timestamp of when the inscription was created
+    metadata?: Uint8Array;      // CBOR encoded metadata
 }
 
+/**
+ * Parsed components of a resource identifier from a DID URL
+ * Format: did:btco:<satNumber>/resources/<index>
+ */
 export interface ParsedResourceId {
-    did: string;
-    satNumber: number;
-    index?: number;
+    did: string;                // The full DID
+    satNumber: number;          // The sat number from the DID
+    index?: number;             // Optional resource index
 }
 
+/**
+ * Represents a resource linked to a DID
+ * This is the basic interface used throughout the system
+ */
 export interface LinkedResource {
-    id: string;
-    type: string;
-    inscriptionId: string;
-    didReference: string;
-    contentType: string;
-    content_url: string;
-    sat: number;
-    inscriptionNumber?: number;
+    id: string;                 // Resource ID (usually in format did:btco:<satNumber>/resources/<index>)
+    type: string;               // Resource type (schema, image, document, etc.)
+    inscriptionId: string;      // ID of the inscription containing this resource
+    didReference: string;       // The DID this resource is linked to
+    contentType: string;        // MIME type of the content
+    content_url: string;        // URL to fetch the content
+    sat: number;                // Satoshi number where this resource is inscribed
+    inscriptionNumber?: number; // Inscription number (if available)
+    size?: number;              // Size of the resource in bytes
+    createdAt?: string;         // ISO timestamp of creation
+    updatedAt?: string;         // ISO timestamp of last update
+    metadata?: Record<string, any>; // Additional metadata for the resource
 }
 
+/**
+ * Information about a resource, typically used in API responses
+ */
 export interface ResourceInfo {
-    id: string;
-    type: string;
-    contentType: string;
-    createdAt: string;
-    updatedAt: string;
-    content_url: string;
-    inscriptionId?: string;
-    didReference?: string;
-    sat?: number;
+    id: string;                 // Resource ID
+    type: string;               // Resource type
+    contentType: string;        // MIME type of the content
+    createdAt: string;          // ISO timestamp of creation
+    updatedAt: string;          // ISO timestamp of last update
+    content_url: string;        // URL to fetch the content
+    inscriptionId?: string;     // ID of the inscription containing this resource
+    didReference?: string;      // The DID this resource is linked to
+    sat?: number;               // Satoshi number where this resource is inscribed
+    size?: number;              // Size of the resource in bytes
+    name?: string;              // Optional name of the resource
+    description?: string;       // Optional description of the resource
+    index?: number;             // Index of this resource within the DID's resources
 }
 
-// Add a standard UTXO type definition
+/**
+ * Standard UTXO type definition used across the system
+ */
 export interface Utxo {
-    txid: string;
-    vout: number;
-    value: number; // Amount in satoshis
-    scriptPubKey?: string; // Hex-encoded script public key
-    status?: any; // Optional status field from block explorer APIs
-    script?: { // Script information including address
-        type?: string;
-        address?: string;
+    txid: string;               // Transaction ID
+    vout: number;               // Output index
+    value: number;              // Amount in satoshis
+    scriptPubKey?: string;      // Hex-encoded script public key
+    status?: any;               // Optional status field from block explorer APIs
+    script?: {                  // Script information including address
+        type?: string;          // Script type
+        address?: string;       // Associated address
     }
 }
 
-// Parameters for resource creation transaction
+/**
+ * Parameters for resource creation transaction
+ */
 export interface ResourceCreationParams {
     // Resource content information
-    content: string | Buffer;
-    contentType: string;
-    resourceType: string;
+    content: string | Buffer;   // The content to inscribe
+    contentType: string;        // MIME type of the content
+    resourceType: string;       // Type of resource (schema, image, document, etc.)
     
     // Wallet and transaction details
-    publicKey: Buffer | Uint8Array;
-    changeAddress: string;
-    recipientAddress: string;
-    utxos: Utxo[];
-    feeRate: number;
-    network: BitcoinNetwork;
+    publicKey: Buffer | Uint8Array; // Public key for transaction signing
+    changeAddress: string;      // Address for change outputs
+    recipientAddress: string;   // Address to receive the inscription
+    utxos: Utxo[];              // UTXOs to use for funding
+    feeRate: number;            // Fee rate in sats/vB
+    network: BitcoinNetwork;    // Bitcoin network to use
     
     // Optional parameters
-    metadata?: Record<string, string>;
+    metadata?: Record<string, any>; // Additional metadata for the resource
+    parentDid?: string;         // Parent DID to link this resource to
+    resourceIndex?: number;     // Optional specific index for this resource
+    label?: string;             // Optional human-readable label
+    description?: string;       // Optional description
 }
 
-// Result of resource creation transaction
+/**
+ * Result of resource creation transaction
+ */
 export interface ResourceCreationResult {
-    commitPsbtBase64: string;
-    revealPsbtBase64: string;
-    estimatedFees: number;
-    resourceId?: string;
+    commitPsbtBase64: string;   // Base64-encoded commit PSBT
+    revealPsbtBase64: string;   // Base64-encoded reveal PSBT
+    estimatedFees: number;      // Total estimated fees in satoshis
+    resourceId?: string;        // ID of the created resource (if available)
+    didUrl?: string;            // Full DID URL for the resource (if available)
 }

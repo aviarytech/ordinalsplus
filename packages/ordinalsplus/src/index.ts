@@ -13,11 +13,6 @@ export {
     KeyManager,
     defaultKeyManager,
     KeyPairGenerator,
-    KeyType,
-    KeyPair,
-    Secp256k1KeyPair,
-    SchnorrKeyPair,
-    ExtendedEd25519KeyPair,
     generateEd25519KeyPair,
     generateSecp256k1KeyPair,
     generateSchnorrKeyPair
@@ -38,7 +33,6 @@ export {
     isValidBtcoDid, 
     isValidResourceId, 
     parseBtcoDid, 
-    parseResourceId, 
     extractSatNumber, 
     extractIndexFromInscription, 
     BTCO_METHOD, 
@@ -48,6 +42,18 @@ export {
 
 export * from './utils/address-utils';
 export { NETWORKS, getScureNetwork } from './utils/networks';
+
+// --- Resource Utility Exports ---
+export {
+    validateResource,
+    parseResourcePath,
+    parseResourceId,
+    createResourceId,
+    getValidationRules,
+    getMimeTypeFromExtension,
+    getResourceTypeFromMimeType,
+    MAX_RESOURCE_SIZE
+} from './utils/resource-utils';
 
 // --- PSBT Utility Exports ---
 export { 

@@ -6,15 +6,13 @@
  */
 
 import { 
-  KeyPairGenerator, 
-  ExtendedEd25519KeyPair, 
+  KeyPairGenerator,
   Secp256k1KeyPair, 
   SchnorrKeyPair,
   KeyGenerationOptions
 } from './key-pair-generator';
 import { BitcoinNetwork } from '../types';
 import { Ed25519KeyPair } from '../utils/keyUtils';
-import { publicKeyToMultibase } from '../utils/keyUtils';
 
 /**
  * Generates an Ed25519 key pair, compatible with the existing implementation

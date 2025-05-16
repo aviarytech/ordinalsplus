@@ -1,7 +1,5 @@
 import { DidDocument } from '../types/did';
 import { BTCO_METHOD, ERROR_CODES as ORIGINAL_ERROR_CODES } from '../utils/constants';
-import { isValidBtcoDid, parseBtcoDid } from '../utils/validators';
-import { validateDidDocument, deserializeDidDocument } from './did-document';
 import { BitcoinNetwork } from '../types';
 import { ResourceProvider } from '../resources/providers/types';
 import { ProviderFactory, ProviderType } from '../resources/providers/provider-factory';
@@ -9,11 +7,16 @@ import { extractCborMetadata } from '../utils/cbor-utils';
 import { verifyTamperProtection } from '../utils/security';
 import { AuditCategory, AuditSeverity, logDidDocumentResolution, logSecurityEvent } from '../utils/audit-logger';
 import { checkRateLimit } from '../utils/security';
+import { resolveResource } from './did-resource-resolver';
+import { validateDidDocument, deserializeDidDocument } from './did-document';
+import { isValidBtcoDid, parseBtcoDid } from '../utils/validators';
 
 // Additional error codes for DID resolution
 export const ADDITIONAL_ERROR_CODES = {
   RATE_LIMIT_EXCEEDED: 'rateLimitExceeded',
-  UNTRUSTED: 'untrustedDocument'
+  UNTRUSTED: 'untrustedDocument',
+  INVALID_METHOD: 'invalidMethod',
+  RESOURCE_NOT_FOUND: 'resourceNotFound'
 } as const;
 
 // Combine original and additional error codes
@@ -57,6 +60,11 @@ export interface DidResolutionOptions {
   noCache?: boolean;
   
   /**
+   * Cache TTL in milliseconds (default: 5 minutes)
+   */
+  cacheTtl?: number;
+  
+  /**
    * Accept resolution of DID Documents without tamper protection
    */
   acceptUntrusted?: boolean;
@@ -83,6 +91,26 @@ export interface DidResolutionOptions {
 }
 
 /**
+ * Resource information for DID URL resolution
+ */
+export interface ResourceInfo {
+  /**
+   * The resource identifier
+   */
+  id: string;
+  
+  /**
+   * The resource type
+   */
+  type: string;
+  
+  /**
+   * The content type of the resource
+   */
+  contentType: string;
+}
+
+/**
  * DID Resolution result metadata
  */
 export interface DidResolutionMetadata {
@@ -102,6 +130,11 @@ export interface DidResolutionMetadata {
   error?: string;
   
   /**
+   * Error message if resolution failed
+   */
+  message?: string;
+  
+  /**
    * The version ID of the resolved DID document
    */
   versionId?: string;
@@ -115,6 +148,11 @@ export interface DidResolutionMetadata {
    * Whether this is the latest version of the DID document
    */
   isLatest?: boolean;
+  
+  /**
+   * Resource information when resolving a DID URL with resource path
+   */
+  resourceInfo?: ResourceInfo;
 }
 
 /**
@@ -202,9 +240,19 @@ export interface ParsedDidUrl {
   fragment?: string;
   
   /**
-   * The version index parsed from the path
+   * The version index if present in the path
    */
   versionIndex?: number;
+  
+  /**
+   * The resource path segments if present
+   */
+  resourcePath?: string[];
+  
+  /**
+   * The resource index if present in the path
+   */
+  resourceIndex?: number;
 }
 
 // Simple in-memory cache for DID resolution results
@@ -273,8 +321,62 @@ export class DidResolver {
     }
   }
   
+
+
   /**
-   * Resolves a DID to a DID document
+   * Parses a DID URL into its components
+   * 
+   * @param didUrl - The DID URL to parse
+   * @returns Parsed DID URL
+   */
+  private parseDidUrl(didUrl: string): ParsedDidUrl | null {
+    try {
+      // Basic DID URL regex
+      const didUrlRegex = /^did:([a-z0-9]+):([a-zA-Z0-9.%-]+)(\/(.*))?(\?(.*))?$/;
+      const match = didUrl.match(didUrlRegex);
+      
+      if (!match) {
+        return null;
+      }
+      
+      const [, method, id, , path, , query] = match;
+      const did = `did:${method}:${id}`;
+      
+      // Parse resource path if present
+      let resourcePath: string[] | undefined;
+      let resourceIndex: number | undefined;
+      
+      if (path) {
+        const pathParts = path.split('/');
+        
+        // Check if this is a resource path
+        if (pathParts[0] === 'resources' && pathParts.length > 1) {
+          resourcePath = pathParts;
+          resourceIndex = parseInt(pathParts[1], 10);
+          
+          // If resourceIndex is NaN, set it to undefined
+          if (isNaN(resourceIndex)) {
+            resourceIndex = undefined;
+          }
+        }
+      }
+      
+      return {
+        method,
+        id,
+        did,
+        path,
+        query,
+        resourcePath,
+        resourceIndex
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Resolves a DID to a DID document or a linked resource
    * 
    * @param didUrl - The DID URL to resolve
    * @param options - Resolution options
@@ -301,22 +403,26 @@ export class DidResolver {
       // Parse the DID URL
       const parsed = this.parseDidUrl(didUrl);
       if (!parsed) {
-        // Log invalid DID URL if auditing is enabled
-        if (options.enableAudit) {
-          await logSecurityEvent(
-            'invalid_did_url',
-            AuditSeverity.WARNING,
-            didUrl,
-            options.actor,
-            { error: 'Invalid DID URL format' }
-          );
-        }
         return this.createErrorResult(ERROR_CODES.INVALID_DID, 'Invalid DID URL format');
       }
       
+      // Check if this is a resource resolution request
+      if (parsed.resourcePath && parsed.resourcePath[0] === 'resources' && parsed.resourceIndex !== undefined) {
+        // Delegate to the external resolveResource function
+        return await resolveResource(parsed, options, this.network);
+      }
+    
       // Check if DID method is supported
       if (parsed.method !== BTCO_METHOD) {
         return this.createErrorResult(ERROR_CODES.METHOD_NOT_SUPPORTED, `DID method '${parsed.method}' is not supported`);
+      }
+      
+      // Check for valid BTCO DID format
+      if (!isValidBtcoDid(parsed.did)) {
+        return this.createErrorResult(
+          ERROR_CODES.INVALID_DID,
+          'Invalid BTCO DID format'
+        );
       }
       
       // Create cache key based on the DID and version path (if any)
@@ -522,43 +628,7 @@ export class DidResolver {
     }
   }
   
-  /**
-   * Parses a DID URL into its components
-   * 
-   * @param didUrl - The DID URL to parse
-   * @returns The parsed DID URL or null if invalid
-   */
-  private parseDidUrl(didUrl: string): ParsedDidUrl | null {
-    // Regular expression to parse DID URL components
-    // did:method:id[/path][?query][#fragment]
-    const didUrlRegex = /^did:([a-z0-9]+):([a-zA-Z0-9.%-]+)(\/[^?#]*)?([\?][^#]*)?(#.*)?$/;
-    
-    const match = didUrlRegex.exec(didUrl);
-    if (!match) return null;
-    
-    const [, method, id, path, query, fragment] = match;
-    const did = `did:${method}:${id}`;
-    
-    // Parse version index from path if present
-    let versionIndex: number | undefined = undefined;
-    if (path) {
-      const pathWithoutSlash = path.startsWith('/') ? path.substring(1) : path;
-      const pathIndex = parseInt(pathWithoutSlash, 10);
-      if (!isNaN(pathIndex) && pathIndex >= 0) {
-        versionIndex = pathIndex;
-      }
-    }
-    
-    return {
-      method,
-      id,
-      did,
-      path: path || undefined,
-      query: query || undefined,
-      fragment: fragment || undefined,
-      versionIndex
-    };
-  }
+
   
   /**
    * Creates an error result for DID resolution
@@ -571,17 +641,10 @@ export class DidResolver {
     return {
       didResolutionMetadata: {
         error: code,
-        contentType: 'application/did+json'
+        contentType: 'application/did+json',
+        message
       },
       didDocument: null,
       didDocumentMetadata: {}
     };
-  }
-  
-  /**
-   * Clears the cache
-   */
-  clearCache(): void {
-    this.cache.clear();
-  }
-} 
+  } }

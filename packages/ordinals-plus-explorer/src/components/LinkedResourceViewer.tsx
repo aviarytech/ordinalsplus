@@ -3,9 +3,10 @@ import { formatTimeAgo } from '../utils/date';
 import { truncateMiddle } from '../utils/string';
 import JSONFormatter from './JSONFormatter';
 import { Copy, ExternalLink, Clock, Download } from 'lucide-react';
-import { useApiService } from '../hooks/useApiService';
 import ApiServiceProvider from '../services/ApiServiceProvider';
 import { LinkedResource } from 'ordinalsplus';
+import { VerificationComponent } from './verification';
+import { VerificationService } from '../services/verificationService';
 // Component-specific interface that matches what we're actually using
 interface LinkedResourceViewProps {
   resource: LinkedResource; // Use the project's LinkedResource type
@@ -24,8 +25,10 @@ const LinkedResourceViewer: React.FC<LinkedResourceViewProps> = ({
   const [fetchedText, setFetchedText] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState<boolean>(false);
   const [textError, setTextError] = useState<boolean>(false);
-  const apiService = useApiService();
-  const apiServiceProvider = ApiServiceProvider.getInstance();
+  const [verificationService] = useState<VerificationService>(() => {
+    const apiServiceInstance = ApiServiceProvider.getInstance();
+    return new VerificationService(apiServiceInstance, { enableDebugLogging: false });
+  });
 
   const isJsonContent = resource.contentType?.includes('json') || false;
 
@@ -255,7 +258,25 @@ const LinkedResourceViewer: React.FC<LinkedResourceViewProps> = ({
       case 'credential':
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
       case 'verification':
-        return 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300';
+        return (
+          <div className="flex flex-col space-y-4 md:space-y-6 mt-6">
+            {resource.inscriptionId && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+                <h3 className="text-lg font-medium mb-4">Verification</h3>
+                <VerificationComponent
+                  inscriptionId={resource.inscriptionId}
+                  verificationService={verificationService}
+                  autoVerify={true}
+                />
+              </div>
+            )}
+            
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+              <h3 className="text-lg font-medium mb-4">Resource Content</h3>
+              {renderResourceContent()}
+            </div>
+          </div>
+        );
       case 'document':
         return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300';
       case 'identity':

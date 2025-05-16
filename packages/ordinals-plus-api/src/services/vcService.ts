@@ -56,19 +56,23 @@ interface DIDResolutionResult {
  * Configuration for the VC Service
  */
 export interface VCServiceConfig {
-  /** Aces API URL */
-  acesApiUrl: string;
-  /** Aces API key */
-  acesApiKey: string;
-  /** Platform DID */
+  /** API endpoint URL for the VC service */
+  apiUrl: string;
+  /** Authentication token or API key */
+  apiKey: string;
+  /** Platform DID used for issuing credentials */
   platformDid: string;
+  /** Provider ID from the configuration */
+  providerId?: string;
+  /** Provider name for display purposes */
+  providerName?: string;
   /** Request timeout in milliseconds */
   timeout?: number;
-  /** Whether to enable logging */
+  /** Whether to enable debug logging */
   enableLogging?: boolean;
-  /** Maximum retries for API calls */
+  /** Maximum number of retry attempts for API calls */
   maxRetries?: number;
-  /** Credential repository settings */
+  /** Configuration for credential repository */
   credentialRepository?: {
     /** Whether to enable encryption for stored credentials */
     enableEncryption?: boolean;
@@ -81,13 +85,20 @@ export interface VCServiceConfig {
   };
 }
 
+// Import the VC API provider configuration
+import { getDefaultVCApiProvider, getVCApiProviderById } from '../config/vcApiConfig';
+
 /**
  * Default configuration values
  */
 const DEFAULT_CONFIG: Partial<VCServiceConfig> = {
-  timeout: 30000,
-  enableLogging: true,
-  maxRetries: 3
+  timeout: 30000, // 30 seconds
+  enableLogging: false,
+  maxRetries: 3,
+  credentialRepository: {
+    enableEncryption: false,
+    autoSaveIntervalMs: 0 // Disable auto-save by default
+  }
 };
 
 /**
@@ -462,6 +473,42 @@ export class VCService {
   private client: ReturnType<typeof createResilientClient>;
   private circuitBreaker: CircuitBreaker;
   private credentialRepository: CredentialRepository;
+  private resourceCache: Map<string, { data: any; timestamp: number }> = new Map();
+  
+  /**
+   * Fetches a JSON resource from a given URL with caching.
+   * This will be used for fetching revocation lists, status list credentials, etc.
+   * @param url The URL to fetch the JSON resource from.
+   * @param cacheTtlMs Optional TTL for cache entries in milliseconds (default: 5 minutes)
+   * @returns The fetched JSON data or null if an error occurs.
+   */
+  private async fetchCachedJsonResource(url: string, cacheTtlMs: number = 5 * 60 * 1000): Promise<any | null> {
+    // Check cache first
+    const cachedEntry = this.resourceCache.get(url);
+    const now = Date.now();
+    
+    // If we have a valid cached entry that hasn't expired, return it
+    if (cachedEntry && (now - cachedEntry.timestamp) < cacheTtlMs) {
+      if (this.config.enableLogging) {
+        console.log(`Cache hit for resource: ${url}`);
+      }
+      return cachedEntry.data;
+    }
+    
+    // If cache miss or expired, fetch from network
+    if (this.config.enableLogging) {
+      console.log(`Cache miss for resource: ${url}, fetching from network`);
+    }
+    
+    const data = await fetchJsonResource(url, this.client);
+    
+    // Cache the result if it's not null
+    if (data) {
+      this.resourceCache.set(url, { data, timestamp: now });
+    }
+    
+    return data;
+  }
   
   /**
    * Create a new VCService instance
@@ -473,8 +520,20 @@ export class VCService {
     private didService: DIDService,
     config: Partial<VCServiceConfig>
   ) {
+    // If a providerId is specified, get that provider's configuration
+    let providerConfig = config.providerId ? 
+      getVCApiProviderById(config.providerId) : 
+      getDefaultVCApiProvider();
+    
+    // Merge configurations with priority: provided config > provider config > default config
     this.config = {
       ...DEFAULT_CONFIG,
+      // Apply provider config values
+      apiUrl: providerConfig.url,
+      apiKey: providerConfig.authToken,
+      providerName: providerConfig.name,
+      providerId: providerConfig.id,
+      // Override with any explicitly provided config values
       ...config
     } as VCServiceConfig;
     
@@ -487,8 +546,8 @@ export class VCService {
     
     // Create resilient API client
     this.client = createResilientClient({
-      baseURL: this.config.acesApiUrl,
-      apiKey: this.config.acesApiKey,
+      baseURL: this.config.apiUrl,
+      apiKey: this.config.apiKey,
       timeout: this.config.timeout,
       retry: {
         ...DEFAULT_RETRY_OPTIONS,
@@ -513,7 +572,11 @@ export class VCService {
     
     if (this.config.enableLogging) {
       console.log('VCService initialized with config:', {
-        acesApiUrl: this.config.acesApiUrl,
+        provider: {
+          id: this.config.providerId,
+          name: this.config.providerName,
+          url: this.config.apiUrl
+        },
         platformDid: this.config.platformDid,
         timeout: this.config.timeout,
         maxRetries: this.config.maxRetries,
@@ -524,6 +587,19 @@ export class VCService {
         }
       });
     }
+  }
+  
+  /**
+   * Get information about the current VC API provider
+   * 
+   * @returns Provider information including ID, name, and URL
+   */
+  getProviderInfo(): { id: string; name: string; url: string } {
+    return {
+      id: this.config.providerId || 'default',
+      name: this.config.providerName || 'Default Provider',
+      url: this.config.apiUrl
+    };
   }
   
   /**
@@ -752,7 +828,7 @@ export class VCService {
           return false; 
         }
 
-        const revocationListJson = await fetchJsonResource(statusId, this.client);
+        const revocationListJson = await this.fetchCachedJsonResource(statusId);
         if (!revocationListJson) {
           console.error(`Failed to fetch revocation list from ${statusId}.`);
           return false; 
@@ -763,7 +839,7 @@ export class VCService {
           if (this.config.enableLogging) {
             console.log(`Verifying RevocationList2020 credential from ${revocationListCredential}`);
           }
-          const fetchedListVc = await fetchJsonResource(revocationListCredential, this.client);
+          const fetchedListVc = await this.fetchCachedJsonResource(revocationListCredential);
           if (!fetchedListVc) {
             console.error(`Failed to fetch RevocationList2020 credential from ${revocationListCredential}.`);
             return false; // Fail closed if list's own credential cannot be fetched
@@ -840,7 +916,7 @@ export class VCService {
           return false; // Fail closed
         }
 
-        const fetchedStatusListCred = await fetchJsonResource(statusListCredential, this.client);
+        const fetchedStatusListCred = await this.fetchCachedJsonResource(statusListCredential);
         if (!fetchedStatusListCred) {
           console.error(`Failed to fetch StatusList2021Credential from ${statusListCredential}.`);
           return false; // Fail closed

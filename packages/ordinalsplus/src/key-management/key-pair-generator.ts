@@ -3,8 +3,7 @@
  * @description Provides functionality for generating cryptographic key pairs with support for different algorithms
  */
 
-import { bytesToHex } from '@noble/hashes/utils';
-import { randomBytes } from 'crypto';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import * as ed from '@noble/ed25519';
 import * as secp from '@noble/secp256k1';
 import * as btc from '@scure/btc-signer';

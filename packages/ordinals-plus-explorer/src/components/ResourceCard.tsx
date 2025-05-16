@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Code, Image } from 'lucide-react';
 import { LinkedResource } from 'ordinalsplus';
+import { StatusBadge } from './verification';
+import { VerificationStatus } from '../types/verification';
 
 interface ResourceCardProps {
   resource: LinkedResource;
   onClick: () => void;
   isSelected: boolean;
+  verificationStatus?: VerificationStatus;
 }
 
-const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelected }) => {
+const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelected, verificationStatus }) => {
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
@@ -172,6 +175,13 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
             {resource.id}
           </h3>
         </div>
+        {verificationStatus && (
+          <StatusBadge 
+            status={verificationStatus} 
+            showText={false}
+            size="sm"
+          />
+        )}
       </div>
       
       {renderPreview()}

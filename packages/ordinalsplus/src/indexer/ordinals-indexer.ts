@@ -5,8 +5,8 @@
  * caching, retries, and CBOR metadata handling.
  */
 
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosError } from 'axios';
-import { decode } from 'cbor';
+import { createFetchClient, FetchRequestConfig, FetchError, FetchResponse } from '../utils/fetchUtils';
+import { decodeCbor } from '../utils/cbor-utils';
 import { 
   OrdinalsIndexerConfig, 
   IndexerInscription, 
@@ -41,7 +41,7 @@ const DEFAULT_CONFIG: Partial<OrdinalsIndexerConfig> = {
  * OrdinalsIndexer class provides methods to interact with an Ordinals indexer API
  */
 export class OrdinalsIndexer {
-  private client: AxiosInstance;
+  private client: ReturnType<typeof createFetchClient>;
   private config: OrdinalsIndexerConfig;
   private db?: IndexerDatabase;
   private logger: Logger;
@@ -99,8 +99,8 @@ export class OrdinalsIndexer {
       });
     }
     
-    // Initialize axios client
-    const axiosConfig: AxiosRequestConfig = {
+    // Initialize fetch client
+    const fetchConfig: FetchRequestConfig = {
       baseURL: this.config.indexerUrl,
       timeout: this.config.timeout,
       headers: {}
@@ -108,13 +108,13 @@ export class OrdinalsIndexer {
     
     // Add API key if provided
     if (this.config.apiKey) {
-      axiosConfig.headers = {
-        ...axiosConfig.headers,
+      fetchConfig.headers = {
+        ...fetchConfig.headers,
         'Authorization': `Bearer ${this.config.apiKey}`
       };
     }
     
-    this.client = axios.create(axiosConfig);
+    this.client = createFetchClient(fetchConfig);
     
     this.logger.info('Initialized OrdinalsIndexer', { 
       indexerUrl: this.config.indexerUrl,
@@ -361,8 +361,8 @@ export class OrdinalsIndexer {
         // Decode CBOR metadata with error handling
         let metadata;
         try {
-          this.logger.debug(`Decoding CBOR metadata for inscription: ${inscriptionId}`);
-          metadata = decode(metadataBuffer);
+          this.logger.debug(`Decoding metadata for inscription: ${inscriptionId}`);
+          metadata = decodeCbor(new Uint8Array(metadataBuffer));
         } catch (error) {
           throw new DataParsingError(
             `Failed to decode CBOR metadata for inscription ${inscriptionId}`,
@@ -529,12 +529,12 @@ export class OrdinalsIndexer {
       return processedCount;
     } catch (error) {
       console.error('Error syncing recent inscriptions:', error instanceof Error ? error.message : error);
-      if (axios.isAxiosError(error)) {
-        console.error('Axios error details:', {
-          url: error.config?.url,
-          method: error.config?.method,
-          status: error.response?.status,
-          data: error.response?.data,
+      if (this.client.isFetchError(error)) {
+        console.error('Fetch error details:', {
+          url: error.request?.url,
+          method: error.request?.method,
+          status: error.status,
+          data: error.data,
         });
       }
       return 0;

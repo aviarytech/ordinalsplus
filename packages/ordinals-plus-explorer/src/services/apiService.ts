@@ -343,6 +343,103 @@ class ApiService {
     // Adjust if the backend returns a different structure (e.g., { data: LinkedResource[] })
     return await handleApiResponse<LinkedResource[]>(response);
   }
+  
+  /**
+   * Get Resources associated with a DID
+   * This is a convenience method that uses the network from the context
+   */
+  async getResourcesByDid(didId: string): Promise<ApiResponse> {
+    // Get the network from the context or use default
+    const networkType = this.getNetworkFromContext() || 'mainnet';
+    
+    const url = this.buildUrl(`/api/resources/did/${encodeURIComponent(didId)}`, networkType);
+    console.log(`[ApiService] Getting resources by DID: ${url}`);
+    const response = await fetch(url);
+    return await handleApiResponse<ApiResponse>(response);
+  }
+  
+  /**
+   * Resolve a DID to get its DID Document
+   */
+  async resolveDid(didId: string): Promise<{ didDocument: any }> {
+    // Get the network from the context or use default
+    const networkType = this.getNetworkFromContext() || 'mainnet';
+    
+    const url = this.buildUrl(`/api/dids/${encodeURIComponent(didId)}/resolve`, networkType);
+    console.log(`[ApiService] Resolving DID: ${url}`);
+    const response = await fetch(url);
+    return await handleApiResponse<{ didDocument: any }>(response);
+  }
+  
+  /**
+   * Create a new resource linked to a DID
+   */
+  async createResource(resourceData: {
+    content: string | ArrayBuffer;
+    contentType: string;
+    metadata: any;
+    parentDid: string;
+  }): Promise<{ resourceId: string }> {
+    // Get the network from the context or use default
+    const networkType = this.getNetworkFromContext() || 'mainnet';
+    
+    // Convert content to base64 if needed
+    let contentBase64: string;
+    if (typeof resourceData.content === 'string') {
+      // If it's already a data URL, extract the base64 part
+      if (resourceData.content.startsWith('data:')) {
+        const base64Part = resourceData.content.split(',')[1];
+        contentBase64 = base64Part || btoa(resourceData.content);
+      } else {
+        // Otherwise, encode as base64
+        contentBase64 = btoa(resourceData.content);
+      }
+    } else {
+      // Convert ArrayBuffer to base64
+      contentBase64 = btoa(
+        Array.from(new Uint8Array(resourceData.content))
+          .map(byte => String.fromCharCode(byte))
+          .join('')
+      );
+    }
+    
+    // Prepare request data
+    const requestData = {
+      contentType: resourceData.contentType,
+      contentBase64,
+      metadata: resourceData.metadata,
+      parentDid: resourceData.parentDid
+    };
+    
+    const url = this.buildUrl(`/api/resources`, networkType);
+    console.log(`[ApiService] Creating resource: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestData)
+    });
+    
+    return await handleApiResponse<{ resourceId: string }>(response);
+  }
+  
+  /**
+   * Helper method to get the current network from context
+   * This should be implemented based on how network context is managed in the application
+   */
+  private getNetworkFromContext(): string | null {
+    // This is a placeholder - implement based on your application's context management
+    // For example, you might have a NetworkContext that stores the current network
+    // or you might get it from localStorage, etc.
+    try {
+      // Try to get from localStorage as a fallback
+      const storedNetwork = localStorage.getItem('currentNetwork');
+      return storedNetwork || 'mainnet';
+    } catch (e) {
+      console.warn('[ApiService] Could not get network from context:', e);
+      return 'mainnet';
+    }
+  }
 
   /**
    * Prepare inscription details (script, fee) - May or may not need network depending on backend logic
@@ -371,8 +468,52 @@ class ApiService {
   async getAddressUtxos(networkType: string, address: string): Promise<Utxo[]> {
     const url = this.buildUrl(`/api/addresses/${address}/utxos`, networkType); 
     console.log(`[ApiService] Getting address UTXOs: ${url}`);
+    
     const response = await fetch(url);
     return await handleApiResponse<Utxo[]>(response);
+  }
+  
+  /**
+   * Gets a DID for a wallet address
+   * 
+   * @param networkType - The network type (e.g., 'bitcoin', 'testnet')
+   * @param address - The wallet address to get the DID for
+   * @returns The DID information for the address
+   */
+  async getDidForAddress(networkType: string, address: string): Promise<{ did?: string; error?: string }> {
+    try {
+      // First try to get DIDs directly associated with this address
+      const url = this.buildUrl(`/api/addresses/${address}/dids`, networkType);
+      console.log(`[ApiService] Getting DIDs for address: ${url}`);
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        // If the endpoint doesn't exist or returns an error, use a fallback approach
+        // Try to get the first inscription owned by this address and check if it's a DID
+        const inscriptionsUrl = this.buildUrl(`/api/addresses/${address}/inscriptions`, networkType);
+        const inscriptionsResponse = await fetch(inscriptionsUrl);
+        const inscriptions = await handleApiResponse<any[]>(inscriptionsResponse);
+        
+        // Check if any of the inscriptions are DIDs
+        for (const inscription of inscriptions || []) {
+          if (inscription.content?.startsWith('did:btco:')) {
+            return { did: inscription.content };
+          }
+        }
+        
+        return { error: 'No DID found for this address' };
+      }
+      
+      const dids = await handleApiResponse<string[]>(response);
+      if (dids && dids.length > 0) {
+        return { did: dids[0] }; // Return the first DID associated with this address
+      }
+      
+      return { error: 'No DID found for this address' };
+    } catch (error) {
+      console.error('[ApiService] Error getting DID for address:', error);
+      return { error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   // --- NEW Method for Commit PSBT ---

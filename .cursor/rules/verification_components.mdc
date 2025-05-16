@@ -1,0 +1,55 @@
+---
+description: Guidelines for implementing verification components and services
+globs: packages/ordinals-plus-explorer/src/components/verification/**/*.tsx, packages/ordinals-plus-api/src/routers/verificationRouter.ts
+filesToApplyRule: packages/ordinals-plus-explorer/src/components/verification/**/*.tsx, packages/ordinals-plus-api/src/routers/verificationRouter.ts
+alwaysApply: true
+---
+
+# Verification Components and Services
+
+## UI Components
+
+- All verification UI components should be placed in `packages/ordinals-plus-explorer/src/components/verification/`
+- Components should be exported from the `index.ts` file in the verification directory
+- Types should be exported using `export type { TypeName }` syntax
+- Components should follow a consistent naming convention:
+  - Main components: `Verification*.tsx`
+  - Subcomponents: `*Badge.tsx`, `*Button.tsx`, `*Panel.tsx`, etc.
+
+## Component Structure
+
+- Each verification component should have a clear, single responsibility
+- Components should accept a `className` prop for styling customization
+- Status indicators should use the `StatusBadge` component for consistency
+- Expandable sections should use a consistent expand/collapse pattern
+- All components should include proper accessibility attributes
+
+## API Endpoints
+
+- Verification API endpoints should be defined in `packages/ordinals-plus-api/src/routers/verificationRouter.ts`
+- Endpoints should follow RESTful conventions:
+  - `GET /api/verify/inscription/:inscriptionId` - Verify an inscription
+  - `POST /api/verify/credential` - Verify a credential directly
+  - `GET /api/verify/issuer/:did` - Get issuer information
+- All endpoints should include proper validation and error handling
+- Response formats should be consistent across all verification endpoints
+
+## Verification Service
+
+- The verification service should implement caching to reduce redundant API calls
+- Cache invalidation should be handled appropriately
+- The service should provide clear error messages for different failure scenarios
+- Verification results should include detailed information about the verification process
+
+## Error Handling
+
+- UI components should gracefully handle all error states
+- API endpoints should return appropriate HTTP status codes
+- Error messages should be user-friendly and actionable
+- Technical error details should be logged but not exposed to users
+
+## Testing
+
+- All verification components should have comprehensive unit tests
+- API endpoints should have integration tests covering success and failure cases
+- Test coverage should include edge cases like expired credentials, invalid signatures, etc.

@@ -2,7 +2,8 @@ import React from 'react';
 import { useNetwork } from '../context/NetworkContext';
 import { NetworkInfo } from '../types/index';
 import { useWallet } from '../context/WalletContext';
-import { Loader2, Wifi } from 'lucide-react';
+import { Loader2, Wifi, Key } from 'lucide-react';
+import VCApiProviderSettings from '../components/settings/VCApiProviderSettings';
 
 const SettingsPage: React.FC = () => {
   const {
@@ -95,6 +96,20 @@ const SettingsPage: React.FC = () => {
                 No networks available or failed to load.
              </div>
          )}
+      </div>
+
+      {/* VC API Provider Settings */}
+      <div className="bg-white dark:bg-gray-800 shadow-md rounded-lg p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-300 flex items-center">
+          <Key className="w-5 h-5 mr-2" /> Verifiable Credential API Providers
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Configure API providers for verifiable credentials. These settings will be used when creating resources with verifiable credential metadata.
+        </p>
+        
+        <div className="mt-4">
+          <VCApiProviderSettings />
+        </div>
       </div>
 
       {/* Removed other settings sections (Display, Auto-Refresh, Save) */}

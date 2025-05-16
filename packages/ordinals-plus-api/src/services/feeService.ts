@@ -1,5 +1,5 @@
 // Service for fetching fee estimations
-import axios from 'axios';
+import fetchClient from '../utils/fetchUtils';
 import type { FeeEstimateResponse, NetworkType } from '../types';
 
 // Mempool.space API base URLs
@@ -26,7 +26,7 @@ export async function getFeeEstimates(network: NetworkType = 'mainnet'): Promise
     const apiUrl = getMempoolApiUrl(network);
     console.log(`Fetching fee estimates from ${apiUrl} for ${network}...`);
     try {
-        const response = await axios.get(`${apiUrl}/v1/fees/recommended`);
+        const response = await fetchClient.get(`${apiUrl}/v1/fees/recommended`);
         const data = response.data;
 
         // Ensure the API response has the expected format

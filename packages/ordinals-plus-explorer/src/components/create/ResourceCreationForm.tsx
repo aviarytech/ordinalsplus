@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { VCApiProvider } from '../../components/settings/VCApiProviderSettings';
 import { bytesToHex } from '@noble/hashes/utils';
 import { Loader2, AlertCircle, CheckCircle, Copy, ExternalLink, Bitcoin, Upload, FileText, X, Check } from 'lucide-react';
 import * as ordinalsplus from 'ordinalsplus';
@@ -80,9 +82,18 @@ interface OrdinalsPlusUtxo {
  * ResourceCreationForm orchestrates the resource creation flow using modular subcomponents.
  */
 const ResourceCreationForm: React.FC = () => {
-  const [contentType, setContentType] = useState<string>('text/plain;charset=utf-8');
-  const [content, setContent] = useState<string>('');
-  const [metadata, setMetadata] = useState<string>('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [contentType, setContentType] = useState('text/plain;charset=utf-8');
+  const [content, setContent] = useState('');
+  const [metadata, setMetadata] = useState('');  // Advanced options state
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  
+  // VC API Provider state
+  const [vcApiProviders] = useLocalStorage<VCApiProvider[]>('vc-api-providers', []);
+  const [selectedVcProviderId, setSelectedVcProviderId] = useState<string | null>(null);
+  const [isVerifiableCredential, setIsVerifiableCredential] = useState(false);
+
   const [feeRateInput, setFeeRateInput] = useState<number>(10);
   const [flowState, setFlowState] = useState<FlowState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -230,21 +241,132 @@ const ResourceCreationForm: React.FC = () => {
       console.error("Failed to copy:", err);
     });
   };
+  
+  // Function to initiate the VC API exchange workflow
+  const initiateVcExchange = async (provider: VCApiProvider, metadata: any) => {
+    console.log(`[initiateVcExchange] Starting exchange with provider: ${provider.name} (${provider.url})`);
+    setStatusMessage(`Initiating exchange with ${provider.name}...`);
+    
+    try {
+      // Step 1: Send initial POST to create the exchange
+      const initialResponse = await fetch(`${provider.url}/exchanges`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${provider.authToken}`
+        },
+        body: JSON.stringify({
+          // Include any necessary data to initiate the exchange
+          type: 'VerifiableCredential',
+          issuer: metadata.issuer?.id || '',
+          subject: metadata.credentialSubject?.id || ''
+        })
+      });
+      
+      if (!initialResponse.ok) {
+        throw new Error(`Failed to initiate exchange: ${initialResponse.status} ${initialResponse.statusText}`);
+      }
+      
+      const exchangeData = await initialResponse.json();
+      console.log('[initiateVcExchange] Exchange created:', exchangeData);
+      
+      if (!exchangeData.url) {
+        throw new Error('Exchange URL not provided in response');
+      }
+      
+      // Step 2: Send GET request to the exchange URL to get requirements
+      const requirementsResponse = await fetch(exchangeData.url, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${provider.authToken}`
+        }
+      });
+      
+      if (!requirementsResponse.ok) {
+        throw new Error(`Failed to get exchange requirements: ${requirementsResponse.status} ${requirementsResponse.statusText}`);
+      }
+      
+      const requirementsData = await requirementsResponse.json();
+      console.log('[initiateVcExchange] Exchange requirements:', requirementsData);
+      
+      // Step 3: Send POST to the exchange URL with the required data to get the VC
+      const vcResponse = await fetch(exchangeData.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${provider.authToken}`
+        },
+        body: JSON.stringify({
+          // Include the metadata and any additional required data
+          ...metadata,
+          // Add any additional fields required by the provider
+          ...(requirementsData.required || {})
+        })
+      });
+      
+      if (!vcResponse.ok) {
+        throw new Error(`Failed to retrieve verifiable credential: ${vcResponse.status} ${vcResponse.statusText}`);
+      }
+      
+      const vcData = await vcResponse.json();
+      console.log('[initiateVcExchange] Retrieved verifiable credential:', vcData);
+      
+      // Update the metadata with the retrieved VC
+      setMetadata(JSON.stringify(vcData, null, 2));
+      
+      addToast(
+        'Successfully retrieved verifiable credential from provider',
+        'success',
+        3000
+      );
+      
+      return vcData;
+    } catch (error) {
+      console.error('[initiateVcExchange] Error:', error);
+      throw error;
+    } finally {
+      setStatusMessage(null);
+    }
+  };
 
-  const parseMetadata = (jsonString: string): Record<string, string> | undefined => {
+  // Helper function to check if metadata is a verifiable credential
+  const isVerifiableCredentialMetadata = (metadata: any): boolean => {
+    if (!metadata || typeof metadata !== 'object') return false;
+    
+    return !!(
+      metadata['@context'] && 
+      metadata.type && 
+      (metadata.type === 'VerifiableCredential' || 
+       (Array.isArray(metadata.type) && metadata.type.includes('VerifiableCredential')))
+    );
+  };
+  
+  const parseMetadata = (jsonString: string): Record<string, any> | undefined => {
     if (!jsonString.trim()) return undefined;
     try {
       const parsed = JSON.parse(jsonString);
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         throw new Error("Metadata must be a JSON object.");
       }
-      const stringified: Record<string, string> = {};
+      
+      // Check if this is a verifiable credential
+      if (isVerifiableCredentialMetadata(parsed)) {
+        // This is a verifiable credential - return it as is without stringifying the values
+        console.log("Detected verifiable credential metadata");
+        return parsed;
+      }
+      
+      // For regular metadata, continue with the original stringification process
+      const stringified: Record<string, any> = {};
       for (const key in parsed) {
         if (Object.prototype.hasOwnProperty.call(parsed, key)) {
-          if (typeof parsed[key] !== 'string') {
-             throw new Error(`Metadata value for key "${key}" must be a string.`);
+          // Allow nested objects for more complex metadata
+          if (typeof parsed[key] === 'object' && parsed[key] !== null) {
+            stringified[key] = parsed[key]; // Keep objects as is
+          } else {
+            // Convert primitive values to strings
+            stringified[key] = String(parsed[key]);
           }
-          stringified[key] = parsed[key];
         }
       }
       return stringified;
@@ -299,6 +421,159 @@ const ResourceCreationForm: React.FC = () => {
       addErrorToast(error);
       setFlowState('failed');
       return;
+    }
+    
+    // Check if the metadata is a verifiable credential and validate it
+    try {
+      if (metadata && metadata.trim()) {
+        const parsedMetadata = JSON.parse(metadata);
+        if (isVerifiableCredentialMetadata(parsedMetadata)) {
+          
+          console.log("[PrepareInscription] Verifiable credential detected in metadata");
+          
+          // Check if issuer ID is missing and try to fetch it
+          if (!parsedMetadata.issuer || !parsedMetadata.issuer.id) {
+            console.log("[PrepareInscription] Issuer ID is missing, attempting to fetch from wallet");
+            
+            // Try to get the user's DID from the wallet address
+            if (walletConnected && walletAddress) {
+              try {
+                const networkType = walletNetwork === 'testnet' ? 'testnet' : 'bitcoin';
+                const didResponse = await apiService?.getDidForAddress(networkType, walletAddress);
+                
+                if (didResponse && didResponse.did) {
+                  // Update the metadata with the fetched issuer DID
+                  parsedMetadata.issuer = { id: didResponse.did };
+                  console.log(`[PrepareInscription] Automatically set issuer DID to: ${didResponse.did}`);
+                  
+                  // Update the metadata state with the updated metadata
+                  setMetadata(JSON.stringify(parsedMetadata, null, 2));
+                  
+                  // Show a toast to inform the user
+                  addToast(
+                    `Automatically set issuer DID to: ${didResponse.did}`,
+                    'success',
+                    3000
+                  );
+                } else {
+                  // Set a placeholder issuer ID if no DID is found
+                  parsedMetadata.issuer = { id: 'did:placeholder:issuer' };
+                  console.log('[PrepareInscription] Set placeholder issuer DID');
+                  
+                  // Update the metadata state with the updated metadata
+                  setMetadata(JSON.stringify(parsedMetadata, null, 2));
+                  
+                  // Inform the user
+                  addToast(
+                    'Set placeholder issuer ID. You can update this later.',
+                    'info',
+                    5000
+                  );
+                }
+              } catch (error) {
+                console.error("[PrepareInscription] Error fetching DID for wallet:", error);
+                // Set a placeholder issuer ID if there's an error
+                parsedMetadata.issuer = { id: 'did:placeholder:issuer' };
+                console.log('[PrepareInscription] Set placeholder issuer DID due to error');
+                
+                // Update the metadata state with the updated metadata
+                setMetadata(JSON.stringify(parsedMetadata, null, 2));
+                
+                // Inform the user
+                addToast(
+                  'Set placeholder issuer ID due to error. You can update this later.',
+                  'info',
+                  5000
+                );
+              }
+            } else {
+              // If wallet is not connected, set a placeholder issuer ID
+              parsedMetadata.issuer = { id: 'did:placeholder:issuer' };
+              console.log('[PrepareInscription] Set placeholder issuer DID (no wallet)');
+              
+              // Update the metadata state with the updated metadata
+              setMetadata(JSON.stringify(parsedMetadata, null, 2));
+              
+              // Inform the user
+              addToast(
+                'Set placeholder issuer ID. Connect your wallet or update this manually.',
+                'info',
+                5000
+              );
+            }
+          }
+          
+          // Initiate the VC API exchange workflow if this is a verifiable credential
+          if (isVerifiableCredential) {
+            // Check if we have any providers configured
+            if (vcApiProviders.length > 0) {
+              // If a provider is selected, use it; otherwise use the default or first provider
+              const providerId = selectedVcProviderId || 
+                (vcApiProviders.find(p => p.isDefault)?.id || vcApiProviders[0].id);
+              
+              // Find the provider details to include in logs
+              const selectedProvider = vcApiProviders.find(p => p.id === providerId);
+              if (selectedProvider) {
+                console.log(`[PrepareInscription] Using VC API provider: ${selectedProvider.name} (${selectedProvider.url})`);
+                
+                // Show a toast to inform the user
+                addToast(
+                  `Using VC API provider: ${selectedProvider.name}`,
+                  'info',
+                  3000
+                );
+                
+                // Initiate the VC API exchange workflow
+                try {
+                  // Start the exchange process
+                  await initiateVcExchange(selectedProvider, parsedMetadata);
+                } catch (error) {
+                  console.error('[PrepareInscription] Error initiating VC exchange:', error);
+                  addToast(
+                    `Error initiating VC exchange: ${error instanceof Error ? error.message : String(error)}`,
+                    'error',
+                    5000
+                  );
+                }
+              }
+            } else {
+              // Warn the user that no providers are configured
+              addToast(
+                'No VC API providers configured. Please add a provider in Settings.',
+                'warning',
+                5000
+              );
+            }
+          }
+          
+          // Check if credential subject is missing
+          if (!parsedMetadata.credentialSubject) {
+            // Add a basic credential subject structure
+            parsedMetadata.credentialSubject = {
+              id: "", // Will need to be filled by the user
+              type: "Collectible",
+              title: "My Collectible",
+              description: "Description of my collectible"
+            };
+            
+            // Update the metadata state with the updated metadata
+            setMetadata(JSON.stringify(parsedMetadata, null, 2));
+            
+            // Inform the user
+            addToast(
+              'Added basic credential subject structure. Please fill in the details.',
+              'info',
+              3000
+            );
+          }
+          
+          // If we're using a verifiable credential, set the resource type to CREDENTIAL
+          console.log("[PrepareInscription] Setting resource type to CREDENTIAL for verifiable credential");
+        }
+      }
+    } catch (e) {
+      console.error("[PrepareInscription] Error parsing metadata:", e);
+      // Continue with normal flow, will be caught later if metadata is invalid
     }
 
     try {
@@ -1098,7 +1373,7 @@ const ResourceCreationForm: React.FC = () => {
                   content={
                     <div>
                       <p>Optional metadata that will be stored with your inscription.</p>
-                      <p className="mt-1">Must be valid JSON in key-value format: {`{"name": "value"}`}</p>
+                      <p className="mt-1">You can use a standard JSON format or select a Verifiable Credential type.</p>
                       <p className="mt-1">Common fields: name, description, creator</p>
                     </div>
                   }
@@ -1108,12 +1383,194 @@ const ResourceCreationForm: React.FC = () => {
                   Metadata (optional)
                 </Tooltip>
               </label>
+              
+              {/* Metadata Type Selector */}
+              <div className="mb-2">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Metadata Type
+                </label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Set to standard JSON metadata
+                      if (metadata.trim() === '') {
+                        setMetadata('{}');
+                      }
+                      setIsVerifiableCredential(false);
+                    }}
+                    className={`px-3 py-1 text-xs border rounded-md ${
+                      !metadata.includes('"@context"') && !metadata.includes('"type":"VerifiableCredential"')
+                        ? 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-700'
+                        : 'bg-white text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
+                    }`}
+                  >
+                    Standard JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      // Set to verifiable credential template
+                      try {
+                        // Set the state to indicate we're using a verifiable credential
+                        setIsVerifiableCredential(true);
+                        
+                        // Check if we have any VC API providers configured
+                        if (vcApiProviders.length === 0) {
+                          addToast(
+                            'No VC API providers configured. Please add a provider in Settings.',
+                            'warning',
+                            5000
+                          );
+                        } else {
+                          // Set the default provider if available
+                          const defaultProvider = vcApiProviders.find(p => p.isDefault);
+                          if (defaultProvider) {
+                            setSelectedVcProviderId(defaultProvider.id);
+                          } else {
+                            setSelectedVcProviderId(vcApiProviders[0].id);
+                          }
+                        }
+                        
+                        // Get the user's DID from the wallet if connected
+                        let issuerDid = '';
+                        if (walletConnected && walletAddress) {
+                          try {
+                            // Try to fetch the user's DID using the API service
+                            // Get the current network type from the wallet
+                            const networkType = walletNetwork === 'testnet' ? 'testnet' : 'bitcoin';
+                            const didResponse = await apiService?.getDidForAddress(networkType, walletAddress);
+                            if (didResponse && didResponse.did) {
+                              issuerDid = didResponse.did;
+                              console.log(`Found DID for wallet address: ${issuerDid}`);
+                            }
+                          } catch (error) {
+                            console.warn('Could not fetch DID for wallet address:', error);
+                            // Continue with empty issuer DID
+                          }
+                        }
+                        
+                        const vcTemplate = {
+                          "@context": [
+                            "https://www.w3.org/ns/credentials/v2",
+                            "https://ordinals.plus/v1"
+                          ],
+                          "type": ["VerifiableCredential", "VerifiableCollectible"],
+                          "issuer": {
+                            "id": issuerDid || "did:placeholder:issuer" // Use placeholder if no DID available
+                          },
+                          "credentialSubject": {
+                            "id": "did:placeholder:subject", // Use placeholder subject DID
+                            "type": "Collectible",
+                            "title": "My Collectible",
+                            "description": "Description of my collectible",
+                            "properties": {
+                              "medium": "Digital",
+                              "format": contentType
+                            }
+                          },
+                          "issuanceDate": new Date().toISOString()
+                        };
+                        setMetadata(JSON.stringify(vcTemplate, null, 2));
+                        
+                        // Show a toast if we used a placeholder DID
+                        if (!issuerDid) {
+                          addToast(
+                            'Using placeholder DIDs. You can update these in the metadata field.',
+                            'info',
+                            5000
+                          );
+                        }
+                      } catch (error) {
+                        console.error('Error creating VC template:', error);
+                        addErrorToast({
+                          code: ErrorCode.INVALID_INPUT, // Using a valid ErrorCode value
+                          message: 'Error creating verifiable credential template',
+                          details: error instanceof Error ? error.message : String(error),
+                          category: ErrorCategory.VALIDATION,
+                          severity: ErrorSeverity.WARNING,
+                          timestamp: new Date(),
+                          recoverable: true,
+                          suggestion: 'Please try again or enter the credential manually.'
+                        });
+                      }
+                    }}
+                    className={`px-3 py-1 text-xs border rounded-md ${
+                      metadata.includes('"@context"') && metadata.includes('"type":"VerifiableCredential"')
+                        ? 'bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-indigo-900/20 dark:text-indigo-300 dark:border-indigo-700'
+                        : 'bg-white text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600'
+                    }`}
+                  >
+                    Verifiable Credential
+                  </button>
+                </div>
+              </div>
+              
+              {/* Metadata Editor */}
               <textarea
                 value={metadata}
                 onChange={(e) => setMetadata(e.target.value)}
                 placeholder='{"name": "My Inscription", "description": "A cool inscription"}'
-                className="w-full h-20 p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                className="w-full h-48 p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 dark:bg-gray-700 font-mono text-sm"
               />
+              
+              {/* VC API Provider Selection - Only shown when using a verifiable credential */}
+              {isVerifiableCredential && (
+                <div className="mt-4">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    Verifiable Credential API Provider
+                  </label>
+                  
+                  {vcApiProviders.length > 0 ? (
+                    <div className="flex flex-col space-y-2">
+                      <select
+                        value={selectedVcProviderId || ''}
+                        onChange={(e) => setSelectedVcProviderId(e.target.value)}
+                        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 dark:bg-gray-700"
+                      >
+                        {vcApiProviders.map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {provider.name} ({provider.url})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <span>Selected provider will be used to issue the verifiable credential. </span>
+                        <a 
+                          href="/settings" 
+                          className="text-indigo-600 dark:text-indigo-400 hover:underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Manage providers
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                        No VC API providers configured. Please add a provider in the
+                        <a 
+                          href="/settings" 
+                          className="text-indigo-600 dark:text-indigo-400 hover:underline mx-1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Settings
+                        </a>
+                        page.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Helper text */}
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {metadata.includes('"@context"') && metadata.includes('"type"') ? 
+                  "Using Verifiable Credential format. Make sure to fill in the issuer and subject IDs." : 
+                  "Using standard JSON metadata format."}
+              </p>
             </div>
 
             <div className="mb-4">
