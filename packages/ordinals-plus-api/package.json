@@ -17,7 +17,8 @@
     "@ljharb/tsconfig": "^0.3.2",
     "@types/body-parser": "^1.19.5",
     "@types/bun": "latest",
-    "@types/express": "^5.0.1"
+    "@types/express": "^5.0.1",
+    "@types/node-fetch": "^2.6.12"
   },
   "peerDependencies": {
     "typescript": "^5"

@@ -8,6 +8,7 @@ import CollectionsListPage from './pages/CollectionsListPage';
 import CollectionDetailPage from './pages/CollectionDetailPage';
 import CollectionsGalleryPage from './pages/CollectionsGalleryPage';
 import CollectionVerificationPage from './pages/CollectionVerificationPage';
+import ExchangeParticipationPage from './pages/ExchangeParticipationPage';
 import WalletConnector from './components/WalletConnector';
 import './index.css';
 import ErrorBoundary from './components/ui/ErrorBoundary';
@@ -58,6 +59,7 @@ function App() {
               <Route path="/collections/verify" element={<CollectionVerificationPage />} />
               <Route path="/collections/:id" element={<CollectionDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/exchange/:providerId/:exchangeId" element={<ExchangeParticipationPage />} />
             </Routes>
           </div>
         </Router>

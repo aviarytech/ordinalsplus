@@ -199,6 +199,102 @@
   font-size: 0.9rem;
 }
 
+/* Exchange Participation Section */
+.exchange-participation-section {
+  margin-top: 32px;
+  padding: 20px;
+  background-color: var(--bg-color-tertiary, #181825);
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #313244);
+}
+
+.exchange-participation-section h3 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: var(--text-color-bright, #ffffff);
+}
+
+.exchange-form {
+  margin-top: 20px;
+}
+
+.exchange-form .form-group {
+  margin-bottom: 16px;
+}
+
+.exchange-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-color-bright, #ffffff);
+}
+
+.exchange-form select,
+.exchange-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #313244);
+  border-radius: 4px;
+  background-color: var(--bg-color-secondary, #1e1e2e);
+  color: var(--text-color, #e1e1e1);
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.exchange-form select:focus,
+.exchange-form input:focus {
+  border-color: var(--focus-color, #89b4fa);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-shadow, rgba(137, 180, 250, 0.3));
+}
+
+.exchange-form select:disabled,
+.exchange-form input:disabled {
+  background-color: var(--disabled-bg, #11111b);
+  color: var(--text-color-muted, #a6adc8);
+  cursor: not-allowed;
+}
+
+.workflow-info {
+  margin-top: 12px;
+  padding: 12px;
+  background-color: var(--info-bg, rgba(137, 180, 250, 0.1));
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.form-actions {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.participate-button {
+  display: inline-block;
+  background-color: var(--primary-color, #89b4fa);
+  color: var(--button-text, #11111b);
+  border: none;
+  border-radius: 4px;
+  padding: 10px 16px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.participate-button:hover {
+  background-color: var(--primary-hover, #74c7ec);
+}
+
+.participate-button.disabled {
+  background-color: var(--disabled-color, #6c7086);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .env-var-help code {
   background-color: var(--code-bg, #11111b);
   padding: 2px 5px;

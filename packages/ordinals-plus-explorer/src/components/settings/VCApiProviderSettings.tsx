@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { fetchSystemVCApiProviders } from '../../services/vcApiService';
+import { Link } from 'react-router-dom';
+import { fetchSystemVCApiProviders, fetchWorkflowConfiguration } from '../../services/vcApiService';
 import './VCApiProviderSettings.css';
 
 // Interface for a VC API provider configuration
@@ -41,6 +42,13 @@ export const VCApiProviderSettings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // State for exchange functionality
+  const [selectedProvider, setSelectedProvider] = useState<string>('');
+  const [exchangeId, setExchangeId] = useState<string>('');
+  const [workflowConfig, setWorkflowConfig] = useState<any>(null);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
+  
   // Fetch providers from the server
   useEffect(() => {
     const loadProviders = async () => {
@@ -48,6 +56,12 @@ export const VCApiProviderSettings: React.FC = () => {
         setIsLoading(true);
         const data = await fetchSystemVCApiProviders();
         setProviders(data);
+        
+        // Set the first provider as selected if available
+        if (data.length > 0) {
+          setSelectedProvider(data[0].id);
+        }
+        
         setError(null);
       } catch (err) {
         console.error('Error loading VC API providers:', err);
@@ -60,6 +74,45 @@ export const VCApiProviderSettings: React.FC = () => {
     loadProviders();
   }, []);
   
+  // Load workflow configuration when provider changes
+  useEffect(() => {
+    const loadWorkflowConfig = async () => {
+      if (!selectedProvider) return;
+      
+      try {
+        setIsLoadingConfig(true);
+        setConfigError(null);
+        
+        const config = await fetchWorkflowConfiguration(selectedProvider);
+        setWorkflowConfig(config);
+        
+        // If there's a default exchange ID in the config, use it
+        if (config?.formatted?.defaultExchangeId) {
+          setExchangeId(config.formatted.defaultExchangeId);
+        }
+      } catch (err) {
+        console.error('Error loading workflow configuration:', err);
+        setConfigError('Failed to load workflow configuration');
+        setWorkflowConfig(null);
+      } finally {
+        setIsLoadingConfig(false);
+      }
+    };
+    
+    loadWorkflowConfig();
+  }, [selectedProvider]);
+  
+  // Handle provider selection change
+  const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedProvider(e.target.value);
+    setExchangeId(''); // Reset exchange ID when provider changes
+  };
+  
+  // Handle exchange ID input change
+  const handleExchangeIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setExchangeId(e.target.value);
+  };
+  
   return (
     <div className="vc-api-settings">
       <div className="vc-api-settings-header">
@@ -68,6 +121,81 @@ export const VCApiProviderSettings: React.FC = () => {
           VC API providers are configured through environment variables on the server.
           Contact your administrator to modify these settings.
         </p>
+      </div>
+      
+      {/* Exchange Participation Section */}
+      <div className="exchange-participation-section">
+        <h3>Participate in Exchange</h3>
+        <p className="description">
+          Use this form to participate in an exchange with a VC API provider.
+          You'll need to select a provider and enter an exchange ID.
+        </p>
+        
+        <div className="exchange-form">
+          <div className="form-group">
+            <label htmlFor="provider-select">Select Provider:</label>
+            <select 
+              id="provider-select" 
+              value={selectedProvider} 
+              onChange={handleProviderChange}
+              disabled={isLoading || providers.length === 0}
+            >
+              {providers.length === 0 && <option value="">No providers available</option>}
+              {providers.map(provider => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="form-group">
+            <label htmlFor="exchange-id">Exchange ID:</label>
+            <input 
+              type="text" 
+              id="exchange-id" 
+              value={exchangeId} 
+              onChange={handleExchangeIdChange}
+              placeholder="Enter exchange ID"
+              disabled={!selectedProvider || isLoadingConfig}
+            />
+          </div>
+          
+          {isLoadingConfig && (
+            <div className="loading-indicator">
+              <p>Loading workflow configuration...</p>
+            </div>
+          )}
+          
+          {configError && (
+            <div className="error-message">
+              <p>{configError}</p>
+            </div>
+          )}
+          
+          {workflowConfig && (
+            <div className="workflow-info">
+              <p>
+                <strong>Available Variables:</strong>{' '}
+                {Object.keys(workflowConfig?.formatted?.variables || {}).join(', ') || 'None'}
+              </p>
+            </div>
+          )}
+          
+          <div className="form-actions">
+            <Link 
+              to={`/exchange/${selectedProvider}/${exchangeId}`}
+              className={`participate-button ${(!selectedProvider || !exchangeId) ? 'disabled' : ''}`}
+              onClick={(e) => {
+                if (!selectedProvider || !exchangeId) {
+                  e.preventDefault();
+                }
+              }}
+            >
+              Participate in Exchange
+            </Link>
+          </div>
+        </div>
       </div>
       
       {isLoading && (
@@ -131,7 +259,7 @@ export const VCApiProviderSettings: React.FC = () => {
       )}
       
       <div className="env-var-help">
-        <h4>Environment Variable Format</h4>
+        <h4>Example Environment Variable Format</h4>
         <div className="env-var-code">
           <div className="env-var-line"><span className="env-var-name">VC_API_PROVIDER_1_NAME</span>=<span className="env-var-value">"Provider Name"</span></div>
           <div className="env-var-line"><span className="env-var-name">VC_API_PROVIDER_1_URL</span>=<span className="env-var-value">"https://api.example.com"</span></div>

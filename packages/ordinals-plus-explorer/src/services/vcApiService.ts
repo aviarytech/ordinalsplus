@@ -1,7 +1,7 @@
 import { VCApiProvider } from '../components/settings/VCApiProviderSettings';
 
 // API server base URL
-const API_BASE_URL = 'http://localhost:3005';
+export const API_BASE_URL = 'http://localhost:3005';
 
 /**
  * Fetches VC API providers configured in the server environment
@@ -108,4 +108,102 @@ export function combineProviders(
   }
   
   return allProviders;
+}
+
+/**
+ * Creates an exchange with a VC API provider
+ * 
+ * @param providerId - ID of the VC API provider
+ * @param options - Options for creating the exchange
+ * @returns Promise that resolves to the created exchange data
+ */
+export async function createExchange(
+  providerId: string,
+  options: {
+    type?: string;
+    issuer?: string;
+    subject?: string;
+    [key: string]: any;
+  }
+): Promise<any> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/vc-api/providers/${providerId}/exchanges`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(options)
+      }
+    );
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create exchange: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating exchange:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetches the workflow configuration for a VC API provider
+ * 
+ * @param providerId - ID of the VC API provider
+ * @returns Promise that resolves to the workflow configuration
+ */
+export async function fetchWorkflowConfiguration(providerId: string): Promise<any> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/vc-api/providers/${providerId}/workflow-configuration`);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch workflow configuration: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching workflow configuration:', error);
+    throw error;
+  }
+}
+
+/**
+ * Participates in an exchange with a VC API provider using form variables
+ * 
+ * @param providerId - ID of the VC API provider
+ * @param exchangeId - ID of the exchange to participate in
+ * @param variables - Variables to use in the exchange (from form inputs)
+ * @returns Promise that resolves to the exchange participation response
+ */
+export async function participateInExchange(
+  providerId: string, 
+  exchangeId: string, 
+  variables: Record<string, string>
+): Promise<any> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/vc-api/providers/${providerId}/exchanges/${exchangeId}/participate`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ variables })
+      }
+    );
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to participate in exchange: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error participating in exchange:', error);
+    throw error;
+  }
 }

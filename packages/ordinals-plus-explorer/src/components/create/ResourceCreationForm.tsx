@@ -89,6 +89,19 @@ const ResourceCreationForm: React.FC = () => {
   const [metadata, setMetadata] = useState('');  // Advanced options state
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   
+  // Resource inscription state
+  const [file, setFile] = useState<File | null>(null);
+  const [resourceName, setResourceName] = useState('');
+  const [resourceDescription, setResourceDescription] = useState('');
+  const [resourceType, setResourceType] = useState('OTHER');
+  const [isInscribing, setIsInscribing] = useState(false);
+  const [inscriptionError, setInscriptionError] = useState<string | null>(null);
+  const [inscriptionResponse, setInscriptionResponse] = useState<any | null>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isDragging, setIsDragging] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  
   // VC API Provider state
   const [vcApiProviders] = useLocalStorage<VCApiProvider[]>('vc-api-providers', []);
   const [selectedVcProviderId, setSelectedVcProviderId] = useState<string | null>(null);
@@ -232,13 +245,229 @@ const ResourceCreationForm: React.FC = () => {
     setExtractedCommitTx(null);
     setShowDirectTextEditor(false);
     setUploadedFileName(null);
+    
+    // Reset resource inscription state
+    setFile(null);
+    setResourceName('');
+    setResourceDescription('');
+    setResourceType('OTHER');
+    setIsInscribing(false);
+    setInscriptionError(null);
+    setInscriptionResponse(null);
+    setValidationErrors([]);
+    setFieldErrors({});
+    setIsDragging(false);
+    setShowPreview(false);
+  };
+  
+  // Process the selected file for resource inscription
+  const processFile = (selectedFile: File) => {
+    setFile(selectedFile);
+    setValidationErrors([]);
+    setFieldErrors({});
+    
+    // Determine content type from file
+    const fileType = selectedFile.type;
+    if (fileType) {
+      setContentType(fileType);
+    } else {
+      // Fallback to guessing by extension
+      const extension = selectedFile.name.split('.').pop()?.toLowerCase() || '';
+      const mimeType = getMimeTypeFromExtension(extension);
+      setContentType(mimeType || 'application/octet-stream');
+    }
+    
+    // Set default resource name from filename if empty
+    if (!resourceName) {
+      const fileName = selectedFile.name.split('.')[0];
+      setResourceName(fileName);
+    }
+    
+    // Read file content
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setContent(e.target?.result?.toString() || '');
+      // Automatically show preview when file is loaded
+      setShowPreview(true);
+    };
+    
+    reader.onerror = () => {
+      // Handle file reading errors
+      setFieldErrors(prev => ({
+        ...prev,
+        file: `Error reading file: ${reader.error?.message || 'Unknown error'}`
+      }));
+    };
+    
+    // Read as text or data URL based on file type
+    if (fileType.startsWith('text/') || fileType === 'application/json') {
+      reader.readAsText(selectedFile);
+    } else {
+      reader.readAsDataURL(selectedFile);
+    }
+    
+    // Validate file selection
+    validateFileSelection(selectedFile, fileType);
+  };
+  
+  // Handle file selection from input
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = event.target.files?.[0];
+    if (!selectedFile) return;
+    processFile(selectedFile);
+  };
+  
+  // Handle drag events
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+  
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set isDragging to false if we're leaving the dropzone (not a child element)
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  };
+  
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFile = e.dataTransfer.files[0];
+      processFile(droppedFile);
+    }
+  };
+  
+  // Validate file selection
+  const validateFileSelection = (selectedFile: File, fileType: string) => {
+    const errors: Record<string, string> = {};
+    const maxSize = 10 * 1024 * 1024; // 10MB max size
+    
+    // Check file size
+    if (selectedFile.size > maxSize) {
+      errors.file = `File size exceeds the maximum allowed (${formatFileSize(maxSize)})`;
+    }
+    
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+  
+  // Format file size for display
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} bytes`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+  
+  // Helper function to determine MIME type from file extension
+  const getMimeTypeFromExtension = (extension: string): string => {
+    const mimeTypeMap: Record<string, string> = {
+      'txt': 'text/plain',
+      'html': 'text/html',
+      'css': 'text/css',
+      'js': 'text/javascript',
+      'json': 'application/json',
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'svg': 'image/svg+xml',
+      'pdf': 'application/pdf',
+      'xml': 'application/xml',
+      'zip': 'application/zip',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'ppt': 'application/vnd.ms-powerpoint',
+      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    };
+    
+    return mimeTypeMap[extension] || '';
+  };
+  
+  // Handle resource inscription
+  const handleResourceInscription = async () => {
+    if (!walletConnected) {
+      addErrorToast(new Error('Please connect your wallet to inscribe resources'));
+      return;
+    }
+    
+    if (!file || !content) {
+      setValidationErrors(['Please select a file to upload']);
+      return;
+    }
+    
+    if (!apiService) {
+      addErrorToast(new Error('API service is not available'));
+      return;
+    }
+    
+    // Start inscription process
+    setIsInscribing(true);
+    setInscriptionError(null);
+    
+    try {
+      // Create metadata
+      const metadata = {
+        type: resourceType,
+        name: resourceName || file.name,
+        description: resourceDescription,
+        size: file.size,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Prepare resource for inscription
+      const resourceData = {
+        content: content,
+        contentType: contentType,
+        metadata: metadata,
+        parentDid: walletAddress || ''
+      };
+      
+      // Call API to create resource
+      const result = await apiService.createResource(resourceData);
+      
+      // Handle success
+      setInscriptionResponse(result);
+      addToast('Successfully inscribed resource', 'success', 3000);
+      
+      // Reset form
+      resetFlow();
+    } catch (error) {
+      console.error('Error inscribing resource:', error);
+      
+      // Handle error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setInscriptionError(`Inscription failed: ${errorMessage}`);
+      setValidationErrors([`Inscription failed: ${errorMessage}`]);
+      
+      addErrorToast(new Error('Inscription Failed: ' + errorMessage));
+    } finally {
+      setIsInscribing(false);
+    }
   };
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
       console.log("Copied to clipboard:", text);
+      addToast('Copied to clipboard', 'success', 2000);
     }).catch(err => {
       console.error("Failed to copy:", err);
+      addErrorToast(new Error('Failed to copy to clipboard'));
     });
   };
   
