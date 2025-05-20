@@ -51,6 +51,8 @@ Several helper scripts have been created to simplify testing:
 - `scripts/bitcoin-cli-signet.sh` - For running Bitcoin CLI commands with the correct configuration
 - `scripts/request-signet-coins.sh` - For requesting test coins from a Signet faucet
 - `scripts/test-verifiable-credential.js` - For verifying the environment and testing credential creation
+- `scripts/setup-signet-environment.sh` - Launches Bitcoin Core and Ord, creates the test wallet, and requests faucet funds
+- `scripts/teardown-signet-environment.sh` - Stops the Signet environment services
 
 ### 5. Configuration Files
 
@@ -62,16 +64,19 @@ All configuration settings are stored in:
 ## Usage Instructions
 
 ### Starting the Environment
+You can start all required services with a single command:
 
-1. Start Bitcoin Core:
-   ```
-   npm run btc:signet
-   ```
+```bash
+./scripts/setup-signet-environment.sh
+```
 
-2. Start the Ord server:
-   ```
-   npm run ord:server
-   ```
+This script launches Bitcoin Core, creates the test wallet, starts the Ord indexer and server, and requests faucet funds automatically.
+
+Stop all services with:
+
+```bash
+./scripts/teardown-signet-environment.sh
+```
 
 ### Testing the Environment
 
