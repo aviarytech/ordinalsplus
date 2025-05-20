@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "build": "cd packages/ordinalsplus && bun run build",
     "btc:signet": "bitcoind -conf=/Users/brian/Projects/ordinalsplus/bitcoin.conf",
     "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=/Users/brian/Projects/ordinalsplus/data/signet/.cookie --data-dir=/Users/brian/Projects/ordinalsplus/data/signet index run",
     "ord:server": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=/Users/brian/Projects/ordinalsplus/data/signet/.cookie --data-dir=/Users/brian/Projects/ordinalsplus/data/signet server",

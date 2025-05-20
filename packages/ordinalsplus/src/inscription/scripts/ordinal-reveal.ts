@@ -58,19 +58,19 @@ export interface PreparedInscription {
  * @returns An OrdinalInscription object compatible with micro-ordinals
  */
 export function createOrdinalInscription(content: InscriptionContent): OrdinalInscription {
-  // Convert metadata to the format expected by micro-ordinals
-  const unknownTags = content.metadata 
-    ? Object.entries(content.metadata).map(
+  const { contentType, metadata: metadataTags, content: body } = content;
+  const metadata = metadataTags 
+    ? Object.entries(metadataTags).map(
         ([key, value]) => [utf8.decode(key), utf8.decode(value)] as [Uint8Array, Uint8Array]
       )
     : undefined;
   
   return {
     tags: {
-      contentType: content.contentType,
-      unknown: unknownTags
+      contentType,
+      metadata
     },
-    body: content.content
+    body
   };
 }
 
