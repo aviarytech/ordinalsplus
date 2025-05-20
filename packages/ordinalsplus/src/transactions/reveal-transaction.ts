@@ -284,6 +284,7 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
           
           // Set error in transaction tracker
           transactionTracker.setTransactionError(transactionId, {
+            name: error.name,
             message: error.message,
             code: error.code,
             details: error.details,
@@ -338,6 +339,7 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
           
           // Set error in transaction tracker
           transactionTracker.setTransactionError(transactionId, {
+            name: signingError.name,
             message: signingError.message,
             code: signingError.code,
             details: signingError.details,
@@ -383,6 +385,7 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         
         // Set error in transaction tracker
         transactionTracker.setTransactionError(transactionId, {
+          name: extractionError.name,
           message: extractionError.message,
           code: extractionError.code,
           details: extractionError.details,
@@ -437,6 +440,7 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       const txInfo = transactionTracker.getTransaction(transactionId);
       if (txInfo && !txInfo.error) {
         transactionTracker.setTransactionError(transactionId, {
+          name: structuredError.name,
           message: structuredError.message,
           code: structuredError.code,
           details: structuredError.details,

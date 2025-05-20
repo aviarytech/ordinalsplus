@@ -53,7 +53,7 @@ const UtxoSelector: React.FC<UtxoSelectorProps> = ({
   const [sortField, setSortField] = useState<SortField>('value');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [filterOption, setFilterOption] = useState<FilterOption>('all');
-  const [showGuidance, setShowGuidance] = useState(true);
+  const [showGuidance, setShowGuidance] = useState(false);
 
   // Calculate the total value of selected UTXOs
   const totalSelectedValue = useMemo(() => 

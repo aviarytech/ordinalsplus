@@ -272,7 +272,7 @@ export async function participateInExchange(providerId: string, exchangeId: stri
         'Accept': 'application/json',
         ...(provider.authToken && { 'Authorization': `Bearer ${provider.authToken}` })
       },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify({})
     });
     
     if (!response.ok) {

@@ -42,10 +42,10 @@ export default defineConfig({
   //   'process.env': '({})', 
   // },
   server: {
-    https: {
-      key: fs.readFileSync(path.resolve(__dirname, './localhost+2-key.pem')), // Adjust path if files are elsewhere
-      cert: fs.readFileSync(path.resolve(__dirname, './localhost+2.pem')), // Adjust path if files are elsewhere
-    },
+    // https: {
+    //   key: fs.readFileSync(path.resolve(__dirname, './localhost+2-key.pem')), // Adjust path if files are elsewhere
+    //   cert: fs.readFileSync(path.resolve(__dirname, './localhost+2.pem')), // Adjust path if files are elsewhere
+    // },
     // Optional: Define port if needed, default is 5173 for Vite
     // port: 3000, 
   },

@@ -1,0 +1,33 @@
+{
+  "network": "signet",
+  "bitcoin": {
+    "dataDir": "/Users/brian/Projects/ordinalsplus/data",
+    "configFile": "/Users/brian/Projects/ordinalsplus/bitcoin.conf",
+    "rpcUrl": "http://127.0.0.1:38332",
+    "cookieFile": "/Users/brian/Projects/ordinalsplus/data/signet/.cookie"
+  },
+  "ord": {
+    "dataDir": "/Users/brian/Projects/ordinalsplus/data/signet",
+    "indexSats": true
+  },
+  "wallet": {
+    "name": "verifiable_credential_wallet",
+    "addresses": {
+      "verifiable_credential": "tb1qtya4axfnyymhzymfqhmmne5556huud0un05gmy"
+    }
+  },
+  "scripts": {
+    "bitcoinCli": "./scripts/bitcoin-cli-signet.sh",
+    "requestCoins": "./scripts/request-signet-coins.sh"
+  },
+  "faucets": [
+    {
+      "name": "Signet Faucet",
+      "url": "https://signet.bc-2.jp/"
+    },
+    {
+      "name": "Alternative Signet Faucet",
+      "url": "https://signetfaucet.com/"
+    }
+  ]
+}

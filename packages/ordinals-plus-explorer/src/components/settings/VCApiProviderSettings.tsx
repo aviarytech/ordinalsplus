@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchSystemVCApiProviders, fetchWorkflowConfiguration } from '../../services/vcApiService';
+import { useLocalStorage } from '../../hooks/useLocalStorage';
 import './VCApiProviderSettings.css';
 
 // Interface for a VC API provider configuration
@@ -42,6 +43,9 @@ export const VCApiProviderSettings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Use local storage to persist providers for use in other components
+  const [_, setVcApiProviders] = useLocalStorage<VCApiProvider[]>('vc-api-providers', []);
+  
   // State for exchange functionality
   const [selectedProvider, setSelectedProvider] = useState<string>('');
   const [exchangeId, setExchangeId] = useState<string>('');
@@ -56,6 +60,9 @@ export const VCApiProviderSettings: React.FC = () => {
         setIsLoading(true);
         const data = await fetchSystemVCApiProviders();
         setProviders(data);
+        
+        // Save providers to local storage for use in other components
+        setVcApiProviders(data);
         
         // Set the first provider as selected if available
         if (data.length > 0) {

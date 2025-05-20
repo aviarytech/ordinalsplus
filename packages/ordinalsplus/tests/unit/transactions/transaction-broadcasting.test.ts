@@ -311,24 +311,15 @@ describe('TransactionBroadcaster', () => {
   });
   
   it('should handle timeouts', async () => {
-    // Create a proper AbortError that matches the DOMException thrown by real AbortController
-    const abortError = new Error('The operation was aborted');
-    abortError.name = 'AbortError';
-    
-    // Mock fetch to simulate a timeout by throwing the abort error when aborted
-    let abortCallback: Function | null = null;
-    mockFetch.mockImplementationOnce(() => {
-      return new Promise((_, reject) => {
-        abortCallback = () => reject(abortError);
-      });
-    });
-    
-    // Override the abort method to trigger our abort callback
+    // Mock AbortController to simulate timeout
     const originalAbort = MockAbortController.prototype.abort;
     MockAbortController.prototype.abort = function() {
       originalAbort.call(this);
-      if (abortCallback) abortCallback();
+      mockFetch.mockRejectedValueOnce(new Error('AbortError'));
     };
+    
+    // Mock fetch to never resolve
+    mockFetch.mockImplementationOnce(() => new Promise(() => {}));
     
     // Second request succeeds
     mockFetch.mockResolvedValueOnce({

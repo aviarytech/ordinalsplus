@@ -1,6 +1,6 @@
 import { configureApi, PORT, HOST } from './config/apiConfig';
 import { registerRouters } from './routers';
-import { vcApiRoutes } from './routes/vcApiRoutes';
+import { vcApiRoutes } from './routers/vcApiRoutes';
 
 /**
  * Main API entry point

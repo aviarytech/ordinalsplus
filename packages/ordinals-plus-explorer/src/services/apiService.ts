@@ -293,8 +293,8 @@ class ApiService {
    * Create a Resource Inscription PSBT for a specific network
    */
   async createResourceInscription(networkType: string, request: ResourceInscriptionRequest): Promise<PsbtResponse> {
-     // Assuming endpoint /api/inscriptions/resource
-    return this.createInscription(networkType, '/api/inscriptions/resource', request);
+    // Use the correct endpoint for resource inscriptions
+    return this.createInscription(networkType, '/api/resource-inscriptions', request);
   }
 
 
