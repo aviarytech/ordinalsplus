@@ -1,13 +1,13 @@
 {
   "network": "signet",
   "bitcoin": {
-    "dataDir": "/Users/brian/Projects/ordinalsplus/data",
-    "configFile": "/Users/brian/Projects/ordinalsplus/bitcoin.conf",
+    "dataDir": "./data",
+    "configFile": "./bitcoin.conf",
     "rpcUrl": "http://127.0.0.1:38332",
-    "cookieFile": "/Users/brian/Projects/ordinalsplus/data/signet/.cookie"
+    "cookieFile": "./data/signet/.cookie"
   },
   "ord": {
-    "dataDir": "/Users/brian/Projects/ordinalsplus/data/signet",
+    "dataDir": "./data/signet",
     "indexSats": true
   },
   "wallet": {

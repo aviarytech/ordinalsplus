@@ -90,6 +90,8 @@ Several helper scripts have been created to simplify working with the Signet env
 
 - `scripts/bitcoin-cli-signet.sh`: Run bitcoin-cli commands with the correct configuration
 - `scripts/request-signet-coins.sh`: Request test coins from a Signet faucet
+- `scripts/setup-signet-environment.sh`: Start Bitcoin Core, create the test wallet, launch Ord, and request coins automatically
+- `scripts/teardown-signet-environment.sh`: Stop all Signet services
 
 ## Configuration
 
