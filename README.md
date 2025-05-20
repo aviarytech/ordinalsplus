@@ -59,4 +59,12 @@ Ordinals Plus is a comprehensive solution for creating, managing, and exploring 
 
 *   **Watch Mode**: Development servers (backend and frontend) are expected to be running in watch mode. Do not include instructions to start/restart servers.
 *   **Focus**: Concentrate on code changes; assume changes are automatically reflected via the watch process.
-*   **Environment**: Assume both backend and frontend servers are continuously running during development sessions. 
+*   **Environment**: Assume both backend and frontend servers are continuously running during development sessions.
+
+## Setup
+
+Run the `configure.sh` script to install Bun and all project dependencies:
+
+```bash
+./scripts/configure.sh
+```
