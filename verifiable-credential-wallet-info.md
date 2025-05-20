@@ -12,7 +12,7 @@
   - **Created**: 2025-05-18
 
 ## Ordinals Wallet Details
-- **Data Directory**: `/Users/brian/Projects/ordinalsplus/data/signet/verifiable_credential_wallet`
+- **Data Directory**: `./data/signet/verifiable_credential_wallet`
 - **Network**: Signet
 - **Purpose**: For inscribing Verifiable credential on Cygnet network
 - **Mnemonic**: `obscure vapor guess virtual awkward plunge text onion gospel seed guess around`
