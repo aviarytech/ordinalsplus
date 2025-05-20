@@ -1,0 +1,52 @@
+**Objective:** Systematically identify, plan, and execute tasks using Taskmaster, following an iterative development approach.
+
+**Workflow:**
+
+1.  **Identify Next Task:**
+    *   Use the Taskmaster `next_task` tool (or `task-master next` CLI command) to determine the next available task.
+    *   Log the ID and title of this task for reference.
+
+2.  **Understand Task Details:**
+    *   Use the Taskmaster `get_task` tool (or `task-master show [ID_FROM_STEP_1]` CLI command) with the obtained ID.
+    *   Thoroughly review all details: description, current subtasks (if any), dependencies, priority, implementation notes, and test strategy.
+
+3.  **Prepare and Execute Task (Iterative Cycle):**
+
+    *   **A. Select Unit of Work:**
+        *   If the main task has 'pending' subtasks, select the first one as the current unit of work. Use `get_task` for this subtask's specific ID to load its details.
+        *   If the main task has no subtasks, the main task itself is the current unit of work.
+        *   If the selected unit of work appears too complex or lacks clear actionable steps, consider using the `expand_task` tool (or `task-master expand --id [ID] [--research]`) to break it down further. If new subtasks are created, select the first 'pending' one as the new unit of work.
+
+    *   **B. Plan Implementation:**
+        *   Verify the target sub-package or directory for the task. Ensure all subsequent operations (e.g., file edits, code generation, terminal commands) are correctly scoped to this location within the repository.
+        *   Based on the details of the current unit of work, formulate a precise implementation plan. This plan should include:
+            *   Specific files to be created or modified.
+            *   Key functions, classes, or components to be implemented or changed.
+            *   Core logic, algorithms, and data structures involved.
+            *   Potential challenges and how to address them.
+        *   Log this detailed plan by appending it to the `details` of the unit of work using the `update_subtask` tool (for a subtask: `update_subtask --id [SUBTASK_ID] --prompt "[Detailed Plan]"`) or `update_task` tool (for a main task: `update_task --id [TASK_ID] --prompt "[Detailed Plan]"`).
+
+    *   **C. Implement:**
+        *   Set the status of the current unit of work to `in-progress` using the `set_task_status` tool (or `task-master set-status --id [ID] --status=in-progress`).
+        *   Proceed with the code implementation according to your plan.
+        *   Regularly document your progress, insights, challenges encountered, and solutions found by appending notes to the unit of work's `details` using `update_subtask` or `update_task` as appropriate. This creates an implementation log.
+
+    *   **D. Complete, Reflect, and Document:**
+        *   Once the implementation for the current unit of work is functionally complete and verified (e.g., by following its `testStrategy`):
+            1.  **Reflection:** Analyze the scalability and maintainability of the code changes. Produce a 1-2 paragraph analysis covering these aspects. Based on your reflections, note any potential improvements, refactoring opportunities, or next steps that might be beneficial for the overall system. Append this reflection to the task's details or log it appropriately.
+            2.  **Rules Update:** Review the implemented code. If any new or modified code patterns, conventions, or best practices have emerged that are not covered by existing Cursor rules, create new or update existing rules in the `.cursor/rules/` directory. Ensure these rules follow the guidelines in `cursor_rules.mdc` and `self_improve.mdc`.
+            3.  **Set Status:** Mark the current unit of work as `done` using the `set_task_status` tool (or `task-master set-status --id [ID] --status=done`).
+            4.  **Commit Changes:** Commit all relevant code changes and any updated/new rule files. Craft a comprehensive Git commit message that summarizes the work done for the unit of work, referencing its ID (e.g., `feat: Implement feature X for task/subtask [ID] - Details: ... - Rules: Updated Y, Created Z`).
+
+4.  **Continue or Fetch New Task:**
+    *   If the completed unit of work was a subtask and the parent main task has more 'pending' subtasks, return to step **3.A (Select Unit of Work)** to process the next subtask for the *same main task*.
+    *   If all subtasks for the main task are 'done', or if the main task (which had no subtasks) is now 'done', return to step **1 (Identify Next Task)** to fetch the next main task from Taskmaster.
+    *   If `next_task` indicates no more tasks are available, the entire process is complete.
+
+**General Guidelines:**
+*   Strictly follow the iterative subtask implementation process detailed in the `dev_workflow.mdc` documentation.
+*   When using AI-powered Taskmaster tools/commands (like `expand_task`, `update_task`, `add_task`), remember they can be long-running.
+*   Prefer Taskmaster MCP tools if available in your environment; otherwise, use the equivalent `task-master` CLI commands.
+*   If at any point a task's requirements are unclear, or if you require additional context or user input, clearly state what information is needed before proceeding.
+*   Always prioritize the creation of maintainable, scalable, and well-documented software, reflecting on these aspects after each unit of work as per step 3.D.1.
+*   Always make sure you are not writing code for something that already exists

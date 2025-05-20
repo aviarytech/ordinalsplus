@@ -1,0 +1,93 @@
+{
+  "name": "ordinalsplus",
+  "version": "0.10.5",
+  "description": "A JavaScript/TypeScript library for working with BTCO DIDs and DID Linked Resources on the Bitcoin blockchain",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/index.d.ts"
+      ],
+      "types": [
+        "./dist/types/index.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src --ext .ts",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:bail": "bun test --bail",
+    "test:psbt": "NODE_OPTIONS='--no-warnings' bun test test/psbt-creation.test.ts",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run test && npm run lint",
+    "example": "bun examples/basic-usage.ts",
+    "example:resolve": "bun run examples/resource-resolution.ts"
+  },
+  "keywords": [
+    "bitcoin",
+    "ordinals",
+    "did",
+    "btco",
+    "decentralized",
+    "identity",
+    "linked-resources",
+    "blockchain"
+  ],
+  "author": "Brian <example@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourname/ordinalsplus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourname/ordinalsplus/issues"
+  },
+  "homepage": "https://github.com/yourname/ordinalsplus#readme",
+  "dependencies": {
+    "@jest/globals": "^29.7.0",
+    "@noble/curves": "^1.9.0",
+    "@noble/ed25519": "^2.2.3",
+    "@noble/hashes": "^1.8.0",
+    "@noble/secp256k1": "^2.2.3",
+    "@scure/btc-signer": "^1.8.0",
+    "@types/uuid": "^10.0.0",
+    "bitcoinjs-lib": "^6.1.7",
+    "jsonld": "^8.3.0",
+    "micro-ordinals": "^0.2.2",
+    "multiformats": "^12.1.0",
+    "tiny-secp256k1": "^2.2.3",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/bitcoinjs-lib": "^5.0.4",
+    "@types/bun": "^1.2.8",
+    "@types/jsonld": "^1.5.15",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "bun-types": "^1.2.11",
+    "eslint": "^8.57.0",
+    "typescript": "^5.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

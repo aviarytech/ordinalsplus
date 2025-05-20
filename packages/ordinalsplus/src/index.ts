@@ -1,0 +1,116 @@
+import { OrdiscanProvider } from './resources/providers/ordiscan-provider';
+import { OrdNodeProvider } from './resources/providers/ord-node-provider';
+
+// --- Type Exports ---
+// Export all types directly from the types index
+export * from './types';
+
+// --- DID Exports ---
+export { BtcoDid, createDidFromInscriptionData, isBtcoDid } from './did/index';
+
+// --- Key Management Exports ---
+export {
+    KeyManager,
+    defaultKeyManager,
+    KeyPairGenerator,
+    generateEd25519KeyPair,
+    generateSecp256k1KeyPair,
+    generateSchnorrKeyPair
+} from './key-management';
+
+// --- Resource Exports ---
+// Note: createLinkedResourceFromInscription is exported from both ./did and ./resources
+// We need to choose one or rename/alias. Let's pick the one from ./resources for now.
+export { 
+    createLinkedResourceFromInscription, 
+    ResourceResolver, 
+    formatResourceContent 
+} from './resources/index';
+
+export type { ResourceProvider, ResourceResolverOptions } from './resources/index';
+
+export { 
+    isValidBtcoDid, 
+    isValidResourceId, 
+    parseBtcoDid, 
+    extractSatNumber, 
+    extractIndexFromInscription, 
+    BTCO_METHOD, 
+    ERROR_CODES, 
+    MAX_SAT_NUMBER 
+} from './utils/index';
+
+export * from './utils/address-utils';
+export { NETWORKS, getScureNetwork } from './utils/networks';
+
+// --- Resource Utility Exports ---
+export {
+    validateResource,
+    parseResourcePath,
+    parseResourceId,
+    createResourceId,
+    getValidationRules,
+    getMimeTypeFromExtension,
+    getResourceTypeFromMimeType,
+    MAX_RESOURCE_SIZE
+} from './utils/resource-utils';
+
+// --- PSBT Utility Exports ---
+export { 
+    finalizePsbt, 
+    extractTransaction, 
+    finalizeAndExtractTransaction 
+} from './utils/psbt-utils';
+
+export { OrdiscanProvider } from './resources/providers/ordiscan-provider';
+
+export { OrdiscanProvider as default, OrdNodeProvider };
+
+export * from './utils/constants';
+
+// --- Transaction Exports ---
+export {
+    calculateFee,
+    prepareResourceInscription, 
+    validateResourceCreationParams,
+    prepareCommitTransaction,
+    createRevealTransaction,
+    transactionTracker
+} from './transactions';
+
+export type { 
+    PreparedResourceInfo,
+    CommitTransactionParams,
+    CommitTransactionResult,
+    RevealTransactionParams,
+    RevealTransactionResult
+} from './transactions';
+
+// --- Transaction Status Tracking Exports ---
+export {
+    TransactionStatus,
+    TransactionType,
+    TransactionStatusTracker
+} from './transactions/transaction-status-tracker';
+
+export type {
+    TrackedTransaction,
+    TransactionError,
+    TransactionProgressEvent
+} from './transactions/transaction-status-tracker';
+
+// --- Component Exports ---
+export * from './components';
+
+// --- Inscription Exports ---
+export {
+    createInscription,
+    createTextInscription,
+    createJsonInscription
+} from './inscription';
+
+// --- Indexer Exports ---
+export {
+  OrdinalsIndexer,
+  MemoryIndexerDatabase
+} from './indexer';

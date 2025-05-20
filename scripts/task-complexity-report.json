@@ -1,0 +1,91 @@
+{
+  "meta": {
+    "generatedAt": "2025-05-19T05:48:22.767Z",
+    "tasksAnalyzed": 10,
+    "thresholdScore": 5,
+    "projectName": "Taskmaster",
+    "usedResearch": true
+  },
+  "complexityAnalysis": [
+    {
+      "taskId": 1,
+      "taskTitle": "Organize Existing Tests into Coherent Test Suites",
+      "complexityScore": 6,
+      "recommendedSubtasks": 4,
+      "expansionPrompt": "Break down the test organization task into specific subtasks for each package (ordinalsplus, ordinals-plus-api, ordinals-plus-explorer), including audit, categorization, restructuring, and documentation steps.",
+      "reasoning": "This task requires understanding the existing test structure across three packages and implementing a coherent organization. It involves code refactoring, documentation, and ensuring tests still pass after reorganization. Medium complexity due to the need for comprehensive understanding of the test ecosystem."
+    },
+    {
+      "taskId": 2,
+      "taskTitle": "Set Up Signet Testing Environment",
+      "complexityScore": 7,
+      "recommendedSubtasks": 5,
+      "expansionPrompt": "Break down the Signet environment setup into subtasks covering Bitcoin Core configuration, Ord server setup, wallet creation, funding, automation scripts, and verification steps.",
+      "reasoning": "Setting up a complete testing environment involves multiple components (Bitcoin Core, Ord server, wallets) and requires system configuration, network setup, and verification. The complexity comes from ensuring all components work together correctly and creating automation for reproducibility."
+    },
+    {
+      "taskId": 3,
+      "taskTitle": "Implement Basic Metadata Writing Tests",
+      "complexityScore": 5,
+      "recommendedSubtasks": 3,
+      "expansionPrompt": "Create subtasks for implementing basic metadata writing tests, including test script creation, verification methods, and documentation of different metadata formats and edge cases.",
+      "reasoning": "This task involves creating and verifying basic metadata inscriptions. It's moderately complex as it requires working with the library's API and implementing verification logic, but the scope is limited to simple metadata structures."
+    },
+    {
+      "taskId": 4,
+      "taskTitle": "Develop Complex JSON Metadata Tests",
+      "complexityScore": 6,
+      "recommendedSubtasks": 4,
+      "expansionPrompt": "Divide the complex JSON metadata testing into subtasks for different structural patterns (nested objects, arrays, mixed types), edge cases, serialization testing, and comprehensive verification.",
+      "reasoning": "Testing complex JSON structures adds more complexity than basic metadata tests. It requires handling nested objects, arrays, and various data types, plus implementing more sophisticated verification logic to ensure data integrity through the inscription process."
+    },
+    {
+      "taskId": 5,
+      "taskTitle": "Implement Metadata Size and Encoding Tests",
+      "complexityScore": 7,
+      "recommendedSubtasks": 4,
+      "expansionPrompt": "Create subtasks for testing metadata size limits, special character handling, different encodings, and documenting findings about practical limitations and encoding issues.",
+      "reasoning": "This task involves testing boundary conditions and character encoding issues, which can be complex to debug. Finding practical size limits requires systematic testing, and handling special characters adds complexity due to potential encoding/decoding issues."
+    },
+    {
+      "taskId": 6,
+      "taskTitle": "Develop End-to-End Workflow Tests",
+      "complexityScore": 8,
+      "recommendedSubtasks": 5,
+      "expansionPrompt": "Break down the end-to-end workflow testing into subtasks covering UTXO selection, transaction creation, signing, broadcasting, confirmation verification, and performance measurement for both single and batch inscriptions.",
+      "reasoning": "End-to-end tests are highly complex as they involve the entire inscription workflow from wallet initialization to verification. This requires coordinating multiple components, handling asynchronous operations, and implementing robust verification. The need to test batch operations adds further complexity."
+    },
+    {
+      "taskId": 7,
+      "taskTitle": "Implement Error Handling and Recovery Tests",
+      "complexityScore": 9,
+      "recommendedSubtasks": 6,
+      "expansionPrompt": "Create subtasks for testing different error scenarios including network interruptions, transaction failures, fee estimation errors, UTXO selection issues, and recovery mechanisms for each scenario.",
+      "reasoning": "Error handling and recovery testing is highly complex as it requires simulating various failure modes and implementing recovery mechanisms. This involves creating mock components, understanding error propagation, and verifying recovery procedures work correctly across different scenarios."
+    },
+    {
+      "taskId": 8,
+      "taskTitle": "Implement API Integration Tests",
+      "complexityScore": 7,
+      "recommendedSubtasks": 5,
+      "expansionPrompt": "Divide API integration testing into subtasks for testing metadata-related endpoints, error handling, rate limiting, concurrency, and CLI command integration.",
+      "reasoning": "API integration testing requires setting up a test environment for the API, implementing tests for various endpoints, and verifying correct behavior including error handling. The complexity comes from testing both happy paths and error scenarios across multiple API endpoints."
+    },
+    {
+      "taskId": 9,
+      "taskTitle": "Implement Explorer UI Tests with Playwright",
+      "complexityScore": 8,
+      "recommendedSubtasks": 5,
+      "expansionPrompt": "Break down the Explorer UI testing into subtasks for setting up Playwright, testing metadata display, search functionality, filtering, responsive design, and cross-browser compatibility.",
+      "reasoning": "UI testing with Playwright involves setting up an automated testing framework, creating test fixtures, and implementing tests for various UI components. The complexity comes from handling asynchronous UI interactions, cross-browser testing, and visual verification requirements."
+    },
+    {
+      "taskId": 10,
+      "taskTitle": "Create Comprehensive Test Documentation and Reports",
+      "complexityScore": 6,
+      "recommendedSubtasks": 4,
+      "expansionPrompt": "Create subtasks for generating test documentation including test summary, code coverage reports, performance metrics, gap analysis, and recommendations for improvements.",
+      "reasoning": "This task requires compiling and organizing results from all other testing tasks, generating reports, and providing meaningful analysis. The complexity comes from the breadth of information to be documented and the need to provide actionable insights based on test findings."
+    }
+  ]
+}

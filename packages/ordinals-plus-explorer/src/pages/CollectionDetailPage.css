@@ -1,0 +1,269 @@
+.collection-detail-container {
+  background-color: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  margin-bottom: 2rem;
+}
+
+.collection-header {
+  padding: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.collection-header-content {
+  flex: 1;
+  min-width: 300px;
+}
+
+.collection-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 1rem 0;
+  line-height: 1.2;
+}
+
+.collection-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.meta-label {
+  font-weight: 500;
+  color: #64748b;
+}
+
+.meta-value {
+  color: #334155;
+}
+
+.curator-did {
+  font-family: monospace;
+}
+
+.collection-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.tag {
+  background-color: #f1f5f9;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  text-transform: capitalize;
+}
+
+.collection-verification {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 250px;
+}
+
+.inscribe-button {
+  background-color: #3b82f6;
+  color: white;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.inscribe-button:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.inscribe-button:disabled {
+  background-color: #93c5fd;
+  cursor: not-allowed;
+}
+
+.inscription-status {
+  font-size: 0.875rem;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.inscription-status.pending {
+  background-color: #fef3c7;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 1rem 0;
+}
+
+.collection-credentials,
+.collection-description,
+.collection-items {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.collection-items {
+  border-bottom: none;
+}
+
+.credentials-container {
+  background-color: #f8fafc;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.no-credential {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.no-credential p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.credential-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.credential-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.credential-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.credential-id {
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.view-credential-button {
+  display: inline-block;
+  background-color: #f97316;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  text-decoration: none;
+  text-align: center;
+  transition: background-color 0.2s ease-in-out;
+  align-self: flex-start;
+}
+
+.view-credential-button:hover {
+  background-color: #ea580c;
+}
+
+.description-text {
+  margin: 0;
+  color: #475569;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .collection-detail-container {
+    background-color: #1e293b;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  }
+  
+  .collection-header {
+    border-bottom-color: #334155;
+  }
+  
+  .collection-title {
+    color: #f8fafc;
+  }
+  
+  .meta-label {
+    color: #94a3b8;
+  }
+  
+  .meta-value {
+    color: #cbd5e1;
+  }
+  
+  .tag {
+    background-color: #334155;
+    color: #cbd5e1;
+  }
+  
+  .inscribe-button:disabled {
+    background-color: #1d4ed8;
+    opacity: 0.5;
+  }
+  
+  .inscription-status {
+    background-color: #0f172a;
+    border-color: #334155;
+    color: #cbd5e1;
+  }
+  
+  .inscription-status.pending {
+    background-color: #422006;
+    border-color: #854d0e;
+    color: #fde68a;
+  }
+  
+  .section-title {
+    color: #f8fafc;
+  }
+  
+  .collection-credentials,
+  .collection-description,
+  .collection-items {
+    border-bottom-color: #334155;
+  }
+  
+  .credentials-container {
+    background-color: #0f172a;
+  }
+  
+  .no-credential p {
+    color: #94a3b8;
+  }
+  
+  .description-text {
+    color: #cbd5e1;
+  }
+}
