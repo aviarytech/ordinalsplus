@@ -30,13 +30,13 @@ signet=1
 # Enable RPC server
 server=1
 rpcallowip=127.0.0.1
-cookiefile=/Users/brian/Projects/ordinalsplus/data/signet/.cookie
+cookiefile=./data/signet/.cookie
 
 # Transaction index (required by ord)
 txindex=1
 
 # Data directory
-datadir=/Users/brian/Projects/ordinalsplus/data
+datadir=./data
 ```
 
 ### 2. Starting Bitcoin Core on Signet

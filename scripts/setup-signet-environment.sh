@@ -13,14 +13,17 @@ json() {
   node -e "console.log(require('$CONFIG_FILE')$1)" 2>/dev/null
 }
 
-BITCOIN_CONF=$(json '.bitcoin.configFile')
-BITCOIN_CLI=$(json '.scripts.bitcoinCli')
+BITCOIN_CONF_REL=$(json '.bitcoin.configFile')
+BITCOIN_CONF="$(realpath "$ROOT_DIR/$BITCOIN_CONF_REL")"
+BITCOIN_CLI_REL=$(json '.scripts.bitcoinCli')
+BITCOIN_CLI="$(realpath "$ROOT_DIR/$BITCOIN_CLI_REL")"
 RPC_URL=$(json '.bitcoin.rpcUrl')
-COOKIE_FILE=$(json '.bitcoin.cookieFile')
-ORD_DATA_DIR=$(json '.ord.dataDir')
+COOKIE_FILE="$(realpath "$ROOT_DIR/$(json '.bitcoin.cookieFile')")"
+ORD_DATA_DIR="$(realpath "$ROOT_DIR/$(json '.ord.dataDir')")"
 WALLET_NAME=$(json '.wallet.name')
 ADDRESS=$(json '.wallet.addresses.verifiable_credential')
-REQUEST_COINS=$(json '.scripts.requestCoins')
+REQUEST_COINS_REL=$(json '.scripts.requestCoins')
+REQUEST_COINS="$(realpath "$ROOT_DIR/$REQUEST_COINS_REL")"
 
 echo "Starting bitcoind on Signet..."
 bitcoind -conf="$BITCOIN_CONF" -daemon

@@ -1,8 +1,8 @@
 {
   "scripts": {
-    "btc:signet": "bitcoind -conf=/Users/brian/Projects/ordinalsplus/bitcoin.conf",
-    "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=/Users/brian/Projects/ordinalsplus/data/signet/.cookie --data-dir=/Users/brian/Projects/ordinalsplus/data/signet index run",
-    "ord:server": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=/Users/brian/Projects/ordinalsplus/data/signet/.cookie --data-dir=/Users/brian/Projects/ordinalsplus/data/signet server",
+    "btc:signet": "bitcoind -conf=./bitcoin.conf",
+    "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --data-dir=./data/signet index run",
+    "ord:server": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --data-dir=./data/signet server",
     "test": "npm run test:all",
     "test:all": "echo '\n📦 Testing all packages\n' && npm run test:summary:ordinalsplus && npm run test:summary:api && npm run test:summary:explorer && echo '\n✅ All tests completed successfully!\n'",
     "test:summary:ordinalsplus": "echo '\n📋 Testing ordinalsplus package...' && cd packages/ordinalsplus && (bun test > /tmp/test-output.txt 2>&1 || (cat /tmp/test-output.txt && exit 1)) && grep -E 'pass|fail|skip|test|Test|PASS|FAIL|SKIP' /tmp/test-output.txt | grep -v 'node_modules' | tail -n 10",

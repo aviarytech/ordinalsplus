@@ -11,7 +11,8 @@ json() {
   node -e "console.log(require('$CONFIG_FILE')$1)" 2>/dev/null
 }
 
-BITCOIN_CLI=$(json '.scripts.bitcoinCli')
+BITCOIN_CLI_REL=$(json '.scripts.bitcoinCli')
+BITCOIN_CLI="$(realpath "$ROOT_DIR/$BITCOIN_CLI_REL")"
 
 # Try to stop ord processes
 if pgrep -f "ord.*--signet" >/dev/null; then

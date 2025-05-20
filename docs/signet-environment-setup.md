@@ -20,11 +20,11 @@ The Signet testing environment consists of the following components:
 Bitcoin Core has been configured to run on Signet with the following settings:
 
 - Network: Signet
-- Data directory: `/Users/brian/Projects/ordinalsplus/data`
+- Data directory: `./data`
 - Transaction indexing enabled (required for Ord)
 - RPC server enabled on localhost
 
-The configuration is stored in `/Users/brian/Projects/ordinalsplus/bitcoin.conf`.
+The configuration is stored in `./bitcoin.conf`.
 
 ### 2. Wallet Setup
 
@@ -33,7 +33,7 @@ A dedicated wallet has been created for Verifiable credential testing:
 - Wallet name: `verifiable_credential_wallet`
 - Address for Verifiable credential: `tb1qlm0ztddtrfu6temuf5ncpssrkaqgtx0wmgdn63`
 
-The wallet information is documented in `/Users/brian/Projects/ordinalsplus/verifiable-credential-wallet-info.md`.
+The wallet information is documented in `./verifiable-credential-wallet-info.md`.
 
 ### 3. Ord Server Configuration
 
@@ -41,7 +41,7 @@ The Ord server has been configured to:
 
 - Connect to the Bitcoin Core node on Signet
 - Use the same cookie file for authentication
-- Store index data in `/Users/brian/Projects/ordinalsplus/data/signet`
+- Store index data in `./data/signet`
 - Serve the web interface on port 80
 
 ### 4. Helper Scripts
