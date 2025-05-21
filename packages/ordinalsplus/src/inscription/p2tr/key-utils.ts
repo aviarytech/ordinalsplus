@@ -33,7 +33,7 @@ export interface P2TRAddressInfo {
   /** The output script for the P2TR address */
   script: Uint8Array;
   /** The internal key used in the P2TR address */
-  internalKey: Uint8Array;
+  internalKey?: Uint8Array;
 }
 
 /**
