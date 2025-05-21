@@ -152,7 +152,6 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
             'Missing commit address, script, or inscription data in prepared inscription for reveal'
           );
       }
-      const commitScript = preparedInscription.commitAddress.script;
       const commitAddress = preparedInscription.commitAddress.address;
       const inscriptionObject = preparedInscription.inscription;
       const pubKey = preparedInscription.revealPublicKey;
@@ -166,7 +165,6 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         ORDINAL_CUSTOM_SCRIPTS
       );
 
-      console.log(`[DEBUG-REVEAL-FIX] Using PRE-CALCULATED commit script for witness: ${Buffer.from(commitScript).toString('hex')}`);
       console.log(`[DEBUG-REVEAL-FIX] Expected Commit Address from prep: ${commitAddress}`);
       console.log(`[DEBUG-REVEAL-FIX] Reveal Payment Script (for input): ${revealPayment.script ? Buffer.from(revealPayment.script).toString('hex') : 'undefined'}`);
       // Log the entire revealPayment object to inspect its structure for tapleaf info
@@ -177,9 +175,9 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         ...revealPayment,
         txid: selectedUTXO.txid,
         index: selectedUTXO.vout,
-        witnessUtxo: { 
-          script: commitScript,
-          amount: inputAmount 
+        witnessUtxo: {
+          script: revealPayment.script,
+          amount: inputAmount
         },
         // Removed incorrect redeemScript property.
         // We need to inspect revealPayment object structure to find where 
@@ -195,7 +193,6 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
 
       // DEBUG-COMMIT-REVEAL logging
       console.log(`[DEBUG-COMMIT-REVEAL] Reveal Address used for output: ${outputAddress}`);
-      console.log(`[DEBUG-COMMIT-REVEAL] Commit Script used for witness: ${Buffer.from(commitScript).toString('hex')}`);
       console.log(`[DEBUG-COMMIT-REVEAL] Using Reveal Public Key for signing: ${Buffer.from(pubKey).toString('hex')}`);
       
       // Add progress event for adding input
