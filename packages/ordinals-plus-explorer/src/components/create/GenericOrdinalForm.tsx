@@ -16,6 +16,7 @@ bitcoin.initEccLib(ecc);
 const supportedContentTypes = [
   { mime: 'text/plain', label: 'Text', isText: true },
   { mime: 'application/json', label: 'JSON', isText: true },
+  { mime: 'text/html', label: 'HTML', isText: true },
   { mime: 'image/png', label: 'PNG Image', isText: false },
   { mime: 'image/jpeg', label: 'JPEG Image', isText: false },
   { mime: 'image/svg+xml', label: 'SVG Image', isText: false },
