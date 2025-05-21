@@ -74,16 +74,20 @@ export {
     prepareResourceInscription, 
     validateResourceCreationParams,
     prepareCommitTransaction,
+    createSimpleCommitTransaction,
     createRevealTransaction,
+    createSimpleRevealTransaction,
     transactionTracker
 } from './transactions';
 
-export type { 
+export type {
     PreparedResourceInfo,
     CommitTransactionParams,
     CommitTransactionResult,
     RevealTransactionParams,
-    RevealTransactionResult
+    RevealTransactionResult,
+    SimpleCommitParams,
+    SimpleRevealParams
 } from './transactions';
 
 // --- Transaction Status Tracking Exports ---
