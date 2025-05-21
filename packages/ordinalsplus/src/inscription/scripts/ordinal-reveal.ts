@@ -191,8 +191,8 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
   const scriptInfo = extractScriptInfo(scriptTree);
   
   // Generate commit address
-  // Use recovery key if provided, otherwise use reveal key
-  const internalKey = recoveryPublicKey || pubKey;
+  // Use recovery key if provided; otherwise leave internal key undefined
+  const internalKey = recoveryPublicKey;
   
   // Get network object
   const btcNetwork = getScureNetwork(network);
@@ -211,10 +211,9 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
   }
   
   // Create script from output
-  const script = p2tr.script || btc.OutScript.encode({
-    type: 'tr',
-    pubkey: internalKey
-  });
+  const script = p2tr.script || (internalKey
+    ? btc.OutScript.encode({ type: 'tr', pubkey: internalKey })
+    : new Uint8Array());
   
   return {
     commitAddress: {
