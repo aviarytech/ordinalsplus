@@ -19,8 +19,8 @@ import { Ed25519KeyPair } from '../utils/keyUtils';
  * 
  * @returns The generated Ed25519 key pair
  */
-export function generateEd25519KeyPair(): Ed25519KeyPair {
-  const extendedKeyPair = KeyPairGenerator.generateEd25519KeyPair();
+export async function generateEd25519KeyPair(): Promise<Ed25519KeyPair> {
+  const extendedKeyPair = await KeyPairGenerator.generateEd25519KeyPair();
   // Convert the extended format to the original format
   return {
     publicKey: extendedKeyPair.publicKey,
