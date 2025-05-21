@@ -3,6 +3,7 @@ import ExplorerPage from './pages/ExplorerPage';
 import LinkedResourcesPage from './pages/LinkedResourcesPage';
 import SettingsPage from './pages/SettingsPage';
 import CreatePage from './pages/CreatePage';
+import CreateHtmlPage from './pages/CreateHtmlPage';
 import CreateCollectionPage from './pages/CreateCollectionPage';
 import CollectionsListPage from './pages/CollectionsListPage';
 import CollectionDetailPage from './pages/CollectionDetailPage';
@@ -27,6 +28,7 @@ function App() {
                   <Link to="/explorer" className="text-white hover:text-orange-200 transition-colors">Explorer</Link>
                   <Link to="/" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
                   <Link to="/create" className="text-white hover:text-orange-200 transition-colors">Create</Link>
+                  <Link to="/create/html" className="text-white hover:text-orange-200 transition-colors">Create HTML</Link>
                   <div className="relative dropdown-container">
                     <Link to="/collections" className="text-white hover:text-orange-200 transition-colors flex items-center dropdown-toggle">
                       Collections
@@ -53,6 +55,7 @@ function App() {
               <Route path="/" element={<LinkedResourcesPage />} />
               <Route path="/explorer" element={<ExplorerPage />} />
               <Route path="/create" element={<CreatePage />} />
+              <Route path="/create/html" element={<CreateHtmlPage />} />
               <Route path="/collections" element={<CollectionsGalleryPage />} />
               <Route path="/collections/list" element={<CollectionsListPage />} />
               <Route path="/collections/create" element={<CreateCollectionPage />} />

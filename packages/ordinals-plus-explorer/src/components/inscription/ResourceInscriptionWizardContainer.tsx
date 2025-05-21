@@ -33,7 +33,11 @@ const WizardContent: React.FC = () => {
  * ResourceInscriptionWizardContainer is the main container component that integrates all the steps
  * of the resource inscription wizard into a cohesive flow.
  */
-const ResourceInscriptionWizardContainer: React.FC = () => {
+interface ResourceInscriptionWizardContainerProps {
+  initialContentType?: string;
+}
+
+const ResourceInscriptionWizardContainer: React.FC<ResourceInscriptionWizardContainerProps> = ({ initialContentType }) => {
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
       <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg p-6">
@@ -41,7 +45,7 @@ const ResourceInscriptionWizardContainer: React.FC = () => {
           Resource Inscription Wizard
         </h1>
         
-        <ResourceInscriptionWizard>
+        <ResourceInscriptionWizard initialContentType={initialContentType}>
           <WizardContent />
         </ResourceInscriptionWizard>
       </div>

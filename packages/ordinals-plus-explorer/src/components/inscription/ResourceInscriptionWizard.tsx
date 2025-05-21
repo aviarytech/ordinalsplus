@@ -198,10 +198,17 @@ const ResourceInscriptionContext = createContext<ResourceInscriptionContextType 
 // Create the provider component
 interface ResourceInscriptionProviderProps {
   children: ReactNode;
+  initialContentType?: string;
 }
 
-export const ResourceInscriptionProvider: React.FC<ResourceInscriptionProviderProps> = ({ children }) => {
-  const [state, dispatch] = useReducer(resourceInscriptionReducer, initialState);
+export const ResourceInscriptionProvider: React.FC<ResourceInscriptionProviderProps> = ({ children, initialContentType }) => {
+  const [state, dispatch] = useReducer(
+    resourceInscriptionReducer,
+    {
+      ...initialState,
+      contentData: { ...initialState.contentData, type: initialContentType ?? initialState.contentData.type }
+    }
+  );
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   // Helper functions for common actions
@@ -390,12 +397,13 @@ const ErrorFallback: React.FC<{ error: Error; resetErrorBoundary: () => void }> 
 // Main wizard container component
 interface ResourceInscriptionWizardProps {
   children: ReactNode;
+  initialContentType?: string;
 }
 
-const ResourceInscriptionWizard: React.FC<ResourceInscriptionWizardProps> = ({ children }) => {
+const ResourceInscriptionWizard: React.FC<ResourceInscriptionWizardProps> = ({ children, initialContentType }) => {
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <ResourceInscriptionProvider>
+      <ResourceInscriptionProvider initialContentType={initialContentType}>
         <WizardLayout>
           {children}
         </WizardLayout>
