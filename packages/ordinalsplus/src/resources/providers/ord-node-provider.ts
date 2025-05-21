@@ -58,7 +58,6 @@ export class OrdNodeProvider implements ResourceProvider {
         this.timeout = options.timeout || 5000;
         this.network = options.network || 'mainnet';
         this.batchSize = batchSize;
-        console.log('options', options)
     }
 
     protected async fetchApi<T>(endpoint: string): Promise<OrdNodeApiResponse<T>> {
@@ -163,7 +162,6 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     transformInscriptionToResource(inscription: Inscription): LinkedResource {
-        console.log('here444')
         return createLinkedResourceFromInscription(inscription, inscription.content_type || 'Unknown', this.network);
     }
 
@@ -213,7 +211,6 @@ export class OrdNodeProvider implements ResourceProvider {
             listResponse.ids.map(async (id: string) => {
                 const inscriptionResponse = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${id}`);
                 
-                console.log(inscriptionResponse)
                 const inscriptionObj: Inscription = {
                     id: inscriptionResponse.id,
                     sat: inscriptionResponse.sat,
@@ -261,11 +258,9 @@ export class OrdNodeProvider implements ResourceProvider {
         let inscriptionIds: string[] = [];
 
         try {
-            console.log(`[OrdNodeProvider] Fetching inscription IDs for address ${address} from endpoint: ${idsEndpoint}`);
-            const idResponse = await this.fetchApi<{ ids: string[] }>(idsEndpoint); 
+            const idResponse = await this.fetchApi<{ ids: string[] }>(idsEndpoint);
             if (idResponse?.ids && Array.isArray(idResponse.ids)) {
                 inscriptionIds = idResponse.ids;
-                console.log(`[OrdNodeProvider] Found ${inscriptionIds.length} potential inscription IDs for address ${address}.`);
             } else {
                 console.warn(`[OrdNodeProvider] No inscription IDs found or unexpected format for address ${address} at ${idsEndpoint}.`);
                 return [];
@@ -279,7 +274,6 @@ export class OrdNodeProvider implements ResourceProvider {
             return [];
         }
 
-        console.log(`[OrdNodeProvider] Fetching full details for ${inscriptionIds.length} inscriptions...`);
         const locationPromises = inscriptionIds.map(async (id): Promise<InscriptionRefWithLocation | null> => {
             try {
                 const detailResponse = await this.fetchApi<OrdNodeFullInscriptionResponse>(`/inscription/${id}`);

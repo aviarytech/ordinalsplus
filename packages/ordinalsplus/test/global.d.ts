@@ -1,1 +1,1 @@
-declare module 'bun:test'
+declare module 'bun:test';
