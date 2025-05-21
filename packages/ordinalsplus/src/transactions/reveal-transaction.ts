@@ -166,7 +166,6 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         ORDINAL_CUSTOM_SCRIPTS
       );
 
-      console.log(`[DEBUG-REVEAL-FIX] Using PRE-CALCULATED commit script for witness: ${Buffer.from(commitScript).toString('hex')}`);
       console.log(`[DEBUG-REVEAL-FIX] Expected Commit Address from prep: ${commitAddress}`);
       console.log(`[DEBUG-REVEAL-FIX] Reveal Payment Script (for input): ${revealPayment.script ? Buffer.from(revealPayment.script).toString('hex') : 'undefined'}`);
       // Log the entire revealPayment object to inspect its structure for tapleaf info
@@ -177,9 +176,9 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         ...revealPayment,
         txid: selectedUTXO.txid,
         index: selectedUTXO.vout,
-        witnessUtxo: { 
+        witnessUtxo: {
           script: commitScript,
-          amount: inputAmount 
+          amount: inputAmount
         },
         // Removed incorrect redeemScript property.
         // We need to inspect revealPayment object structure to find where 
