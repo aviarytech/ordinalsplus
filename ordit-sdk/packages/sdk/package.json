@@ -1,0 +1,60 @@
+{
+  "name": "@sadoprotocol/ordit-sdk",
+  "version": "0.0.28",
+  "description": "SDK for simplified interaction with wallet APIs and inscription service",
+  "repository": "https://github.com/sadoprotocol/ordit-sdk",
+  "bugs": "https://github.com/sadoprotocol/ordit-sdk/issues",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "ordit",
+    "ordit-sdk",
+    "sdk"
+  ],
+  "scripts": {
+    "build": "tsc -b ./tsconfig.build.json",
+    "build:watch": "tsc -b ./tsconfig.build.json --watch",
+    "flush": "npm run clean && rm -rf ./node_modules",
+    "clean": "rm -rf ./.turbo ./dist",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@bitcoinerlab/secp256k1": "^1.0.5",
+    "bip32": "^4.0.0",
+    "bip322-js": "^1.1.0",
+    "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^6.1.5",
+    "bitcoinjs-message": "^2.2.0",
+    "buffer-reverse": "^1.0.1",
+    "cross-fetch": "^3.1.8",
+    "ecpair": "^2.1.0",
+    "ethers": "^6.10.0",
+    "sats-connect": "^0.5.0"
+  },
+  "devDependencies": {
+    "@sadoprotocol/eslint-config": "^0.0.2",
+    "@sadoprotocol/typescript": "^0.0.2",
+    "@types/node": "^20.3.1"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@sadoprotocol"
+    ],
+    "parserOptions": {
+      "project": "./tsconfig.json"
+    }
+  },
+  "lint-staged": {
+    "*": [
+      "prettier --write --ignore-unknown"
+    ],
+    "*.{ts}": [
+      "eslint --fix"
+    ]
+  }
+}

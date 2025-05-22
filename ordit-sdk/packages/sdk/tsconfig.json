@@ -1,0 +1,9 @@
+{
+  "extends": "@sadoprotocol/typescript",
+  "compilerOptions": {
+    "rootDir": "./",
+    "outDir": "./dist",
+    "sourceMap": true
+  },
+  "include": ["./src", "./tests", "./src/types"]
+}
