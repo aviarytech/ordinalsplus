@@ -10,7 +10,6 @@ import {
 import { Chain, Network } from "../config/types"
 import { MAXIMUM_ROYALTY_PERCENTAGE } from "../constants"
 import { OrditSDKError } from "../utils/errors"
-import { buildMeta } from "./meta"
 
 export async function publishCollection({
   title,
@@ -142,47 +141,22 @@ export async function bulkMintFromCollection({
 
   let currentPointer = 0
 
-  const { metaList, inscriptionList } = inscriptions.reduce<{
-    metaList: EnvelopeOpts[]
-    inscriptionList: EnvelopeOpts[]
-  }>(
-    (acc, insc) => {
-      const { nonce, mediaContent, mediaType, delegateInscriptionId, receiverAddress, postage, iid, signature } = insc
+  const inscriptionList = inscriptions.map((insc) => {
+    const { mediaContent, mediaType, delegateInscriptionId, receiverAddress, postage } = insc
 
-      const meta = buildMeta({
-        collectionGenesis,
-        iid,
-        publisher: publisherAddress,
-        nonce,
-        receiverAddress,
-        signature
-      })
+    const inscriptionEnvelope: EnvelopeOpts = {
+      mediaContent,
+      mediaType,
+      delegateInscriptionId,
+      pointer: currentPointer === 0 ? undefined : currentPointer.toString(),
+      receiverAddress,
+      postage
+    }
 
-      const metaEnvelope: EnvelopeOpts = {
-        mediaContent: JSON.stringify(meta),
-        mediaType: "application/json;charset=utf-8",
-        receiverAddress,
-        postage
-      }
+    currentPointer += postage
 
-      const inscriptionEnvelope: EnvelopeOpts = {
-        mediaContent,
-        mediaType,
-        delegateInscriptionId,
-        pointer: currentPointer === 0 ? undefined : currentPointer.toString(),
-        receiverAddress,
-        postage
-      }
-
-      currentPointer += postage
-
-      return {
-        metaList: [...acc.metaList, metaEnvelope],
-        inscriptionList: [...acc.inscriptionList, inscriptionEnvelope]
-      }
-    },
-    { metaList: [], inscriptionList: [] }
-  )
+    return inscriptionEnvelope
+  })
 
   return new Inscriber({
     address,
@@ -194,7 +168,6 @@ export async function bulkMintFromCollection({
     outputs,
     changeAddress,
     taptreeVersion,
-    metaInscriptions: metaList,
     inscriptions: inscriptionList
   })
 }
