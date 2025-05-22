@@ -10,7 +10,7 @@ import * as transactions from "./transactions"
 import * as utils from "./utils"
 import * as wallet from "./wallet"
 
-export const ordit = {
+export const ordinalsplus = {
   config,
   addresses,
   wallet,

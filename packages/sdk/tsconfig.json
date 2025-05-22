@@ -1,9 +1,11 @@
 {
-  "extends": "@sadoprotocol/typescript",
   "compilerOptions": {
     "rootDir": "./",
     "outDir": "./dist",
-    "sourceMap": true
+    "sourceMap": true,
+    "target": "es2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext"
   },
   "include": ["./src", "./tests", "./src/types"]
 }

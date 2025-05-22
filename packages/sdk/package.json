@@ -36,25 +36,6 @@
     "sats-connect": "^0.5.0"
   },
   "devDependencies": {
-    "@sadoprotocol/eslint-config": "^0.0.2",
-    "@sadoprotocol/typescript": "^0.0.2",
     "@types/node": "^20.3.1"
-  },
-  "eslintConfig": {
-    "root": true,
-    "extends": [
-      "@sadoprotocol"
-    ],
-    "parserOptions": {
-      "project": "./tsconfig.json"
-    }
-  },
-  "lint-staged": {
-    "*": [
-      "prettier --write --ignore-unknown"
-    ],
-    "*.{ts}": [
-      "eslint --fix"
-    ]
   }
 }
