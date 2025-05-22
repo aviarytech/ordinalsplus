@@ -3,7 +3,6 @@ import {
   EnvelopeOpts,
   GetWalletOptions,
   Inscriber,
-  InscriberV2,
   JsonRpcDatasource,
   TaptreeVersion,
   verifyMessage
@@ -185,7 +184,7 @@ export async function bulkMintFromCollection({
     { metaList: [], inscriptionList: [] }
   )
 
-  return new InscriberV2({
+  return new Inscriber({
     address,
     chain,
     publicKey,

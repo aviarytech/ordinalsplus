@@ -42,3 +42,5 @@ export { OrditSDKError } from "./utils/errors"
 export { UTXOManager } from "./utxos"
 export * from "./wallet"
 export { Ordit } from "./wallet/Ordit"
+export { Inscriber } from "./transactions/Inscriber"
+

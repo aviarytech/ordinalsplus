@@ -1,4 +1,4 @@
 export * from "./Inscriber"
-export * from "./InscriberV2"
+export * from "./Inscriber"
 export * from "./psbt"
 export * from "./types"
