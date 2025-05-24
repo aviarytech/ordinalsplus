@@ -3,7 +3,7 @@ import { useResourceInscription } from './ResourceInscriptionWizard';
 import UtxoSelector from '../create/UtxoSelector';
 import { useWallet, Utxo } from '../../context/WalletContext';
 import { Button } from '../ui';
-import { AlertCircle, Info } from 'lucide-react';
+import { AlertCircle, Info, Edit, Check } from 'lucide-react';
 
 /**
  * UTXOSelectionStep handles the selection of a UTXO for the resource inscription.
@@ -22,10 +22,20 @@ const UTXOSelectionStep: React.FC = () => {
   const [isFetchingUtxos, setIsFetchingUtxos] = useState<boolean>(false);
   const [utxoError, setUtxoError] = useState<string | null>(null);
   const [showGuidance, setShowGuidance] = useState<boolean>(false);
+  const [manualSelectionMode, setManualSelectionMode] = useState<boolean>(false);
   
   // Format satoshi values to BTC
   const formatBtcValue = (satoshis: number): string => {
     return (satoshis / 100_000_000).toFixed(8);
+  };
+
+  // Find the largest UTXO from the available UTXOs
+  const findLargestUtxo = (utxos: Utxo[]): Utxo | null => {
+    if (!utxos || utxos.length === 0) return null;
+    
+    return utxos.reduce((largest, current) => {
+      return current.value > largest.value ? current : largest;
+    }, utxos[0]);
   };
 
   // Fetch UTXOs from wallet
@@ -55,6 +65,15 @@ const UTXOSelectionStep: React.FC = () => {
       } else {
         setAvailableUtxos(utxos);
         clearError('utxoSelection');
+        
+        // Automatically select the largest UTXO if not in manual mode
+        // and if no UTXO is currently selected
+        if (!manualSelectionMode && state.utxoSelection.length === 0) {
+          const largestUtxo = findLargestUtxo(utxos);
+          if (largestUtxo) {
+            setUtxoSelection([largestUtxo]);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching UTXOs:', error);
@@ -79,6 +98,20 @@ const UTXOSelectionStep: React.FC = () => {
       setUtxoSelection([]);
       // Only set error after user has interacted with the component
       handleUtxoInteraction();
+    }
+  };
+  
+  // Toggle between automatic and manual selection modes
+  const toggleSelectionMode = () => {
+    const newMode = !manualSelectionMode;
+    setManualSelectionMode(newMode);
+    
+    // If switching back to automatic mode and we have UTXOs, select the largest one
+    if (!newMode && availableUtxos.length > 0) {
+      const largestUtxo = findLargestUtxo(availableUtxos);
+      if (largestUtxo) {
+        setUtxoSelection([largestUtxo]);
+      }
     }
   };
   
@@ -148,6 +181,8 @@ const UTXOSelectionStep: React.FC = () => {
           <p className="mb-2">Select a UTXO that contains the sat you want to inscribe your resource on.</p>
           <ul className="list-disc list-inside space-y-1 mb-2">
             <li><span className="font-medium">Confirmed UTXOs</span> are recommended for reliable inscriptions.</li>
+            <li><span className="font-medium">Automatic selection</span> chooses the largest UTXO by default.</li>
+            <li><span className="font-medium">Manual selection</span> allows you to choose any UTXO.</li>
           </ul>
           <p>Wallet: {address ? <span className="font-medium">{address.substring(0, 8)}...{address.substring(address.length - 8)}</span> : 'Not connected'}</p>
         </div>
@@ -160,6 +195,36 @@ const UTXOSelectionStep: React.FC = () => {
           <div>{state.errors.utxoSelection}</div>
         </div>
       )}
+      
+      {/* Selection Mode Toggle */}
+      <div className="flex justify-between items-center">
+        <div className="text-sm text-gray-700 dark:text-gray-300">
+          <span className="font-medium">Selection Mode: </span>
+          {manualSelectionMode ? (
+            <span className="text-amber-600 dark:text-amber-400">Manual Selection</span>
+          ) : (
+            <span className="text-green-600 dark:text-green-400">Automatic (Largest UTXO)</span>
+          )}
+        </div>
+        <Button
+          onClick={toggleSelectionMode}
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-1"
+        >
+          {manualSelectionMode ? (
+            <>
+              <Check className="h-4 w-4" />
+              <span>Auto Select</span>
+            </>
+          ) : (
+            <>
+              <Edit className="h-4 w-4" />
+              <span>Manual Select</span>
+            </>
+          )}
+        </Button>
+      </div>
       
       {/* UTXO Selection summary - simplified */}
       {state.utxoSelection.length > 0 && (
@@ -177,17 +242,20 @@ const UTXOSelectionStep: React.FC = () => {
         </div>
       )}
       
-      <UtxoSelector
-        walletConnected={walletConnected}
-        utxos={availableUtxos}
-        selectedUtxos={state.utxoSelection}
-        isFetchingUtxos={isFetchingUtxos}
-        utxoError={utxoError}
-        flowState="awaitingUtxoSelection"
-        onFetchUtxos={handleFetchUtxos}
-        onUtxoSelectionChange={handleUtxoSelectionChange}
-        requiredAmount={0} /* Removed minimum required funds */
-      />
+      {/* Only show the UTXO selector in manual mode or when no UTXOs are selected */}
+      {(manualSelectionMode || state.utxoSelection.length === 0) && (
+        <UtxoSelector
+          walletConnected={walletConnected}
+          utxos={availableUtxos}
+          selectedUtxos={state.utxoSelection}
+          isFetchingUtxos={isFetchingUtxos}
+          utxoError={utxoError}
+          flowState="awaitingUtxoSelection"
+          onFetchUtxos={handleFetchUtxos}
+          onUtxoSelectionChange={handleUtxoSelectionChange}
+          requiredAmount={0} /* Removed minimum required funds */
+        />
+      )}
       
       <div className="flex justify-between mt-6">
         <div className="text-sm text-gray-500 dark:text-gray-400 self-center">

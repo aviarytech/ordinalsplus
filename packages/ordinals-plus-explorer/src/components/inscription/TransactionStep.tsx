@@ -4,7 +4,7 @@ import { useWallet, Utxo } from '../../context/WalletContext';
 import { useApi } from '../../context/ApiContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Button } from '../ui';
-import { Loader2, AlertCircle, CheckCircle, Copy, ExternalLink, Info } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, Copy, ExternalLink, Info, Edit, Check } from 'lucide-react';
 import UtxoSelector from '../create/UtxoSelector';
 import * as ordinalsplus from 'ordinalsplus';
 import * as btc from '@scure/btc-signer';
@@ -52,9 +52,41 @@ const TransactionStep: React.FC = () => {
   const [utxoError, setUtxoError] = useState<string | null>(null);
   const [showUtxoGuidance, setShowUtxoGuidance] = useState<boolean>(false);
   const [requiredAmount, setRequiredAmount] = useState<number>(0);
+  const [manualSelectionMode, setManualSelectionMode] = useState<boolean>(false);
   
   // Inscription-specific state
   const [ephemeralRevealPrivateKeyWif, setEphemeralRevealPrivateKeyWif] = useState<string | null>(null);
+  
+  // Find the largest UTXO from the available UTXOs
+  const findLargestUtxo = (utxos: Utxo[]): Utxo | null => {
+    if (!utxos || utxos.length === 0) return null;
+    
+    return utxos.reduce((largest, current) => {
+      return current.value > largest.value ? current : largest;
+    }, utxos[0]);
+  };
+  
+  // Find UTXOs that together meet the required amount, starting with the largest ones
+  const findUtxosForAmount = (utxos: Utxo[], requiredAmount: number): Utxo[] => {
+    if (!utxos || utxos.length === 0) return [];
+    
+    // Sort UTXOs by value in descending order
+    const sortedUtxos = [...utxos].sort((a, b) => b.value - a.value);
+    
+    const selectedUtxos: Utxo[] = [];
+    let totalValue = 0;
+    
+    for (const utxo of sortedUtxos) {
+      selectedUtxos.push(utxo);
+      totalValue += utxo.value;
+      
+      if (totalValue >= requiredAmount) {
+        break;
+      }
+    }
+    
+    return selectedUtxos;
+  };
   
   // Get block explorer URL based on network
   const blockExplorerUrl = walletNetwork === 'testnet'
@@ -96,6 +128,15 @@ const TransactionStep: React.FC = () => {
         setUtxoError('No UTXOs found in your wallet');
       } else {
         setAvailableUtxos(utxos);
+        
+        // Automatically select UTXOs if not in manual mode
+        if (!manualSelectionMode && state.utxoSelection.length === 0 && requiredAmount > 0) {
+          // If we have a required amount, select UTXOs that meet that amount
+          const selectedUtxos = findUtxosForAmount(utxos, requiredAmount);
+          if (selectedUtxos.length > 0) {
+            setUtxoSelection(selectedUtxos);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching UTXOs:', error);
@@ -118,6 +159,20 @@ const TransactionStep: React.FC = () => {
       }
     });
     setUtxoError(null);
+  };
+  
+  // Toggle between automatic and manual selection modes
+  const toggleSelectionMode = () => {
+    const newMode = !manualSelectionMode;
+    setManualSelectionMode(newMode);
+    
+    // If switching back to automatic mode and we have UTXOs, select UTXOs that meet the required amount
+    if (!newMode && availableUtxos.length > 0 && requiredAmount > 0) {
+      const selectedUtxos = findUtxosForAmount(availableUtxos, requiredAmount);
+      if (selectedUtxos.length > 0) {
+        setUtxoSelection(selectedUtxos);
+      }
+    }
   };
   
   // Prepare and sign commit transaction
@@ -709,14 +764,16 @@ const TransactionStep: React.FC = () => {
                 <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200">
                   Select UTXOs for Inscription
                 </h3>
-                <button
-                  type="button"
-                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                  onClick={() => setShowUtxoGuidance(!showUtxoGuidance)}
-                  aria-label={showUtxoGuidance ? "Hide guidance" : "Show guidance"}
-                >
-                  <Info className="h-5 w-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    onClick={() => setShowUtxoGuidance(!showUtxoGuidance)}
+                    aria-label={showUtxoGuidance ? "Hide guidance" : "Show guidance"}
+                  >
+                    <Info className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
               
               {showUtxoGuidance && (
@@ -730,22 +787,57 @@ const TransactionStep: React.FC = () => {
                       <span className="text-green-600 dark:text-green-400">Sufficient funds</span> : 
                       <span className="text-red-600 dark:text-red-400">Insufficient funds</span>}
                     </li>
+                    <li><span className="font-medium">Automatic selection</span> chooses optimal UTXOs by default.</li>
+                    <li><span className="font-medium">Manual selection</span> allows you to choose specific UTXOs.</li>
                   </ul>
                   <p className="text-xs italic">You can select multiple UTXOs to meet the required amount</p>
                 </div>
               )}
               
-              <UtxoSelector
-                walletConnected={walletConnected}
-                utxos={availableUtxos}
-                selectedUtxos={state.utxoSelection}
-                isFetchingUtxos={isFetchingUtxos}
-                utxoError={utxoError}
-                flowState="awaitingUtxoSelection"
-                onFetchUtxos={handleFetchUtxos}
-                onUtxoSelectionChange={handleUtxoSelectionChange}
-                requiredAmount={requiredAmount}
-              />
+              {/* Selection Mode Toggle */}
+              <div className="flex justify-between items-center mb-4">
+                <div className="text-sm text-gray-700 dark:text-gray-300">
+                  <span className="font-medium">Selection Mode: </span>
+                  {manualSelectionMode ? (
+                    <span className="text-amber-600 dark:text-amber-400">Manual Selection</span>
+                  ) : (
+                    <span className="text-green-600 dark:text-green-400">Automatic (Optimal UTXOs)</span>
+                  )}
+                </div>
+                <Button
+                  onClick={toggleSelectionMode}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-1"
+                >
+                  {manualSelectionMode ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      <span>Auto Select</span>
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="h-4 w-4" />
+                      <span>Manual Select</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+              
+              {/* Only show the UTXO selector in manual mode or when no UTXOs are selected */}
+              {(manualSelectionMode || state.utxoSelection.length === 0 || !hasEnoughFunds) && (
+                <UtxoSelector
+                  walletConnected={walletConnected}
+                  utxos={availableUtxos}
+                  selectedUtxos={state.utxoSelection}
+                  isFetchingUtxos={isFetchingUtxos}
+                  utxoError={utxoError}
+                  flowState="awaitingUtxoSelection"
+                  onFetchUtxos={handleFetchUtxos}
+                  onUtxoSelectionChange={handleUtxoSelectionChange}
+                  requiredAmount={requiredAmount}
+                />
+              )}
               
               <div className="flex justify-between mt-6">
                 <div className="text-sm text-gray-500 dark:text-gray-400 self-center">
