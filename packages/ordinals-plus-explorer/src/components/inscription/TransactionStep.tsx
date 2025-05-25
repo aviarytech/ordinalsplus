@@ -219,21 +219,21 @@ const TransactionStep: React.FC = () => {
       const safetyBufferFeeRate = inscriptionData.feeRate + 0.1;
       const requiredCommitAmount = BigInt(inscriptionData.requiredCommitAmount);
       
-      const commitResult = await ordinalsplus.prepareCommitTransaction({
+      const commitResult = await ordinalsplus.createSimpleCommitTransaction({
         inscription: {
           commitAddress: {
             address: inscriptionData.commitAddress,
             script: commitScript,
-            internalKey: new Uint8Array(32) // Required field with proper size
+            internalKey: new Uint8Array(32)
           },
           inscription: inscriptionData.inscription,
           revealPublicKey: revealPublicKey,
-        } as any,
-        utxos: utxosForApi,
+          revealPrivateKey: hexToBytes(inscriptionData.revealPrivateKeyHex)
+        },
+        utxo: utxosForApi[0],
         changeAddress: walletAddress,
         feeRate: safetyBufferFeeRate,
-        network: inscriptionData.network,
-        minimumCommitAmount: Number(requiredCommitAmount)
+        network: inscriptionData.network
       });
       
       console.log(`[PrepareAndSignCommit] Commit transaction prepared, fee: ${commitResult.fees.commit} sats`);
@@ -544,35 +544,31 @@ const TransactionStep: React.FC = () => {
       
       // Create the reveal transaction
       console.log('[CreateReveal] Creating reveal transaction with ephemeral key');
-      const revealTx = await ordinalsplus.createRevealTransaction({
-        selectedUTXO: {
+      const revealTx = await ordinalsplus.createSimpleRevealTransaction({
+        utxo: {
           txid: commitTxid,
-          vout: 0, // Assume the first output is the commit output
+          vout: 0,
           value: Number(requiredCommitAmount),
-          script: { 
-            type: 'p2tr',
-            address: inscriptionData.commitAddress 
-          }
+          script: { type: 'p2tr', address: inscriptionData.commitAddress }
         },
         preparedInscription: {
           inscription: inscriptionData.inscription,
           commitAddress: {
             address: inscriptionData.commitAddress,
             script: commitScript,
-            internalKey: new Uint8Array(32) // Required field with proper size
+            internalKey: new Uint8Array(32)
           },
           revealPublicKey: revealPublicKey,
+          revealPrivateKey: revealPrivateKey,
           inscriptionScript: {
             script: inscriptionScript,
             controlBlock: controlBlock,
             leafVersion: inscriptionData.inscriptionScript.leafVersion
-          },
-          revealPrivateKey: revealPrivateKey
+          }
         },
         privateKey: revealPrivateKey,
         feeRate: inscriptionData.feeRate,
         network: scureNetwork,
-        commitTransactionId: commitTxid,
         destinationAddress: walletAddress || ''
       });
       // Extract transaction ID
