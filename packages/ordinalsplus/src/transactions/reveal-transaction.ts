@@ -154,37 +154,35 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       }
       const commitScript = preparedInscription.commitAddress.script;
       const commitAddress = preparedInscription.commitAddress.address;
-      const inscriptionObject = preparedInscription.inscription;
       const pubKey = preparedInscription.revealPublicKey;
+      const inscriptionScript = preparedInscription.inscriptionScript;
 
-      // Align with micro-ordinals example: Create reveal payment details
-      const revealPayment = btc.p2tr(
-        undefined as any, // Use the reveal public key
-        ordinals.p2tr_ord_reveal(pubKey, [inscriptionObject]), // TaprootScriptTree
-        network,
-        false, // allowUnknownOutputs
-        ORDINAL_CUSTOM_SCRIPTS
+      console.log(
+        `[DEBUG-REVEAL-FIX] Using PRE-CALCULATED commit script for witness: ${Buffer.from(commitScript).toString('hex')}`
+      );
+      console.log(`[DEBUG-REVEAL-FIX] Expected Commit Address from prep: ${commitAddress}`);
+      console.log(
+        `[DEBUG-REVEAL-FIX] Using stored inscription script for input: ${Buffer.from(inscriptionScript.script).toString('hex')}`
       );
 
-      console.log(`[DEBUG-REVEAL-FIX] Using PRE-CALCULATED commit script for witness: ${Buffer.from(commitScript).toString('hex')}`);
-      console.log(`[DEBUG-REVEAL-FIX] Expected Commit Address from prep: ${commitAddress}`);
-      console.log(`[DEBUG-REVEAL-FIX] Reveal Payment Script (for input): ${revealPayment.script ? Buffer.from(revealPayment.script).toString('hex') : 'undefined'}`);
-      // Log the entire revealPayment object to inspect its structure for tapleaf info
-      console.log(`[DEBUG-REVEAL-FIX] Full Reveal Payment Object:`, revealPayment);
-
-      // Add the selected UTXO as the first input
+      // Add the selected UTXO as the first input using the stored script info
       tx.addInput({
-        ...revealPayment,
         txid: selectedUTXO.txid,
         index: selectedUTXO.vout,
-        witnessUtxo: { 
+        witnessUtxo: {
           script: commitScript,
-          amount: inputAmount 
+          amount: inputAmount
         },
-        // Removed incorrect redeemScript property.
-        // We need to inspect revealPayment object structure to find where 
-        // tapLeafScript and controlBlock are located and add them here explicitly 
-        // for the signing process.
+        tapInternalKey: preparedInscription.commitAddress.internalKey,
+        tapLeafScript: [
+          [
+            btc.TaprootControlBlock.decode(inscriptionScript.controlBlock),
+            btc.utils.concatBytes(
+              inscriptionScript.script,
+              new Uint8Array([inscriptionScript.leafVersion])
+            )
+          ]
+        ]
       });
 
       // Destination address for the inscription output
@@ -318,7 +316,7 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
           console.log('Signing reveal transaction with provided private key for script path spend...');
           
           // Simplify the sign call, relying on default sighash for Taproot
-          // and hoping the library correctly uses the tapLeafScript from revealPayment.
+          // and hoping the library correctly uses the tapLeafScript from the stored script info.
           tx.sign(privateKey); 
 
           tx.finalize(); // Finalize *after* signing
