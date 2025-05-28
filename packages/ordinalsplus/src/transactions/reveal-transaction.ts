@@ -156,6 +156,30 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       const commitAddress = preparedInscription.commitAddress.address;
       const pubKey = preparedInscription.revealPublicKey;
       const inscriptionScript = preparedInscription.inscriptionScript;
+      const internalKey = preparedInscription.commitAddress.internalKey;
+      
+      // Add detailed key logging
+      console.log(`[DEBUG-KEYS] Commit Address: ${commitAddress}`);
+      console.log(`[DEBUG-KEYS] Commit Script: ${Buffer.from(commitScript).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Reveal Public Key: ${Buffer.from(pubKey).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Internal Key: ${Buffer.from(internalKey).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Inscription Script: ${Buffer.from(inscriptionScript.script).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Control Block: ${Buffer.from(inscriptionScript.controlBlock).toString('hex')}`);
+      
+      // Check for zero keys
+      const isRevealKeyAllZeros = pubKey.every(byte => byte === 0);
+      const isInternalKeyAllZeros = internalKey.every(byte => byte === 0);
+      const isControlBlockAllZeros = inscriptionScript.controlBlock.every(byte => byte === 0);
+      
+      if (isRevealKeyAllZeros) {
+        console.error('[createRevealTransaction] ERROR: Reveal public key is all zeros!');
+      }
+      if (isInternalKeyAllZeros) {
+        console.error('[createRevealTransaction] ERROR: Internal key is all zeros!');
+      }
+      if (isControlBlockAllZeros) {
+        console.error('[createRevealTransaction] ERROR: Control block is all zeros!');
+      }
 
       console.log(
         `[DEBUG-REVEAL-FIX] Using PRE-CALCULATED commit script for witness: ${Buffer.from(commitScript).toString('hex')}`
@@ -165,25 +189,53 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         `[DEBUG-REVEAL-FIX] Using stored inscription script for input: ${Buffer.from(inscriptionScript.script).toString('hex')}`
       );
 
+      // Check the tapInternalKey before using it
+      let tapInternalKey = preparedInscription.commitAddress.internalKey;
+      
+      // Check if the internal key is all zeros - if so, use the reveal public key as a fallback
+      if (tapInternalKey.every(byte => byte === 0)) {
+        console.error('[createRevealTransaction] ERROR: tapInternalKey is all zeros! Using reveal public key as fallback.');
+        // Use the reveal public key as a fallback for the internal key
+        tapInternalKey = pubKey;
+        console.log(`[createRevealTransaction] Using fallback key: ${Buffer.from(tapInternalKey).toString('hex')}`);
+      }
+      
+      // Try to decode the control block - if it fails, we'll log an error
+      let decodedControlBlock;
+      try {
+        decodedControlBlock = btc.TaprootControlBlock.decode(inscriptionScript.controlBlock);
+        console.log(`[DEBUG-REVEAL] Successfully decoded control block`);
+      } catch (error) {
+        console.error(`[DEBUG-REVEAL] Failed to decode control block: ${error instanceof Error ? error.message : String(error)}`);
+        // Create a placeholder empty control block
+        console.error(`[DEBUG-REVEAL] Will attempt to proceed with a placeholder control block`);
+      }
+      
       // Add the selected UTXO as the first input using the stored script info
-      tx.addInput({
-        txid: selectedUTXO.txid,
-        index: selectedUTXO.vout,
-        witnessUtxo: {
-          script: commitScript,
-          amount: inputAmount
-        },
-        tapInternalKey: preparedInscription.commitAddress.internalKey,
-        tapLeafScript: [
-          [
-            btc.TaprootControlBlock.decode(inscriptionScript.controlBlock),
-            btc.utils.concatBytes(
-              inscriptionScript.script,
-              new Uint8Array([inscriptionScript.leafVersion])
-            )
+      try {
+        tx.addInput({
+          txid: selectedUTXO.txid,
+          index: selectedUTXO.vout,
+          witnessUtxo: {
+            script: commitScript,
+            amount: inputAmount
+          },
+          tapInternalKey: tapInternalKey,
+          tapLeafScript: [
+            [
+              decodedControlBlock || btc.TaprootControlBlock.decode(inscriptionScript.controlBlock),
+              btc.utils.concatBytes(
+                inscriptionScript.script,
+                new Uint8Array([inscriptionScript.leafVersion])
+              )
+            ]
           ]
-        ]
-      });
+        });
+        console.log(`[DEBUG-REVEAL] Successfully added input with taproot details`);
+      } catch (error) {
+        console.error(`[DEBUG-REVEAL] Error adding input: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
 
       // Destination address for the inscription output
       // Use the provided destination address if available, otherwise fall back to the commit address

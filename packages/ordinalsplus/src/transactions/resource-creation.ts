@@ -69,11 +69,53 @@ export async function prepareResourceInscription(
         const preparedContent = prepareContent(content, resolvedContentType, resourceMetadata);
         
         // 6. Create the inscription using the micro-ordinals approach
+        console.log(`[prepareResourceInscription] Public key type: ${typeof publicKey}`);
+        if (publicKey) {
+            console.log(`[prepareResourceInscription] Public key format: ${publicKey instanceof Uint8Array ? 'Uint8Array' : 'other'}`); 
+            if (publicKey instanceof Uint8Array) {
+                console.log(`[prepareResourceInscription] Public key hex: ${Buffer.from(publicKey).toString('hex')}`);
+                // Check if the key is all zeros
+                const isAllZeros = publicKey.every(byte => byte === 0);
+                if (isAllZeros) {
+                    console.error('[prepareResourceInscription] ERROR: Public key is all zeros before passing to prepareInscription!');
+                }
+            } else {
+                // Try to inspect the key in other formats
+                try {
+                    console.log(`[prepareResourceInscription] Non-Uint8Array public key:`, JSON.stringify(publicKey));
+                } catch (e) {
+                    console.log(`[prepareResourceInscription] Non-Uint8Array public key (non-serializable):`, publicKey);
+                }
+            }
+        } else {
+            console.log(`[prepareResourceInscription] Public key is ${publicKey === undefined ? 'undefined' : 'null'}`);
+        }
+        
+        // Convert the key correctly or pass undefined for auto-generation
+        const revealPublicKey = publicKey instanceof Uint8Array ? publicKey : undefined;
+        console.log(`[prepareResourceInscription] Passing reveal public key: ${revealPublicKey ? 'provided' : 'undefined (will auto-generate)'}`); 
+        
         const preparedInscription = prepareInscription({
             content: preparedContent,
-            revealPublicKey: publicKey instanceof Uint8Array ? publicKey : undefined,
+            revealPublicKey,
             network: networkType
         });
+        
+        // Verify the returned inscription data
+        console.log(`[prepareResourceInscription] Received prepared inscription with commit address: ${preparedInscription.commitAddress.address}`);
+        console.log(`[prepareResourceInscription] Reveal public key from prepared inscription: ${Buffer.from(preparedInscription.revealPublicKey).toString('hex')}`);
+        console.log(`[prepareResourceInscription] Internal key from prepared inscription: ${Buffer.from(preparedInscription.commitAddress.internalKey).toString('hex')}`);
+        
+        // Check if returned keys are all zeros
+        const isRevealKeyAllZeros = preparedInscription.revealPublicKey.every(byte => byte === 0);
+        const isInternalKeyAllZeros = preparedInscription.commitAddress.internalKey.every(byte => byte === 0);
+        
+        if (isRevealKeyAllZeros) {
+            console.error('[prepareResourceInscription] ERROR: Reveal public key is all zeros in prepared inscription!');
+        }
+        if (isInternalKeyAllZeros) {
+            console.error('[prepareResourceInscription] ERROR: Internal key is all zeros in prepared inscription!');
+        }
         
         console.log(`[prepareResourceInscription] Inscription prepared. Commit Address: ${preparedInscription.commitAddress.address}`);
 
