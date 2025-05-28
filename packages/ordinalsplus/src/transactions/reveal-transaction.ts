@@ -181,23 +181,33 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         console.error('[createRevealTransaction] ERROR: Control block is all zeros!');
       }
 
-      console.log(
-        `[DEBUG-REVEAL-FIX] Using PRE-CALCULATED commit script for witness: ${Buffer.from(commitScript).toString('hex')}`
-      );
-      console.log(`[DEBUG-REVEAL-FIX] Expected Commit Address from prep: ${commitAddress}`);
-      console.log(
-        `[DEBUG-REVEAL-FIX] Using stored inscription script for input: ${Buffer.from(inscriptionScript.script).toString('hex')}`
-      );
-
       // Check the tapInternalKey before using it
       let tapInternalKey = preparedInscription.commitAddress.internalKey;
       
-      // Check if the internal key is all zeros - if so, use the reveal public key as a fallback
+      // Check if the internal key is all zeros
       if (tapInternalKey.every(byte => byte === 0)) {
-        console.error('[createRevealTransaction] ERROR: tapInternalKey is all zeros! Using reveal public key as fallback.');
-        // Use the reveal public key as a fallback for the internal key
-        tapInternalKey = pubKey;
-        console.log(`[createRevealTransaction] Using fallback key: ${Buffer.from(tapInternalKey).toString('hex')}`);
+        console.error('[createRevealTransaction] ERROR: tapInternalKey is all zeros!');
+        
+        // First, try to extract the key from the commit script
+        // P2TR script format: OP_1 OP_PUSHBYTES_32 <32-byte-key>
+        if (commitScript.length >= 34 && commitScript[0] === 0x51 && commitScript[1] === 0x20) {
+          const extractedKey = commitScript.slice(2, 34);
+          if (!extractedKey.every(byte => byte === 0)) {
+            console.log('[createRevealTransaction] Using internal key extracted from commit script');
+            tapInternalKey = extractedKey;
+          } else {
+            console.error('[createRevealTransaction] Extracted key is also zeros, falling back to reveal public key');
+            tapInternalKey = pubKey;
+          }
+        } else {
+          console.log('[createRevealTransaction] Using reveal public key as fallback for internal key');
+          tapInternalKey = pubKey;
+        }
+        
+        // Final validation - should never happen with the steps above
+        if (tapInternalKey.every(byte => byte === 0)) {
+          throw new Error('Cannot find valid internal key for taproot script-path spend');
+        }
       }
       
       // Try to decode the control block - if it fails, we'll log an error
