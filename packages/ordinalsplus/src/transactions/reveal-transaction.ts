@@ -266,15 +266,36 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       });
 
       // Estimate fee based on transaction size
-      // Instead of using a fixed size, calculate based on inscription size
-      const baseRevealTxSize = 200; // Base transaction overhead
+      // CRITICAL FIX: The inscription content is embedded in the witness data
+      // We need to calculate the actual transaction size including the full inscription
       const inscriptionSize = preparedInscription.inscription.body?.length || 0;
-      // Inscriptions have overhead in the transaction structure, adjust the multiplier accordingly
-      // The 1.02 multiplier accounts for witness data and script overhead
-      const estimatedVsize = baseRevealTxSize + Math.ceil(inscriptionSize * 1.02);
-
-      console.log(`[calculateFee] Inscription size: ${inscriptionSize} bytes`);
-      console.log(`[calculateFee] Estimated transaction vsize: ${estimatedVsize} vbytes`);
+      
+      // For reveal transactions, the size calculation is:
+      // Base transaction (inputs/outputs): ~150 bytes
+      // Witness data: inscription content + script overhead (~300 bytes)
+      // The witness data gets a 75% discount in vsize calculation
+      
+      let estimatedVsize: number;
+      if (inscriptionSize > 0) {
+        // Base transaction size (non-witness data)
+        // More accurate: version(4) + input_count(1) + input(37) + output_count(1) + outputs(~65) + locktime(4) = ~112 bytes
+        // Using 150 as conservative estimate to account for variable output sizes
+        const baseSize = 150;
+        
+        // Witness data includes:
+        // - Signature: ~64 bytes
+        // - Inscription script: inscription content + script overhead (~300 bytes)
+        // - Control block: ~33 bytes
+        const witnessSize = inscriptionSize + 300;
+        
+        // vsize = (base_size * 3 + total_size) / 4
+        // where total_size = base_size + witness_size
+        const totalSize = baseSize + witnessSize;
+        estimatedVsize = Math.ceil((baseSize * 3 + totalSize) / 4);
+      } else {
+        // For non-inscription transactions, use a simpler calculation
+        estimatedVsize = 200;
+      }
 
       const fee = BigInt(calculateFee(estimatedVsize, feeRate));
       
@@ -287,89 +308,29 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
 
       // Calculate change amount (making sure we don't create dust outputs)
       const postageValue = BigInt(MIN_POSTAGE_VALUE);
-      const changeAmount = inputAmount - fee - postageValue;
+      
+      // CRITICAL FIX: The input amount from the commit transaction already includes the reveal fee
+      // We should not subtract a separately calculated fee again, as this causes double-counting
+      // The commit transaction was funded with: revealFee + postageValue
+      // So we should use: inputAmount - postageValue for the actual fee
+      const actualFeeAllocated = inputAmount - postageValue;
+      const changeAmount = BigInt(0); // No change expected in a properly funded reveal transaction
 
       // Add the inscription output (recipient)
-      if (changeAmount > 0) {
-        // If we have enough for both the fee and the inscription
-        tx.addOutputAddress(
-          outputAddress || '', 
-          postageValue,
-          network
-        );
-        
-        // Add progress event for adding inscription output
-        transactionTracker.addTransactionProgressEvent({
-          transactionId,
-          message: `Added inscription output: ${outputAddress} (${postageValue} sats)`,
-          timestamp: new Date()
-        });
-
-        // Add change output back to the owner's address if it's not dust
-        if (changeAmount >= BigInt(MIN_POSTAGE_VALUE) && selectedUTXO.script?.address) {
-          tx.addOutputAddress(
-            selectedUTXO.script.address,
-            changeAmount,
-            network
-          );
-          
-          // Add progress event for adding change output
-          transactionTracker.addTransactionProgressEvent({
-            transactionId,
-            message: `Added change output: ${selectedUTXO.script.address} (${changeAmount} sats)`,
-            timestamp: new Date()
-          });
-        } else if (changeAmount > 0) {
-          // If change is below dust limit but above zero, add it to the fee
-          // Add progress event for dust change
-          transactionTracker.addTransactionProgressEvent({
-            transactionId,
-            message: `Change amount ${changeAmount} is below dust limit, adding to fee`,
-            timestamp: new Date()
-          });
-        }
-      } else {
-        // If we don't have enough for change, use all remaining for the inscription
-        const availableForInscription = inputAmount - fee;
-        if (availableForInscription <= 0) {
-          // Create a structured error
-          const error = errorHandler.createError(
-            ErrorCode.INSUFFICIENT_FUNDS,
-            {
-              utxoValue: Number(inputAmount),
-              requiredFee: Number(fee)
-            },
-            `UTXO value too low to cover the fee. Need at least ${fee} sats.`
-          );
-          
-          // Set error in transaction tracker
-          transactionTracker.setTransactionError(transactionId, {
-            name: error.name,
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            category: ErrorCategory.VALIDATION,
-            severity: ErrorSeverity.ERROR,
-            timestamp: new Date(),
-            recoverable: false
-          });
-          
-          throw error;
-        }
-        
-        tx.addOutputAddress(
-          outputAddress || '',
-          availableForInscription,
-          network
-        );
-        
-        // Add progress event for adding minimal inscription output
-        transactionTracker.addTransactionProgressEvent({
-          transactionId,
-          message: `Added minimal inscription output: ${outputAddress} (${availableForInscription} sats)`,
-          timestamp: new Date()
-        });
-      }
+      // FIXED: Simply add the inscription output with postage value
+      // The remaining amount (inputAmount - postageValue) will automatically become the fee
+      tx.addOutputAddress(
+        outputAddress || '', 
+        postageValue,
+        network
+      );
+      
+      // Add progress event for adding inscription output
+      transactionTracker.addTransactionProgressEvent({
+        transactionId,
+        message: `Added inscription output: ${outputAddress} (${postageValue} sats), fee allocated: ${actualFeeAllocated} sats`,
+        timestamp: new Date()
+      });
 
       // Sign if private key is provided
       if (privateKey) {
@@ -462,21 +423,120 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       const txHex = hex.encode(txBytes);
       const txBase64 = base64.encode(txBytes);
       
+      // Calculate the actual vsize from the finalized transaction
+      // For SegWit transactions, vsize = (base_size * 3 + total_size) / 4
+      // We need to properly calculate this instead of using total size
+      
+      // Parse the transaction to separate witness and non-witness data
+      let actualVsize: number;
+      try {
+        // For SegWit transactions, we need to calculate vsize properly
+        // The transaction structure is: version(4) + marker(1) + flag(1) + inputs + outputs + witness + locktime(4)
+        // Non-witness data: version + inputs + outputs + locktime
+        // Witness data: marker + flag + witness
+        
+        // Since @scure/btc-signer doesn't expose witness/non-witness separation directly,
+        // we'll use the same calculation method as the estimation but with actual data sizes
+        
+        // Get the actual inscription size from the prepared inscription
+        const actualInscriptionSize = preparedInscription.inscription.body?.length || 0;
+        
+        if (actualInscriptionSize > 0) {
+          // More accurate base transaction size calculation
+          // Base transaction (non-witness data) includes:
+          // - Version: 4 bytes
+          // - Input count: 1 byte (for 1 input)
+          // - Input: 36 bytes (txid + vout + sequence) + 1 byte (empty scriptSig length)
+          // - Output count: 1 byte (for 1-2 outputs)
+          // - Outputs: 8 bytes (value) + 1 byte (script length) + script bytes per output
+          // - Locktime: 4 bytes
+          
+          let baseSize = 4 + 1 + 37 + 1 + 4; // Version + input count + input + output count + locktime
+          
+          // Add output sizes
+          for (let i = 0; i < tx.outputsLength; i++) {
+            const output = tx.getOutput(i);
+            baseSize += 8 + 1 + (output.script?.length || 31); // value + script length + script
+          }
+          
+          // Witness data calculation:
+          // - Marker + Flag: 2 bytes (but these are counted as witness data)
+          // - Witness stack count for input: 1 byte
+          // - Signature: 64 bytes (Schnorr) + 1 byte length prefix
+          // - Inscription script: actual content + overhead + 1-3 bytes length prefix
+          // - Control block: 33 bytes + 1 byte length prefix
+          
+          const signatureBytes = 64 + 1; // Schnorr signature + length prefix
+          const controlBlockBytes = 33 + 1; // Control block + length prefix
+          
+          // Calculate inscription script size with proper length encoding
+          const inscriptionScriptSize = actualInscriptionSize + 50; // Content + OP codes overhead
+          const inscriptionScriptBytes = inscriptionScriptSize + (inscriptionScriptSize < 253 ? 1 : 3); // + length prefix
+          
+          const witnessSize = 2 + 1 + signatureBytes + inscriptionScriptBytes + controlBlockBytes; // marker+flag + stack count + signature + script + control block
+          
+          // vsize = (base_size * 3 + total_size) / 4
+          const totalSize = baseSize + witnessSize;
+          actualVsize = Math.ceil((baseSize * 3 + totalSize) / 4);
+          
+          console.log(`[Vsize Debug] Base size: ${baseSize}, Witness size: ${witnessSize}, Total size: ${totalSize}, Calculated vsize: ${actualVsize}`);
+        } else {
+          // For non-inscription transactions, use the total size as approximation
+          actualVsize = txBytes.length;
+        }
+      } catch (error) {
+        console.warn('[Vsize Calculation] Failed to calculate proper vsize, using total size as fallback:', error);
+        actualVsize = txBytes.length;
+      }
+      
+      // Log the comparison between estimated and actual size for debugging
+      const actualAllocatedFee = Number(actualFeeAllocated); // Use the actual allocated fee
+      const actualEffectiveRate = (actualAllocatedFee / actualVsize).toFixed(2);
+      
+      console.log(`[Fee Comparison] Estimated vsize: ${estimatedVsize} vB, Actual vsize: ${actualVsize} vB`);
+      console.log(`[Fee Comparison] Allocated fee: ${actualAllocatedFee} sats (was estimated: ${Number(fee)} sats)`);
+      console.log(`[Fee Comparison] Target fee rate: ${feeRate} sat/vB, Actual effective rate: ${actualEffectiveRate} sat/vB`);
+      
+      // Check if the actual effective rate is significantly lower than target
+      const effectiveRate = actualAllocatedFee / actualVsize;
+      if (effectiveRate < feeRate * 0.9) { // If effective rate is more than 10% lower than target
+        console.warn(`[Fee Warning] Effective fee rate (${actualEffectiveRate} sat/vB) is significantly lower than target (${feeRate} sat/vB). Transaction may not be prioritized properly.`);
+        
+        // Calculate what the fee should be based on actual vsize
+        const correctFee = Number(calculateFee(actualVsize, feeRate));
+        const feeDifference = correctFee - actualAllocatedFee;
+        
+        console.log(`[Fee Correction] Allocated fee: ${actualAllocatedFee} sats, Correct fee: ${correctFee} sats, Difference: ${feeDifference} sats`);
+        
+        // If the fee difference is significant (more than 100 sats), we should warn about potential issues
+        if (feeDifference > 100) {
+          console.error(`[Fee Error] Significant fee underpayment detected! Transaction may not be relayed or confirmed quickly.`);
+          console.error(`[Fee Error] Consider using a higher fee rate or improving vsize estimation.`);
+          
+          // Add this information to the transaction tracker
+          transactionTracker.addTransactionProgressEvent({
+            transactionId,
+            message: `WARNING: Fee underpayment detected. Effective rate: ${actualEffectiveRate} sat/vB (target: ${feeRate} sat/vB)`,
+            timestamp: new Date()
+          });
+        }
+      }
+      
       // Add progress event for transaction prepared successfully
       transactionTracker.addTransactionProgressEvent({
         transactionId,
-        message: 'Reveal transaction prepared successfully',
+        message: `Reveal transaction prepared successfully (actual size: ${actualVsize} bytes, effective rate: ${actualEffectiveRate} sat/vB)`,
         timestamp: new Date()
       });
       
       // Set transaction to ready status
       transactionTracker.setTransactionStatus(transactionId, TransactionStatus.CONFIRMING);
       
-      // Return the result
+      // Return the result with actual vsize and actual allocated fee
       return {
         tx,
-        fee: Number(fee),
-        vsize: estimatedVsize,
+        fee: actualAllocatedFee, // Use the fee that was actually allocated in the transaction
+        vsize: actualVsize, // Return actual vsize for accurate reporting
         hex: txHex,
         base64: txBase64,
         transactionId,

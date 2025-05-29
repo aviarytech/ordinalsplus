@@ -9,6 +9,7 @@ import UtxoSelector from '../create/UtxoSelector';
 import * as ordinalsplus from 'ordinalsplus';
 import * as btc from '@scure/btc-signer';
 import { utils as secpUtils } from '@noble/secp256k1';
+import { getScureNetwork } from 'ordinalsplus';
 
 /**
  * TransactionStep handles the creation, signing, and broadcasting of the resource inscription transaction.
@@ -46,6 +47,10 @@ const TransactionStep: React.FC = () => {
   const [commitTxid, setCommitTxid] = useState<string | null>(state.transactionInfo.commitTx);
   const [revealTxid, setRevealTxid] = useState<string | null>(state.transactionInfo.revealTx);
   
+  // Fee rate selection state
+  const [selectedFeeRate, setSelectedFeeRate] = useState<number>(10);
+  const [feeRateMode, setFeeRateMode] = useState<'low' | 'medium' | 'high' | 'custom'>('medium');
+  
   // UTXO selection state
   const [availableUtxos, setAvailableUtxos] = useState<Utxo[]>([]);
   const [isFetchingUtxos, setIsFetchingUtxos] = useState<boolean>(false);
@@ -53,9 +58,6 @@ const TransactionStep: React.FC = () => {
   const [showUtxoGuidance, setShowUtxoGuidance] = useState<boolean>(false);
   const [requiredAmount, setRequiredAmount] = useState<number>(0);
   const [manualSelectionMode, setManualSelectionMode] = useState<boolean>(false);
-  
-  // Inscription-specific state
-  const [ephemeralRevealPrivateKeyWif, setEphemeralRevealPrivateKeyWif] = useState<string | null>(null);
   
   // Find the largest UTXO from the available UTXOs
   const findLargestUtxo = (utxos: Utxo[]): Utxo | null => {
@@ -92,19 +94,6 @@ const TransactionStep: React.FC = () => {
   const blockExplorerUrl = walletNetwork === 'testnet'
     ? 'https://mempool.space/testnet'
     : 'https://mempool.space';
-  
-  // Interface for the ordinalsplus.OrdinalInscription type
-  interface OrdinalInscription {
-    tags: Record<string, string>;
-    body: string | Uint8Array;
-  }
-  
-  // Interface for P2TR address info
-  interface P2TRAddressInfo {
-    address: string;
-    script: Uint8Array;
-    internalKey: Uint8Array;
-  }
   
   // Fetch UTXOs from wallet
   const handleFetchUtxos = async () => {
@@ -175,10 +164,9 @@ const TransactionStep: React.FC = () => {
     }
   };
   
-  // Prepare and sign commit transaction
   const handlePrepareAndSignCommit = async () => {
-    if (!walletConnected || !walletAddress) {
-      setErrorMessage('Wallet not connected');
+    if (!walletConnected || !walletAddress || !state.utxoSelection || state.utxoSelection.length === 0) {
+      setErrorMessage('Please connect your wallet and select UTXOs first');
       return;
     }
     
@@ -198,7 +186,7 @@ const TransactionStep: React.FC = () => {
         txid: utxo.txid,
         vout: utxo.vout,
         value: utxo.value,
-        scriptPubKey: utxo.scriptPubKey || ''
+        ...(utxo.scriptPubKey && { scriptPubKey: utxo.scriptPubKey }) // Only include if available
       }));
       
       // Retrieve inscription data from localStorage
@@ -213,12 +201,40 @@ const TransactionStep: React.FC = () => {
       const commitScript = new Uint8Array(Buffer.from(inscriptionData.commitScriptHex, 'hex'));
       const revealPublicKey = new Uint8Array(Buffer.from(inscriptionData.revealPublicKeyHex, 'hex'));
       
+      // Calculate reveal transaction fee based on content size
+      const content = state.contentData.content || '';
+      const contentSizeBytes = Buffer.from(content).length;
+      
+      // Use the EXACT same calculation as the ordinalsplus library (corrected version)
+      // This matches the fixed logic in packages/ordinalsplus/src/transactions/reveal-transaction.ts
+      let estimatedVsize: number;
+      if (contentSizeBytes > 0) {
+        // Base transaction size (non-witness data)
+        const baseSize = 150;
+        
+        // Witness data includes:
+        // - Signature: ~64 bytes
+        // - Inscription script: inscription content + ~200 bytes overhead
+        // - Control block: ~33 bytes
+        const witnessSize = contentSizeBytes + 300;
+        
+        // vsize = (base_size * 3 + total_size) / 4
+        // where total_size = base_size + witness_size
+        const totalSize = baseSize + witnessSize;
+        estimatedVsize = Math.ceil((baseSize * 3 + totalSize) / 4);
+      } else {
+        // For non-inscription transactions, use a simpler calculation
+        estimatedVsize = 200;
+      }
+      
+      // Calculate fee using ordinalsplus calculateFee function
+      let revealFee: number;
+      let revealTxVSize: number;
+      
+      revealFee = Number(ordinalsplus.calculateFee(estimatedVsize, selectedFeeRate));
+      revealTxVSize = estimatedVsize;
+      
       // Prepare the commit transaction
-      console.log('[PrepareAndSignCommit] Creating commit transaction...');
-      
-      const safetyBufferFeeRate = inscriptionData.feeRate + 0.1;
-      const requiredCommitAmount = BigInt(inscriptionData.requiredCommitAmount);
-      
       const commitResult = await ordinalsplus.prepareCommitTransaction({
         inscription: {
           commitAddress: {
@@ -227,29 +243,34 @@ const TransactionStep: React.FC = () => {
             internalKey: new Uint8Array(32) // Required field with proper size
           },
           inscription: inscriptionData.inscription,
-          revealPublicKey: revealPublicKey,
+          revealPublicKey: revealPublicKey
         } as any,
         utxos: utxosForApi,
         changeAddress: walletAddress,
-        feeRate: safetyBufferFeeRate,
+        feeRate: selectedFeeRate,
         network: inscriptionData.network,
-        minimumCommitAmount: Number(requiredCommitAmount)
+        minimumCommitAmount: Number(inscriptionData.requiredCommitAmount)
       });
-      
-      console.log(`[PrepareAndSignCommit] Commit transaction prepared, fee: ${commitResult.fees.commit} sats`);
       
       // Store the PSBT for signing
       setUnsignedPsbt(commitResult.commitPsbtBase64);
       
-      // Update transaction status to signing
+      // Update transaction status to include fee breakdown
       setTransactionInfo({
-        status: 'signing'
+        status: 'preparing',
+        feeDetails: {
+          commitFeeRate: selectedFeeRate,
+          commitFee: commitResult.fees.commit,
+          commitVSize: Math.ceil(commitResult.fees.commit / selectedFeeRate),
+          revealFeeRate: selectedFeeRate,
+          revealFee: revealFee,
+          revealVSize: revealTxVSize,
+          totalFees: commitResult.fees.commit + revealFee
+        }
       });
       
-      setStatusMessage('Commit transaction prepared. Please sign it with your wallet.');
-      
-      // Proceed with signing
-      await signTransaction();
+      setStatusMessage('Fee breakdown ready. Please review before signing.');
+      // The user will proceed to sign using the Sign Transaction button in the fee breakdown UI
       
     } catch (error: any) {
       console.error('Error preparing commit transaction:', error);
@@ -283,11 +304,8 @@ const TransactionStep: React.FC = () => {
     
     try {
       // Generate ephemeral key pair for the inscription
-      console.log('[ResourceInscription] Generating ephemeral keypair...');
       const revealPrivateKeyBytes = secpUtils.randomPrivateKey();
       const revealPublicKeyBytes = btc.utils.pubSchnorr(revealPrivateKeyBytes);
-      setEphemeralRevealPrivateKeyWif(Buffer.from(revealPrivateKeyBytes).toString('hex'));
-      console.log(`[ResourceInscription] Ephemeral Public Key generated: ${Buffer.from(revealPublicKeyBytes).toString('hex')}`);
       
       // Prepare content and metadata
       const content = state.contentData.content || '';
@@ -295,23 +313,38 @@ const TransactionStep: React.FC = () => {
       
       // Process content based on type
       let processedContent: string | Buffer;
+      let actualContentSizeBytes: number;
       
       if (typeof content === 'string') {
         if (content.startsWith('data:')) {
           // Handle data URLs (e.g., base64 encoded images)
           const matches = content.match(/^data:([^;]+);base64,(.+)$/);
           if (matches && matches.length === 3) {
-            processedContent = content;
+            // CRITICAL FIX: Extract only the base64 data, not the full data URL
+            // The ordinalsplus library expects just the base64 string for images
+            const base64Data = matches[2];
+            
+            // For images, pass the base64 data as a Buffer to ensure proper binary encoding
+            if (contentType.startsWith('image/')) {
+              processedContent = Buffer.from(base64Data, 'base64');
+              actualContentSizeBytes = processedContent.length; // Use the actual binary size
+            } else {
+              // For other data URLs, pass the full data URL
+              processedContent = content;
+              actualContentSizeBytes = Buffer.from(content).length;
+            }
           } else {
             throw new Error('Invalid data URL format');
           }
         } else {
           // Handle plain text content
           processedContent = content;
+          actualContentSizeBytes = Buffer.from(content).length;
         }
       } else {
         // Handle any other content type as string
         processedContent = String(content);
+        actualContentSizeBytes = Buffer.from(String(content)).length;
       }
       
       // Process metadata
@@ -335,10 +368,9 @@ const TransactionStep: React.FC = () => {
         return 'mainnet';
       };
       
-      const BTC_NETWORK = walletNetwork ? getOrdinalsPlusNetwork(walletNetwork) : 'mainnet';
+      const BTC_NETWORK = getOrdinalsPlusNetwork(walletNetwork);
       
       // Create the inscription using ordinalsplus
-      console.log('[ResourceInscription] Preparing inscription data...');
       const preparedInscription = ordinalsplus.createInscription({
         content: processedContent,
         contentType: contentType,
@@ -347,27 +379,89 @@ const TransactionStep: React.FC = () => {
         network: BTC_NETWORK
       });
       
-      console.log('[ResourceInscription] Inscription data prepared');
+      // Use a more balanced fee calculation approach that won't cause UTXO selection issues
       
-      // Calculate fees
-      const feeRate = 5; // Default fee rate, could be made configurable
-      const safetyBufferFeeRate = feeRate + 0.1;
+      // 1. Start with the selected fee rate
+      const baseFeeRate = selectedFeeRate; // Use selected fee rate instead of hardcoded value
       
-      // Calculate content size for fee estimation
-      const contentSizeBytes = Buffer.from(processedContent).length;
+      // 2. Calculate content size for fee estimation
+      const contentSizeBytes = actualContentSizeBytes;
       
-      const baseRevealTxSize = 200; // Base size of the reveal transaction
-      const estimatedTotalVBytes = baseRevealTxSize + (contentSizeBytes * 1.02);
+      // 3. Use the EXACT same calculation as the ordinalsplus library (corrected version)
+      // This matches the fixed logic in packages/ordinalsplus/src/transactions/reveal-transaction.ts
+      let estimatedVsize: number;
+      if (contentSizeBytes > 0) {
+        // Base transaction size (non-witness data)
+        const baseSize = 150;
+        
+        // Witness data includes:
+        // - Signature: ~64 bytes
+        // - Inscription script: inscription content + ~200 bytes overhead
+        // - Control block: ~33 bytes
+        const witnessSize = contentSizeBytes + 300;
+        
+        // vsize = (base_size * 3 + total_size) / 4
+        // where total_size = base_size + witness_size
+        const totalSize = baseSize + witnessSize;
+        estimatedVsize = Math.ceil((baseSize * 3 + totalSize) / 4);
+      } else {
+        // For non-inscription transactions, use a simpler calculation
+        estimatedVsize = 200;
+      }
       
-      const revealFee = ordinalsplus.calculateFee(Math.ceil(estimatedTotalVBytes), safetyBufferFeeRate);
-      console.log(`[ResourceInscription] Estimated reveal fee: ${revealFee} sats`);
+      // Calculate fee using ordinalsplus calculateFee function
+      const baseRevealFee = Number(ordinalsplus.calculateFee(estimatedVsize, baseFeeRate));
       
-      // Define postage value (minimum amount to be sent to the inscription output)
-      const POSTAGE_VALUE = 1000n; // 1000 sats
-      const requiredCommitAmount = BigInt(revealFee) + POSTAGE_VALUE;
+      // CRITICAL FIX: Calculate the commit transaction fee to ensure proper funding
+      // Estimate commit transaction size (1 input, 2 outputs typically)
+      const estimatedCommitTxSize = 150; // Conservative estimate for commit transaction vsize
+      const estimatedCommitFee = Number(ordinalsplus.calculateFee(estimatedCommitTxSize, baseFeeRate));
       
-      // Update the required amount for UTXO selection
-      setRequiredAmount(Number(requiredCommitAmount) + 10000); // Add extra buffer for commit tx fee
+      // Define postage value and calculate required commit amount
+      const POSTAGE_VALUE = 1000n;
+      const requiredCommitAmount = BigInt(baseRevealFee) + POSTAGE_VALUE;
+      
+      // Update the required amount for UTXO selection (add buffer for commit tx fee)
+      const buffer = 1000; // Reasonable buffer
+      const totalRequiredForUtxoSelection = Number(requiredCommitAmount) + estimatedCommitFee + buffer;
+      setRequiredAmount(totalRequiredForUtxoSelection);
+      
+      // If UTXOs are already selected, check if they still meet the new requirement
+      if (state.utxoSelection && state.utxoSelection.length > 0) {
+        const selectedTotal = state.utxoSelection.reduce((sum, utxo) => sum + utxo.value, 0);
+        if (selectedTotal < totalRequiredForUtxoSelection) {
+          // Clear selection if it no longer meets requirements
+          setUtxoSelection([]);
+        }
+      }
+      
+      console.log(`[Fee Debug] Content size: ${contentSizeBytes} bytes`);
+      console.log(`[Fee Debug] Estimated vsize: ${estimatedVsize} vB`);
+      console.log(`[Fee Debug] Fee rate: ${baseFeeRate} sat/vB`);
+      console.log(`[Fee Debug] Reveal fee: ${baseRevealFee} sats`);
+      console.log(`[Fee Debug] Commit fee estimate: ${estimatedCommitFee} sats`);
+      console.log(`[Fee Debug] Postage value: ${POSTAGE_VALUE} sats`);
+      console.log(`[Fee Debug] Buffer: ${buffer} sats`);
+      console.log(`[Fee Debug] Commit output amount: ${requiredCommitAmount} sats`);
+      console.log(`[Fee Debug] Total required for UTXO selection: ${totalRequiredForUtxoSelection} sats`);
+      
+      // Add detailed breakdown for large content
+      if (contentSizeBytes > 50000) { // 50KB threshold
+        console.warn(`[Large Content Warning] Content size is ${(contentSizeBytes / 1024).toFixed(1)}KB`);
+        console.warn(`[Large Content Warning] This will result in high fees: ${baseRevealFee} sats (~$${(baseRevealFee * 0.00000001 * 60000).toFixed(2)} USD)`);
+        console.warn(`[Large Content Warning] Consider compressing the image or using a lower fee rate`);
+        
+        // Calculate fees at different rates for comparison
+        const lowFeeRate = 5;
+        const lowRevealFee = Number(ordinalsplus.calculateFee(estimatedVsize, lowFeeRate));
+        const lowCommitFee = Number(ordinalsplus.calculateFee(estimatedCommitTxSize, lowFeeRate));
+        const lowTotalRequired = lowRevealFee + 1000 + lowCommitFee + buffer;
+        
+        console.log(`[Fee Comparison] At ${lowFeeRate} sat/vB: ${lowTotalRequired} sats (~$${(lowTotalRequired * 0.00000001 * 60000).toFixed(2)} USD)`);
+        
+        // Set a warning message for the user
+        setStatusMessage(`⚠️ Large content detected (${(contentSizeBytes / 1024).toFixed(1)}KB). This will require ${totalRequiredForUtxoSelection} sats (~$${(totalRequiredForUtxoSelection * 0.00000001 * 60000).toFixed(2)} USD) in fees. Consider using ${lowFeeRate} sat/vB fee rate (${lowTotalRequired} sats) or compressing your image.`);
+      }
       
       // We don't need to create the commit transaction here anymore
       // Just prepare the inscription data and store it for later use
@@ -384,7 +478,7 @@ const TransactionStep: React.FC = () => {
         revealPublicKeyHex: Buffer.from(revealPublicKeyBytes).toString('hex'),
         revealPrivateKeyHex: Buffer.from(revealPrivateKeyBytes).toString('hex'),
         requiredCommitAmount: requiredCommitAmount.toString(),
-        feeRate: safetyBufferFeeRate,
+        feeRate: baseFeeRate,
         network: BTC_NETWORK
       }));
       
@@ -406,7 +500,13 @@ const TransactionStep: React.FC = () => {
   // Sign PSBT
   const signTransaction = async () => {
     if (!unsignedPsbt) {
-      setErrorMessage('No unsigned PSBT available');
+      setErrorMessage('No unsigned PSBT available. Please try preparing the transaction again.');
+      return;
+    }
+    
+    // Check if wallet is connected and signPsbt function is available
+    if (!walletConnected || typeof signPsbt !== 'function') {
+      setErrorMessage('Wallet connection issue. Please reconnect your wallet.');
       return;
     }
     
@@ -415,10 +515,31 @@ const TransactionStep: React.FC = () => {
     setErrorMessage(null);
     
     try {
-      // Sign the PSBT
+      // Call the wallet's signPsbt function
       const signedPsbtHex = await signPsbt(unsignedPsbt);
+      
+      // Store the signed PSBT
       setSignedPsbt(signedPsbtHex);
-      setStatusMessage('Transaction signed. Ready to broadcast.');
+      
+      // Update transaction status
+      setTransactionInfo({
+        status: 'signing'
+      });
+      
+      setStatusMessage('Transaction signed. Broadcasting automatically...');
+      
+      // Automatically broadcast the transaction after signing
+      if (signedPsbtHex) {
+        // Wait a moment before proceeding to broadcast
+        setTimeout(async () => {
+          try {
+            await broadcastTransaction(signedPsbtHex); // Pass the signed PSBT directly
+          } catch (error) {
+            console.error('Error in automatic broadcast:', error);
+            setErrorMessage(`Failed to broadcast after signing: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }, 1000);
+      }
     } catch (error) {
       console.error('Error signing transaction:', error);
       const errorMsg = `Failed to sign transaction: ${error instanceof Error ? error.message : 'User rejected signing'}`;
@@ -438,8 +559,11 @@ const TransactionStep: React.FC = () => {
   };
   
   // Broadcast commit transaction and handle reveal transaction creation
-  const broadcastTransaction = async () => {
-    if (!signedPsbt) {
+  const broadcastTransaction = async (signedPsbtHex?: string) => {
+    // Use the passed parameter or fall back to state
+    const psbtToUse = signedPsbtHex || signedPsbt;
+    
+    if (!psbtToUse) {
       setErrorMessage('No signed PSBT available');
       return;
     }
@@ -454,27 +578,51 @@ const TransactionStep: React.FC = () => {
         status: 'broadcasting'
       });
       
-      // Finalize the PSBT and extract the raw transaction
-      console.log('[BroadcastCommit] Finalizing PSBT...');
-      const finalizedTx = ordinalsplus.finalizePsbt(signedPsbt);
-      console.log('[BroadcastCommit] PSBT finalized successfully');
+      // Use the combined finalizeAndExtractTransaction function from the library
+      let extractedTxHex;
+      try {
+        extractedTxHex = ordinalsplus.finalizeAndExtractTransaction(psbtToUse);
+      } catch (finalizationError) {
+        console.error('[BroadcastCommit] Error finalizing PSBT:', finalizationError);
+        throw new Error(`Failed to finalize PSBT: ${finalizationError instanceof Error ? finalizationError.message : 'Unknown error'}`);
+      }
       
-      console.log('[BroadcastCommit] Extracting transaction...');
-      const extractedTxHex = ordinalsplus.extractTransaction(finalizedTx);
-      console.log('[BroadcastCommit] Transaction extracted successfully');
+      // Determine network type from wallet network - properly handle signet
+      let networkType: string;
+      if (walletNetwork === 'mainnet') {
+        networkType = 'mainnet';
+      } else if (walletNetwork === 'signet') {
+        networkType = 'signet';
+      } else {
+        networkType = 'testnet'; // fallback for testnet or unknown
+      }
       
-      // Broadcast the extracted transaction
-      const networkType = walletNetwork || 'mainnet';
+      // Check API service
       if (!apiService) {
         throw new Error('API service not available');
       }
       
-      console.log('[BroadcastCommit] Broadcasting transaction...');
-      const response = await apiService.broadcastTransaction(networkType, extractedTxHex);
+      // Setup timeout mechanism to catch hanging requests
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Broadcasting timed out after 30 seconds')), 30000);
+      });
       
-      // Extract txid from response
-      const txid = typeof response === 'object' && response !== null ? response.txid : response;
-      console.log(`[BroadcastCommit] Commit transaction broadcast with txid: ${txid}`);
+      // Broadcast with timeout
+      const response = await Promise.race([
+        apiService.broadcastTransaction(networkType, extractedTxHex),
+        timeoutPromise
+      ]);
+      
+      // Extract txid from response - handle different response types safely
+      let txid: string;
+      if (typeof response === 'string') {
+        txid = response;
+      } else if (typeof response === 'object' && response !== null) {
+        const responseObj = response as Record<string, unknown>;
+        txid = typeof responseObj.txid === 'string' ? responseObj.txid : String(response);
+      } else {
+        txid = String(response);
+      }
       
       if (!txid) {
         throw new Error('No transaction ID returned from API');
@@ -517,80 +665,126 @@ const TransactionStep: React.FC = () => {
     }
   };
   
-  // Create and broadcast reveal transaction
+  // Create and broadcast reveal transaction using real API calls
   const createAndBroadcastRevealTransaction = async (commitTxid: string) => {
     try {
-      console.log('[CreateReveal] Starting reveal transaction creation...');
       setStatusMessage('Creating reveal transaction...');
       
-      // Retrieve inscription data from localStorage
-      const inscriptionDataStr = localStorage.getItem('inscriptionData');
-      if (!inscriptionDataStr) {
-        throw new Error('Inscription data not found. Cannot create reveal transaction.');
+      // Load inscription data from localStorage
+      const savedInscriptionData = localStorage.getItem('inscriptionData');
+      if (!savedInscriptionData) {
+        throw new Error('No inscription data found. Please restart the inscription process.');
       }
       
-      const inscriptionData = JSON.parse(inscriptionDataStr);
-      console.log('[CreateReveal] inscriptionData: ', inscriptionData);
-      // Convert hex strings back to Uint8Arrays
-      const commitScript = new Uint8Array(Buffer.from(inscriptionData.commitScriptHex, 'hex'));
-      const controlBlock = new Uint8Array(Buffer.from(inscriptionData.controlBlockHex, 'hex'));
-      const inscriptionScript = new Uint8Array(Buffer.from(inscriptionData.inscriptionScriptHex, 'hex'));
-      const revealPublicKey = new Uint8Array(Buffer.from(inscriptionData.revealPublicKeyHex, 'hex'));
-      const revealPrivateKey = new Uint8Array(Buffer.from(inscriptionData.revealPrivateKeyHex, 'hex'));
+      const inscriptionData = JSON.parse(savedInscriptionData);
+      
+      if (!commitTxid || !walletAddress) {
+        throw new Error('Missing required data for reveal transaction');
+      }
+      
+      // Load required data from saved inscription data
+      const commitAddress = inscriptionData.commitAddress;
+      const commitScript = hexToBytes(inscriptionData.commitScriptHex);
+      const inscriptionScript = hexToBytes(inscriptionData.inscriptionScriptHex);
+      const controlBlock = hexToBytes(inscriptionData.controlBlockHex);
+      const leafVersion = inscriptionData.leafVersion || 0xc0;
+      const feeRate = selectedFeeRate;
       const requiredCommitAmount = BigInt(inscriptionData.requiredCommitAmount);
+      const revealPrivateKey = hexToBytes(inscriptionData.revealPrivateKeyHex);
       
-      // Get the network from ordinalsplus
-      const scureNetwork = ordinalsplus.getScureNetwork(inscriptionData.network);
+      // Determine network type from wallet network - properly handle signet
+      let networkType: string;
+      if (walletNetwork === 'mainnet') {
+        networkType = 'mainnet';
+      } else if (walletNetwork === 'signet') {
+        networkType = 'signet';
+      } else {
+        networkType = 'testnet'; // fallback for testnet or unknown
+      }
       
-      // Create the reveal transaction
-      console.log('[CreateReveal] Creating reveal transaction with ephemeral key');
+      // Create the reveal transaction using ordinalsplus
       const revealTx = await ordinalsplus.createRevealTransaction({
         selectedUTXO: {
           txid: commitTxid,
-          vout: 0, // Assume the first output is the commit output
+          vout: 0, // The commit output is typically at index 0
           value: Number(requiredCommitAmount),
           script: { 
             type: 'p2tr',
-            address: inscriptionData.commitAddress 
+            address: commitAddress 
           }
         },
         preparedInscription: {
           inscription: inscriptionData.inscription,
           commitAddress: {
-            address: inscriptionData.commitAddress,
+            address: commitAddress,
             script: commitScript,
             internalKey: new Uint8Array(32) // Required field with proper size
           },
-          revealPublicKey: revealPublicKey,
+          revealPublicKey: hexToBytes(inscriptionData.revealPublicKeyHex),
           inscriptionScript: {
             script: inscriptionScript,
             controlBlock: controlBlock,
-            leafVersion: inscriptionData.inscriptionScript.leafVersion
+            leafVersion: leafVersion
           },
           revealPrivateKey: revealPrivateKey
         },
         privateKey: revealPrivateKey,
-        feeRate: inscriptionData.feeRate,
-        network: scureNetwork,
+        feeRate: feeRate,
+        network: getScureNetwork(networkType === 'mainnet' ? 'mainnet' : 'testnet'),
         commitTransactionId: commitTxid,
-        destinationAddress: walletAddress || ''
+        destinationAddress: walletAddress
       });
-      // Extract transaction ID
+      
+      // Extract transaction ID and hex
       const revealTxid = revealTx.tx.id;
-      console.log(`[CreateReveal] Reveal TX constructed. Txid: ${revealTxid}`);
+      const actualRevealVSize = revealTx.vsize; // Get actual vsize from the library
+      const actualRevealFee = revealTx.fee; // Get actual fee from the library
+      
+      // Update fee details with actual reveal transaction data
+      const currentFeeDetails = state.transactionInfo.feeDetails;
+      if (currentFeeDetails) {
+        setTransactionInfo({
+          commitTx: commitTxid,
+          revealTx: null, // Will be set after successful broadcast
+          status: 'broadcasting',
+          feeDetails: {
+            ...currentFeeDetails,
+            revealFee: actualRevealFee,
+            revealVSize: actualRevealVSize,
+            revealFeeRate: Math.round((actualRevealFee / actualRevealVSize) * 100) / 100, // Calculate actual fee rate
+            totalFees: currentFeeDetails.commitFee + actualRevealFee
+          }
+        });
+      }
       
       // Broadcast the reveal transaction
-      console.log('[BroadcastReveal] Broadcasting reveal transaction...');
       setStatusMessage('Broadcasting reveal transaction...');
       
       if (!apiService) {
         throw new Error('API service not available');
       }
-      const revealResponse = await apiService.broadcastTransaction(inscriptionData.network, revealTx.hex);
-      const finalRevealTxid = typeof revealResponse === 'object' && revealResponse !== null ? 
-        revealResponse.txid : revealResponse;
       
-      console.log(`[BroadcastReveal] Reveal transaction broadcast with txid: ${finalRevealTxid}`);
+      // Setup timeout mechanism to catch hanging requests
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Broadcasting reveal transaction timed out after 30 seconds')), 30000);
+      });
+      
+      // Broadcast reveal transaction with timeout
+      const revealResponse = await Promise.race([
+        apiService.broadcastTransaction(networkType, revealTx.hex),
+        timeoutPromise
+      ]) as unknown;
+      
+      // Handle response - safely extract txid
+      let finalRevealTxid: string;
+      if (typeof revealResponse === 'string') {
+        finalRevealTxid = revealResponse;
+      } else if (typeof revealResponse === 'object' && revealResponse !== null) {
+        const responseObj = revealResponse as Record<string, unknown>;
+        finalRevealTxid = typeof responseObj.txid === 'string' ? responseObj.txid : String(revealResponse);
+      } else {
+        finalRevealTxid = String(revealResponse);
+      }
       
       // Update state with reveal txid
       setRevealTxid(finalRevealTxid);
@@ -631,8 +825,16 @@ const TransactionStep: React.FC = () => {
     }
     
     try {
-      // Check transaction status
-      const networkType = walletNetwork || 'mainnet';
+      // Determine network type from wallet network - properly handle signet
+      let networkType: string;
+      if (walletNetwork === 'mainnet') {
+        networkType = 'mainnet';
+      } else if (walletNetwork === 'signet') {
+        networkType = 'signet';
+      } else {
+        networkType = 'testnet'; // fallback for testnet or unknown
+      }
+      
       if (!apiService) {
         throw new Error('API service not available');
       }
@@ -653,7 +855,8 @@ const TransactionStep: React.FC = () => {
         nextStep(); // Move to the complete step
       }
     } catch (error) {
-      console.error('Error checking transaction confirmation:', error instanceof Error ? error.message : error);
+      // Silently handle transaction confirmation check errors
+      // This is not critical functionality
     }
   };
   
@@ -688,28 +891,6 @@ const TransactionStep: React.FC = () => {
     }
   }, []);
   
-  // Generate a random key pair for the inscription
-  // This is a simplified version that doesn't rely on external libraries
-  const generateEphemeralKeyPair = useCallback(async () => {
-    try {
-      // In a real implementation, we would use the wallet's key management
-      // For now, we'll just simulate it with a random string
-      const simulatedWif = 'simulated_wif_' + Date.now();
-      
-      setEphemeralRevealPrivateKeyWif(simulatedWif);
-      return { 
-        wif: simulatedWif,
-        // These would be actual keys in a real implementation
-        privateKey: new Uint8Array(32), 
-        publicKey: new Uint8Array(33) 
-      };
-    } catch (error) {
-      console.error('Error generating ephemeral key pair:', error);
-      setErrorMessage('Failed to generate ephemeral key pair for inscription.');
-      throw error;
-    }
-  }, [walletNetwork]);
-  
   // Copy to clipboard
   const copyToClipboardWithLabel = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
@@ -719,6 +900,87 @@ const TransactionStep: React.FC = () => {
       (err) => {
         console.error('Could not copy text: ', err instanceof Error ? err.message : err);
       }
+    );
+  };
+  
+  // Fee rate selector component
+  const FeeRateSelector = () => {
+    const feeRatePresets = {
+      low: 5,
+      medium: 10,
+      high: 20
+    };
+    
+    const handleFeeRateChange = (mode: 'low' | 'medium' | 'high' | 'custom', customValue?: number) => {
+      setFeeRateMode(mode);
+      if (mode === 'custom' && customValue !== undefined) {
+        setSelectedFeeRate(customValue);
+      } else if (mode !== 'custom') {
+        setSelectedFeeRate(feeRatePresets[mode]);
+      }
+    };
+    
+    return (
+      <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-md">
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          Fee Rate Selection
+        </h4>
+        <div className="space-y-3">
+          {/* Preset buttons */}
+          <div className="flex gap-2">
+            {Object.entries(feeRatePresets).map(([mode, rate]) => (
+              <button
+                key={mode}
+                onClick={() => handleFeeRateChange(mode as 'low' | 'medium' | 'high')}
+                className={`px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                  feeRateMode === mode
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                }`}
+              >
+                {mode.charAt(0).toUpperCase() + mode.slice(1)} ({rate} sats/vB)
+              </button>
+            ))}
+            <button
+              onClick={() => handleFeeRateChange('custom')}
+              className={`px-3 py-2 text-xs font-medium rounded-md transition-colors ${
+                feeRateMode === 'custom'
+                  ? 'bg-indigo-500 text-white'
+                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+              }`}
+            >
+              Custom
+            </button>
+          </div>
+          
+          {/* Custom fee rate input */}
+          {feeRateMode === 'custom' && (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="1000"
+                value={selectedFeeRate}
+                onChange={(e) => setSelectedFeeRate(Number(e.target.value))}
+                className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="10"
+              />
+              <span className="text-xs text-gray-500 dark:text-gray-400">sats/vB</span>
+            </div>
+          )}
+          
+          {/* Current selection display */}
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            Current fee rate: <span className="font-mono font-medium">{selectedFeeRate} sats/vB</span>
+            {selectedFeeRate < 5 && (
+              <span className="text-amber-600 dark:text-amber-400 ml-2">⚠️ Low fee may cause delays</span>
+            )}
+            {selectedFeeRate > 50 && (
+              <span className="text-red-600 dark:text-red-400 ml-2">⚠️ High fee rate</span>
+            )}
+          </div>
+        </div>
+      </div>
     );
   };
   
@@ -745,6 +1007,59 @@ const TransactionStep: React.FC = () => {
     }
   }, [state.transactionInfo.status]);
   
+  // Recalculate required amount when fee rate changes
+  useEffect(() => {
+    if (state.contentData.content && state.transactionInfo.status === 'not_started') {
+      // Recalculate the required amount with the new fee rate using the same calculation as ordinalsplus library
+      const content = state.contentData.content || '';
+      const contentSizeBytes = Buffer.from(content).length;
+      
+      // Use the EXACT same calculation as the ordinalsplus library (corrected version)
+      let estimatedVsize: number;
+      if (contentSizeBytes > 0) {
+        // Base transaction size (non-witness data)
+        const baseSize = 150;
+        
+        // Witness data includes:
+        // - Signature: ~64 bytes
+        // - Inscription script: inscription content + ~200 bytes overhead
+        // - Control block: ~33 bytes
+        const witnessSize = contentSizeBytes + 300;
+        
+        // vsize = (base_size * 3 + total_size) / 4
+        // where total_size = base_size + witness_size
+        const totalSize = baseSize + witnessSize;
+        estimatedVsize = Math.ceil((baseSize * 3 + totalSize) / 4);
+      } else {
+        // For non-inscription transactions, use a simpler calculation
+        estimatedVsize = 200;
+      }
+      
+      // Calculate fee using ordinalsplus calculateFee function
+      const baseRevealFee = Number(ordinalsplus.calculateFee(estimatedVsize, selectedFeeRate));
+      
+      // Define postage value and calculate required commit amount
+      const POSTAGE_VALUE = 1000n;
+      const requiredCommitAmount = BigInt(baseRevealFee) + POSTAGE_VALUE;
+      
+      // Update the required amount for UTXO selection (add buffer for commit tx fee)
+      const estimatedCommitTxSize = 150; // Conservative estimate for commit transaction vsize
+      const estimatedCommitFee = Number(ordinalsplus.calculateFee(estimatedCommitTxSize, selectedFeeRate));
+      const buffer = 1000; // Reasonable buffer
+      const totalRequiredForUtxoSelection = Number(requiredCommitAmount) + estimatedCommitFee + buffer;
+      setRequiredAmount(totalRequiredForUtxoSelection);
+      
+      // If UTXOs are already selected, check if they still meet the new requirement
+      if (state.utxoSelection && state.utxoSelection.length > 0) {
+        const selectedTotal = state.utxoSelection.reduce((sum, utxo) => sum + utxo.value, 0);
+        if (selectedTotal < totalRequiredForUtxoSelection) {
+          // Clear selection if it no longer meets requirements
+          setUtxoSelection([]);
+        }
+      }
+    }
+  }, [selectedFeeRate, state.contentData.content, state.transactionInfo.status]);
+  
   // Calculate total selected value
   const totalSelectedValue = state.utxoSelection.reduce((sum, utxo) => sum + utxo.value, 0);
   
@@ -756,6 +1071,93 @@ const TransactionStep: React.FC = () => {
     switch (state.transactionInfo.status) {
       case 'not_started':
       case 'preparing':
+        // Show fee breakdown if available
+        if (state.transactionInfo.feeDetails) {
+          const { feeDetails } = state.transactionInfo;
+          return (
+            <div className="space-y-6">
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-md">
+                <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 flex items-center">
+                  <Info className="h-5 w-5 mr-2 text-indigo-500" />
+                  Fee Breakdown
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2 mb-4">
+                  Review the transaction fees before signing. The total fee is comprised of both a commit transaction fee and a reveal transaction fee.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
+                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Commit Transaction</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">Fee Rate:</span>
+                        <span className="font-mono">{feeDetails.commitFeeRate} sats/vB</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">Virtual Size:</span>
+                        <span className="font-mono">{feeDetails.commitVSize} vB</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span className="text-gray-700 dark:text-gray-300">Commit Fee:</span>
+                        <span className="font-mono">{feeDetails.commitFee} sats</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
+                    <h4 className="font-medium text-gray-700 dark:text-gray-300 mb-2">Reveal Transaction</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">Fee Rate:</span>
+                        <span className="font-mono">{feeDetails.revealFeeRate} sats/vB</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-gray-400">Virtual Size:</span>
+                        <span className="font-mono">{feeDetails.revealVSize} vB</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span className="text-gray-700 dark:text-gray-300">Reveal Fee:</span>
+                        <span className="font-mono">{feeDetails.revealFee} sats</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-md">
+                  <div className="flex justify-between font-medium">
+                    <span className="text-gray-800 dark:text-gray-200">Total Fee:</span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">{feeDetails.totalFees} sats (~${(feeDetails.totalFees * 0.00000001 * 60000).toFixed(2)} USD)</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex justify-between mt-6">
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    // Reset transaction info to go back to UTXO selection
+                    setTransactionInfo({
+                      status: 'not_started',
+                      commitTx: null,
+                      revealTx: null
+                    });
+                  }}
+                  className="px-4 py-2"
+                >
+                  Back to UTXO Selection
+                </Button>
+                
+                <Button
+                  onClick={signTransaction}
+                  className="px-4 py-2"
+                >
+                  Sign Transaction
+                </Button>
+              </div>
+            </div>
+          );
+        }
+        
         // Show UTXO selection if we've calculated the required amount
         if (requiredAmount > 0) {
           return (
@@ -775,6 +1177,37 @@ const TransactionStep: React.FC = () => {
                   </button>
                 </div>
               </div>
+              
+              {/* Fee Rate Selector */}
+              <FeeRateSelector />
+              
+              {/* Large Content Warning */}
+              {requiredAmount > 50000 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-md border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start">
+                    <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 mr-2" />
+                    <div className="flex-1">
+                      <h4 className="font-medium text-amber-800 dark:text-amber-200 mb-2">
+                        High Fee Warning
+                      </h4>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mb-3">
+                        Your content appears to be large, resulting in high inscription fees. 
+                        Required: <span className="font-mono font-medium">{requiredAmount.toLocaleString()} sats</span> 
+                        (~${(requiredAmount * 0.00000001 * 60000).toFixed(2)} USD)
+                      </p>
+                      <div className="space-y-2 text-sm">
+                        <p className="font-medium text-amber-800 dark:text-amber-200">Suggestions to reduce fees:</p>
+                        <ul className="list-disc list-inside space-y-1 text-amber-700 dark:text-amber-300">
+                          <li>Use a lower fee rate (try 5 sat/vB for slower but cheaper confirmation)</li>
+                          <li>Compress your image to reduce file size</li>
+                          <li>Consider using a different image format (WebP, AVIF)</li>
+                          <li>Reduce image dimensions if possible</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {showUtxoGuidance && (
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-md text-sm text-blue-800 dark:text-blue-200 mb-4">
@@ -871,32 +1304,26 @@ const TransactionStep: React.FC = () => {
       
       case 'signing':
         return (
-          <div className="space-y-6">
-            <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-md">
-              <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">
-                Sign Transaction
+          <div className="flex flex-col items-center justify-center p-8 space-y-6">
+            <div className="text-center">
+              <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+              <h3 className="text-xl font-medium text-gray-800 dark:text-gray-200 mb-2">
+                Transaction Signed Successfully
               </h3>
-              <p className="text-gray-700 dark:text-gray-300 mb-4">
-                Please sign the transaction with your wallet to create the resource inscription.
+              <p className="text-gray-700 dark:text-gray-300">
+                {statusMessage || 'Transaction signed. Broadcasting automatically...'}
               </p>
-              <Button
-                onClick={signTransaction}
-                disabled={isLoading || !unsignedPsbt}
-                className="w-full"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Signing...
-                  </>
-                ) : (
-                  'Sign Transaction'
-                )}
-              </Button>
             </div>
+            
+            {isLoading && (
+              <div className="flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-500 mr-2" />
+                <span className="text-gray-600 dark:text-gray-400">Broadcasting...</span>
+              </div>
+            )}
           </div>
         );
-      
+        
       case 'broadcasting':
         return (
           <div className="flex flex-col items-center justify-center p-8">
@@ -1065,16 +1492,6 @@ const TransactionStep: React.FC = () => {
         >
           Back
         </Button>
-        
-        {state.transactionInfo.status === 'signing' && signedPsbt && (
-          <Button
-            onClick={broadcastTransaction}
-            className="px-4 py-2"
-            disabled={isLoading}
-          >
-            Broadcast Transaction
-          </Button>
-        )}
       </div>
     </div>
   );

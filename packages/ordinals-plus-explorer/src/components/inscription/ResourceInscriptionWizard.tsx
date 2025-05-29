@@ -45,6 +45,15 @@ export interface TransactionInfo {
   revealTx: string | null;
   status: 'not_started' | 'preparing' | 'signing' | 'broadcasting' | 'confirming' | 'completed' | 'failed';
   error?: string;
+  feeDetails?: {
+    commitFeeRate: number;
+    commitFee: number;
+    commitVSize: number;
+    revealFeeRate: number;
+    revealFee: number;
+    revealVSize: number;
+    totalFees: number;
+  };
 }
 
 // Define the main state interface
@@ -378,10 +387,9 @@ const ErrorFallback: React.FC<{ error: Error; resetErrorBoundary: () => void }> 
   return (
     <div className="p-4 border border-red-500 rounded-md bg-red-50 dark:bg-red-900/20">
       <ErrorDisplay 
-        title="Component Error" 
-        message={error.message} 
-        details={error.stack} 
+        error={error}
         onRetry={resetErrorBoundary}
+        showDetails={true}
       />
     </div>
   );

@@ -1,6 +1,5 @@
 import React from 'react';
 import ResourceInscriptionWizardContainer from '../components/inscription/ResourceInscriptionWizardContainer';
-// import GenericOrdinalForm from '../components/create/GenericOrdinalForm';
 // import DidCreationForm from '../components/create/DidCreationForm';
 // import LinkedResourceForm from '../components/create/LinkedResourceForm';
 
