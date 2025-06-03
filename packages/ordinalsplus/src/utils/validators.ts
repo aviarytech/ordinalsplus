@@ -5,11 +5,12 @@ export interface ParsedResourceId {
     did: string;
     satNumber: string;
     index: number;
+    network: string;
 }
 
 // Regular expressions for validation
-const VALID_BTCO_DID_REGEX = /^did:btco:([0-9]+)$/;
-const VALID_RESOURCE_ID_REGEX = /^did:btco:([0-9]+)\/([0-9]+)$/;
+const VALID_BTCO_DID_REGEX = /^did:btco(?::(test|sig))?:([0-9]+)$/;
+const VALID_RESOURCE_ID_REGEX = /^did:btco(?::(test|sig))?:([0-9]+)\/([0-9]+)$/;
 
 /**
  * Validates if a string is a valid BTCO DID
@@ -20,7 +21,7 @@ export function isValidBtcoDid(did: string): boolean {
     const match = VALID_BTCO_DID_REGEX.exec(did);
     if (!match) return false;
     
-    const satNumber = BigInt(match[1]);
+    const satNumber = BigInt(match[2]);
     return satNumber <= BigInt(MAX_SAT_NUMBER);
 }
 
@@ -33,10 +34,10 @@ export function isValidResourceId(id: string): boolean {
     const match = VALID_RESOURCE_ID_REGEX.exec(id);
     if (!match) return false;
     
-    const satNumber = BigInt(match[1]);
+    const satNumber = BigInt(match[2]);
     if (satNumber > BigInt(MAX_SAT_NUMBER)) return false;
     
-    const index = parseInt(match[2], 10);
+    const index = parseInt(match[3], 10);
     return index >= 0;
 }
 
@@ -45,16 +46,20 @@ export function isValidResourceId(id: string): boolean {
  * @param did The DID to parse
  * @returns The parsed components or null if invalid
  */
-export function parseBtcoDid(did: string): { did: string; satNumber: string } | null {
+export function parseBtcoDid(did: string): { did: string; satNumber: string; network: string } | null {
     const match = VALID_BTCO_DID_REGEX.exec(did);
     if (!match) return null;
     
-    const satNumber = match[1];
+    const networkSuffix = match[1];
+    const satNumber = match[2];
+    const network = networkSuffix || 'mainnet';
+    
     if (BigInt(satNumber) > BigInt(MAX_SAT_NUMBER)) return null;
     
     return {
         did,
-        satNumber
+        satNumber,
+        network
     };
 }
 
@@ -63,20 +68,25 @@ export function parseBtcoDid(did: string): { did: string; satNumber: string } | 
  * @param id The resource ID to parse
  * @returns The parsed components or null if invalid
  */
-export function parseResourceId(id: string): { did: string; satNumber: string; index: number } | null {
+export function parseResourceId(id: string): { did: string; satNumber: string; index: number; network: string } | null {
     const match = VALID_RESOURCE_ID_REGEX.exec(id);
     if (!match) return null;
     
-    const satNumber = match[1];
-    if (BigInt(satNumber) > BigInt(MAX_SAT_NUMBER)) return null;
+    const networkSuffix = match[1];
+    const satNumber = match[2];
+    const index = parseInt(match[3], 10);
+    const network = networkSuffix || 'mainnet';
     
-    const index = parseInt(match[2], 10);
+    if (BigInt(satNumber) > BigInt(MAX_SAT_NUMBER)) return null;
     if (index < 0) return null;
     
+    const didPrefix = networkSuffix ? `did:btco:${networkSuffix}` : 'did:btco';
+    
     return {
-        did: `did:btco:${satNumber}`,
+        did: `${didPrefix}:${satNumber}`,
         satNumber,
-        index
+        index,
+        network
     };
 }
 

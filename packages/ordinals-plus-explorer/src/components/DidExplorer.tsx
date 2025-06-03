@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import {
   Search,
-  RotateCw
+  RotateCw,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  ExternalLink
 } from 'lucide-react';
 import DidDocumentViewer from './DidDocumentViewer';
 import LinkedResourceList from './LinkedResourceList';
 import { DidDocument, LinkedResource } from 'ordinalsplus';
+import { useNetwork } from '../context/NetworkContext';
+import { useApi } from '../context/ApiContext';
 
 // Simple Label component with proper types (unused for now but kept for reference)
 /* interface LabelProps {
@@ -123,38 +129,138 @@ interface DidExplorerProps {
   onResourceSelect?: (resource: LinkedResource) => void;
 }
 
+interface ResolutionMetadata {
+  inscriptionId?: string;
+  satNumber?: string;
+  contentType?: string;
+  deactivated?: boolean;
+  message?: string;
+  network?: string;
+  foundContent?: string;
+}
+
+interface ApiResolutionResult {
+  status: 'success' | 'error';
+  message?: string;
+  data?: {
+    didDocument?: DidDocument;
+    resolutionMetadata?: ResolutionMetadata;
+    didDocumentMetadata?: any;
+    error?: string;
+    inscriptionId?: string;
+    satNumber?: string;
+    network?: string;
+    foundContent?: string;
+  };
+}
+
 const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplorerProps) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('did:btco:sig:YOUR_SATOSHI_NUMBER_HERE');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [didDocument, setDidDocument] = useState<DidDocument | null>(null);
   const [didString, setDidString] = useState<string>('');
+  const [resolutionResult, setResolutionResult] = useState<ApiResolutionResult | null>(null);
   const [_, setCurrentPage] = useState(0);
   const [__, setTotalPages] = useState(0);
+  const { network } = useNetwork();
+  const { apiService } = useApi();
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
 
     setIsLoading(true);
     setError(null);
+    setDidDocument(null);
+    setResolutionResult(null);
 
     try {
-      const document = {
-        id: 'did:btco:1234567890',
-        controller: ['did:btco:1234567890'],
-        '@context': ['https://www.w3.org/ns/did/v1'],
-        verificationMethod: [],
-        authentication: [],
-        assertionMethod: [],
-        keyAgreement: []
-      } as DidDocument;
-      // todoawait didService.resolveDid(searchQuery.trim());
-      setDidDocument(document);
-      setDidString(searchQuery.trim());
-      setTotalPages(1); // Since we're not paginating the DID document
-      setCurrentPage(0);
+      if (!apiService) {
+        throw new Error('API service not available');
+      }
+
+      // Use the backend API endpoint for DID resolution
+      // Note: The API service returns { didDocument: any } format
+      try {
+        const result = await apiService.resolveDid(searchQuery.trim());
+        
+        // Create a mock resolution result that matches our interface
+        const mockResult: ApiResolutionResult = {
+          status: 'success',
+          data: {
+            didDocument: result.didDocument,
+            resolutionMetadata: {
+              contentType: 'application/did+ld+json'
+            }
+          }
+        };
+        
+        setResolutionResult(mockResult);
+
+        if (result.didDocument) {
+          setDidDocument(result.didDocument);
+          setDidString(searchQuery.trim());
+          setTotalPages(1);
+          setCurrentPage(0);
+        } else {
+          setError('No DID document found in response');
+        }
+      } catch (apiError) {
+        // Handle specific API errors
+        const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+        
+        if (errorMessage.includes('metadataNotAvailable')) {
+          setError(
+            'BTCO DID found but full resolution is not yet available. ' +
+            'The inscription exists and contains a valid DID reference, but CBOR metadata parsing is needed to extract the DID document.'
+          );
+        } else if (errorMessage.includes('deactivated')) {
+          setError('This DID has been deactivated (🔥)');
+        } else if (errorMessage.includes('404') || errorMessage.includes('Not Found') || errorMessage.includes('notFound')) {
+          if (searchQuery.includes('sig:')) {
+            setError(
+              `DID not found: ${searchQuery.trim()}\n\n` +
+              'For signet network:\n' +
+              '• Make sure your local ord node is running on http://127.0.0.1:80\n' +
+              '• Verify the satoshi number has inscriptions\n' +
+              '• Check that the inscription contains a valid BTCO DID document'
+            );
+          } else {
+            setError(`DID not found: ${searchQuery.trim()}`);
+          }
+        } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+          setError(
+            'Server error occurred while resolving DID. This might be due to the BTCO DID resolution implementation being incomplete. ' +
+            'Please try again later or contact support if the issue persists.'
+          );
+        } else if (errorMessage.includes('Failed to connect') || errorMessage.includes('ECONNREFUSED')) {
+          if (searchQuery.includes('sig:')) {
+            setError(
+              'Connection failed to local ord node. For signet DIDs:\n\n' +
+              '• Ensure your local ord signet node is running\n' +
+              '• Check that it\'s accessible at http://127.0.0.1:80\n' +
+              '• Verify the node is fully synced'
+            );
+          } else {
+            setError(`Connection failed: ${errorMessage}`);
+          }
+        } else {
+          setError(`Resolution failed: ${errorMessage}`);
+        }
+      }
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to resolve DID');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to resolve DID';
+      
+      // Provide specific guidance for common issues
+      if (errorMessage.includes('Network request failed') || errorMessage.includes('fetch')) {
+        setError(
+          'Network Error: Unable to connect to the API. ' +
+          'Please check your internet connection and try again.'
+        );
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -166,8 +272,92 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     }
   };
 
+  const renderResolutionMetadata = () => {
+    if (!resolutionResult || !resolutionResult.data?.resolutionMetadata) return null;
+
+    const metadata = resolutionResult.data.resolutionMetadata;
+
+    return (
+      <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg space-y-3">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+          <CheckCircle className="w-5 h-5 text-green-500" />
+          Resolution Details
+        </h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          {metadata.inscriptionId && (
+            <div>
+              <span className="font-medium text-gray-600 dark:text-gray-400">Inscription ID:</span>
+              <div className="flex items-center gap-2">
+                <code className="bg-white dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">
+                  {metadata.inscriptionId}
+                </code>
+                <a
+                  href={`https://ordiscan.com/inscription/${metadata.inscriptionId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+          )}
+          
+          {metadata.satNumber && (
+            <div>
+              <span className="font-medium text-gray-600 dark:text-gray-400">Satoshi Number:</span>
+              <div className="flex items-center gap-2">
+                <code className="bg-white dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">
+                  {metadata.satNumber}
+                </code>
+                <a
+                  href={`https://ordiscan.com/sat/${metadata.satNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+          )}
+          
+          {metadata.contentType && (
+            <div>
+              <span className="font-medium text-gray-600 dark:text-gray-400">Content Type:</span>
+              <code className="bg-white dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono ml-2">
+                {metadata.contentType}
+              </code>
+            </div>
+          )}
+          
+          {metadata.deactivated && (
+            <div className="col-span-2">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <XCircle className="w-4 h-4" />
+                <span className="font-medium">DID Status: Deactivated</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* Search Header */}
+      <div className="text-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-2">
+          BTCO DID Resolution
+        </h2>
+        <p className="text-gray-600 dark:text-gray-400">
+          Enter a BTCO DID to resolve it according to the BTCO DID Method Specification
+        </p>
+      </div>
+
+      {/* Search Input */}
       <div className="flex gap-4">
         <div className="flex-1">
           <input
@@ -175,29 +365,47 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Enter DID (e.g., did:btco:1234567890/0)"
-            className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            placeholder="Enter BTCO DID (e.g., did:btco:1234567890)"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-lg"
           />
+          <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Supported formats: did:btco:&lt;satoshi&gt;, did:btco:test:&lt;satoshi&gt;, did:btco:sig:&lt;satoshi&gt;
+          </div>
         </div>
         <button
           onClick={handleSearch}
-          disabled={isLoading}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+          disabled={isLoading || !searchQuery.trim()}
+          className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           {isLoading ? (
-            <RotateCw className="w-5 h-5 animate-spin" />
+            <>
+              <RotateCw className="w-5 h-5 animate-spin" />
+              Resolving...
+            </>
           ) : (
-            <Search className="w-5 h-5" />
+            <>
+              <Search className="w-5 h-5" />
+              Resolve
+            </>
           )}
         </button>
       </div>
 
+      {/* Error Display */}
       {error && (
-        <div className="p-4 bg-red-50 text-red-700 rounded-md dark:bg-red-900 dark:text-red-100">
-          {error}
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg dark:bg-red-900 dark:border-red-700 dark:text-red-100 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-medium">Resolution Failed</h4>
+            <p className="mt-1 whitespace-pre-line">{error}</p>
+          </div>
         </div>
       )}
 
+      {/* Resolution Metadata */}
+      {resolutionResult && !error && renderResolutionMetadata()}
+
+      {/* DID Document and Resources */}
       {didDocument && (
         <div className="space-y-6">
           <DidDocumentViewer document={didDocument} />

@@ -336,12 +336,28 @@ class ApiService {
    * Get Resources Linked to a DID for a specific network
    */
   async getLinkedResources(networkType: string, did: string): Promise<LinkedResource[]> {
-    // Assuming the backend returns the array directly under 'data' key or similar
-    const url = this.buildUrl(`/api/dids/${encodeURIComponent(did)}/resources`, networkType); // Assuming path
+    const url = this.buildUrl(`/api/dids/${did}/resources`, networkType);
     console.log(`[ApiService] Getting linked resources: ${url}`);
     const response = await fetch(url);
-    // Adjust if the backend returns a different structure (e.g., { data: LinkedResource[] })
-    return await handleApiResponse<LinkedResource[]>(response);
+    
+    // The DID router returns: { status: 'success', data: { resources: [...], count: N } }
+    // handleApiResponse returns data.data (the inner object) if it exists
+    const result = await handleApiResponse<{
+      resources?: LinkedResource[];
+      count?: number;
+    }>(response);
+    
+    console.log(`[ApiService] DID resources response:`, result);
+    
+    // Since handleApiResponse returns the inner data object, check for resources directly
+    if (result.resources) {
+      console.log(`[ApiService] Found ${result.resources.length} resources:`, result.resources);
+      return result.resources;
+    }
+    
+    // Fallback for unexpected response format
+    console.warn('[ApiService] No resources found in response:', result);
+    return [];
   }
   
   /**

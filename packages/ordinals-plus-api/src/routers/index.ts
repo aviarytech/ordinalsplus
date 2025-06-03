@@ -6,6 +6,7 @@ import { exploreRouter } from './exploreRouter';
 import { utxoRouter } from './utxoRouter';
 import { transactionRouter } from './transactionRouter';
 import { verificationRouter } from './verificationRouter';
+import { didRouter } from './didRouter';
 
 // Set up basic routes
 export const setupBaseRoutes = (app: Elysia) => {
@@ -18,9 +19,9 @@ export const setupBaseRoutes = (app: Elysia) => {
         .get('/api/networks', () => {
             console.log('[Route] GET /api/networks');
             return [
-                { id: 'mainnet', name: 'Bitcoin Mainnet' },
-                { id: 'signet', name: 'Bitcoin Signet' },
-                { id: 'testnet', name: 'Bitcoin Testnet' }
+                { id: 'mainnet', name: 'Bitcoin Mainnet', type: 'mainnet' },
+                { id: 'signet', name: 'Bitcoin Signet', type: 'signet' },
+                { id: 'testnet', name: 'Bitcoin Testnet', type: 'testnet' }
             ];
         }, {
             detail: {
@@ -44,5 +45,6 @@ export const registerRouters = (app: Elysia) => {
         .use(exploreRouter)
         .use(utxoRouter)
         .use(transactionRouter)
-        .use(verificationRouter);
+        .use(verificationRouter)
+        .use(didRouter);
 }; 

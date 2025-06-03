@@ -75,8 +75,8 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async getSatInfo(satNumber: string): Promise<{ inscription_ids: string[] }> {
-        const response = await this.fetchApi<{ inscription_ids: string[] }>(`/sat/${satNumber}`);
-        return { inscription_ids: response.inscription_ids };
+        const response = await this.fetchApi<{ inscriptions: string[] }>(`/sat/${satNumber}`);
+        return { inscription_ids: response.inscriptions || [] };
     }
 
     async getSatNumber(outpoint: string): Promise<number> {
@@ -102,6 +102,16 @@ export class OrdNodeProvider implements ResourceProvider {
         return response.sat_ranges[0][0];
     }
 
+    async getMetadata(inscriptionId: string): Promise<any> {
+        try {
+            const response = await this.fetchApi<any>(`/r/metadata/${inscriptionId}`);
+            return response;
+        } catch (error) {
+            console.warn(`[OrdNodeProvider] Failed to retrieve metadata for inscription ${inscriptionId}:`, error);
+            return null;
+        }
+    }
+
     async resolve(resourceId: string): Promise<LinkedResource> {
         const parsed = parseResourceId(resourceId);
         if (!parsed) {
@@ -112,17 +122,23 @@ export class OrdNodeProvider implements ResourceProvider {
             throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No inscription found at index ${parsed.index}`);
         }
         const inscriptionId = satInfo.inscription_ids[parsed.index];
+
         const inscription = await this.resolveInscription(inscriptionId);
         return this.transformInscriptionToResource(inscription);
     }
 
     async resolveInscription(inscriptionId: string): Promise<Inscription> {
-        const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
+        const response = await this.fetchApi<any>(`/inscription/${inscriptionId}`);
+        
+        // Handle different possible response formats
+        let id = response.inscription_id || response.id || inscriptionId;
+        let sat = response.sat || 0;
+        let content_type = response.content_type || 'application/octet-stream';
         return {
-            id: response.inscription_id,
-            sat: response.sat,
-            content_type: response.content_type,
-            content_url: response.content_url
+            id: id,
+            sat: sat,
+            content_type: content_type,
+            content_url: `${this.nodeUrl}/content/${inscriptionId}`
         };
     }
 

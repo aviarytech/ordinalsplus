@@ -2,8 +2,8 @@
 # (https://github.com/ordinals/ord)
 # Assumes default port 80. Change if your server runs elsewhere (e.g., 8080).
 @baseUrl = http://localhost:80
-@inscriptionId = aa45005f684a1d6c0869f905196358c4b6ac65239fad40c56e345ad7e4084ff0i0
-@satNumber = 1954913028215432
+@inscriptionId = e70a8ba10031c3c09ed22c9d6cbfe70390d61f9c35501d8d2ba4578d969e4f63i0
+@satNumber = 1158212723409207
 ###
 # Get inscriptions
 GET {{baseUrl}}/inscriptions
@@ -43,3 +43,9 @@ Accept: application/json
 # This endpoint might not exist on all versions
 # GET {{baseUrl}}/block/latest
 # Accept: application/json
+
+
+###
+# Get inscription metadata
+GET {{baseUrl}}/r/metadata/{{inscriptionId}}
+Accept: application/json

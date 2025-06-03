@@ -7,6 +7,8 @@ export * from './types';
 
 // --- DID Exports ---
 export { BtcoDid, createDidFromInscriptionData, isBtcoDid } from './did/index';
+export { BtcoDidResolver } from './did/btco-did-resolver';
+export type { BtcoDidResolutionResult, BtcoDidResolutionOptions } from './did/btco-did-resolver';
 
 // --- Key Management Exports ---
 export {

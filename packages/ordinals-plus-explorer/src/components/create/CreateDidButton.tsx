@@ -140,13 +140,13 @@ const CreateDidButton: React.FC<CreateDidButtonProps> = ({ className, onDidCreat
           `✅ CBOR Test Passed!\n` +
           `📊 Size: ${testResult.cborSize} bytes\n` +
           `🔍 Hex (first 50 chars): ${testResult.cborHex.substring(0, 50)}...\n` +
-          `This hex is what ordinals.com shows for binary metadata.`,
+          `This hex is what will be stored as metadata in the inscription.`,
           'success'
         );
         
         // Log full hex to console for copying
         console.log('🔍 Full CBOR hex for testing:', testResult.cborHex);
-        console.log('📋 Copy this hex to test in the decoder tool:', `${window.location.origin}/cbor-decoder.html`);
+        console.log('📋 DID document that was encoded:', didDocument);
       } else {
         addErrorToast(new Error(`CBOR test failed: ${testResult.error || 'Round-trip failed'}`));
       }

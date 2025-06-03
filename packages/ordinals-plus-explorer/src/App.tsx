@@ -24,8 +24,8 @@ function App() {
               <div className="max-w-7xl mx-auto flex flex-wrap justify-between items-center">
                 <div className="font-bold text-xl">Ordinals Plus Explorer</div>
                 <div className="flex items-center space-x-4">
-                  <Link to="/explorer" className="text-white hover:text-orange-200 transition-colors">Explorer</Link>
-                  <Link to="/" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
+                  <Link to="/" className="text-white hover:text-orange-200 transition-colors font-medium">BTCO DID Resolver</Link>
+                  <Link to="/resources" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
                   <Link to="/create" className="text-white hover:text-orange-200 transition-colors">Create</Link>
                   <div className="relative dropdown-container">
                     <Link to="/collections" className="text-white hover:text-orange-200 transition-colors flex items-center dropdown-toggle">
@@ -50,7 +50,8 @@ function App() {
             </nav>
             
             <Routes>
-              <Route path="/" element={<LinkedResourcesPage />} />
+              <Route path="/" element={<ExplorerPage />} />
+              <Route path="/resources" element={<LinkedResourcesPage />} />
               <Route path="/explorer" element={<ExplorerPage />} />
               <Route path="/create" element={<CreatePage />} />
               <Route path="/collections" element={<CollectionsGalleryPage />} />
