@@ -43,6 +43,14 @@ export {
 export * from './utils/address-utils';
 export { NETWORKS, getScureNetwork } from './utils/networks';
 
+// --- CBOR Utility Exports ---
+export {
+    encodeCbor,
+    decodeCbor,
+    isCbor,
+    extractCborMetadata
+} from './utils/cbor-utils';
+
 // --- Resource Utility Exports ---
 export {
     validateResource,

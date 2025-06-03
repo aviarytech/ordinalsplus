@@ -71,6 +71,7 @@
     "@scure/btc-signer": "^1.8.0",
     "@types/uuid": "^10.0.0",
     "bitcoinjs-lib": "^6.1.7",
+    "cbor-js": "^0.1.0",
     "jsonld": "^8.3.0",
     "micro-ordinals": "^0.2.2",
     "multiformats": "^12.1.0",

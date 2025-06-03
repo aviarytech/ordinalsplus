@@ -1,89 +1,77 @@
 /**
- * Simple JSON-based utilities for encoding and decoding data
+ * CBOR (Concise Binary Object Representation) utilities for encoding and decoding data
  * Used for handling DID Documents and other metadata in BTCO DIDs
  * 
- * This implementation uses JSON.stringify/parse with TextEncoder/Decoder
- * for maximum browser compatibility
+ * This implementation uses the 'cbor-js' library for proper CBOR encoding/decoding
+ * as required by the Ordinals Plus specification. cbor-js is a pure JavaScript
+ * implementation that works well in both Node.js and browser environments.
  */
 
+import * as CBOR from 'cbor-js';
+
 /**
- * Encodes a JavaScript object to binary format using JSON
+ * Encodes a JavaScript object to CBOR format
  * 
  * @param obj - The object to encode
  * @returns The encoded data as a Uint8Array
  */
 export function encodeCbor(obj: unknown): Uint8Array {
   try {
-    // Convert object to JSON string
-    const jsonString = JSON.stringify(obj);
+    // Use cbor-js encode function
+    const cborBuffer = CBOR.encode(obj);
     
-    // Use TextEncoder for browser-compatible string to Uint8Array conversion
-    const encoder = new TextEncoder();
-    return encoder.encode(jsonString);
+    // cbor-js returns ArrayBuffer, convert to Uint8Array for consistency
+    return new Uint8Array(cborBuffer);
   } catch (error) {
-    console.error('Error encoding data:', error);
-    throw new Error(`Failed to encode object: ${error instanceof Error ? error.message : String(error)}`);
+    console.error('Error encoding CBOR data:', error);
+    throw new Error(`Failed to encode object as CBOR: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
- * Decodes binary data to a JavaScript object using JSON
+ * Decodes CBOR data to a JavaScript object
  * 
- * @param data - The binary data to decode
+ * @param data - The CBOR data to decode
  * @returns The decoded JavaScript object
  */
 export function decodeCbor(data: Uint8Array): unknown {
   try {
-    // Use TextDecoder for browser-compatible Uint8Array to string conversion
-    const decoder = new TextDecoder();
-    const jsonString = decoder.decode(data);
+    // cbor-js expects ArrayBuffer, so convert from Uint8Array properly
+    // Create a new ArrayBuffer to avoid SharedArrayBuffer issues
+    const arrayBuffer = new ArrayBuffer(data.length);
+    const uint8View = new Uint8Array(arrayBuffer);
+    uint8View.set(data);
     
-    // Parse JSON string to object
-    return JSON.parse(jsonString);
+    // Decode CBOR data
+    return CBOR.decode(arrayBuffer);
   } catch (error) {
-    console.error('Error decoding data:', error);
-    throw new Error(`Failed to decode binary data: ${error instanceof Error ? error.message : String(error)}`);
+    console.error('Error decoding CBOR data:', error);
+    throw new Error(`Failed to decode CBOR data: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 /**
- * Checks if data appears to be JSON encoded
+ * Checks if data appears to be CBOR encoded
  * 
  * @param data - The data to check
- * @returns True if the data appears to be JSON encoded
+ * @returns True if the data appears to be CBOR encoded
  */
 export function isCbor(data: Uint8Array): boolean {
   if (data.length === 0) return false;
   
   try {
-    // Check for common JSON starting characters: {, [, ", number, true, false, null
-    const firstChar = String.fromCharCode(data[0]);
-    
-    // Simple check for JSON-like data
-    if (['{', '[', '"', 't', 'f', 'n'].includes(firstChar) || 
-        (firstChar >= '0' && firstChar <= '9') || 
-        firstChar === '-') {
-      
-      // Try to decode a small sample to verify it's valid JSON
-      // This is more reliable than just checking the first character
-      const decoder = new TextDecoder();
-      const sample = decoder.decode(data.slice(0, Math.min(data.length, 50)));
-      
-      // Try to parse the beginning of the JSON to see if it's valid
-      // This will throw an error if it's not valid JSON
-      JSON.parse(sample.charAt(0) === '{' ? sample : `{"sample":${sample}}`);
-      
-      return true;
-    }
-    
-    return false;
+    // Try to decode the data as CBOR
+    // If it succeeds, it's likely valid CBOR
+    decodeCbor(data);
+    return true;
   } catch {
+    // If decoding fails, it's probably not CBOR
     return false;
   }
 }
 
 /**
- * Extracts JSON encoded metadata from an Ordinals inscription
+ * Extracts CBOR encoded metadata from an Ordinals inscription
  * 
  * @param metadata - The raw metadata from the inscription
  * @returns The decoded JavaScript object or null if invalid
@@ -94,10 +82,9 @@ export function extractCborMetadata(metadata: Uint8Array | null): unknown | null
   }
   
   try {
-    // For backward compatibility, we'll try to decode the data regardless of format check
     return decodeCbor(metadata);
   } catch (error) {
-    console.error('Error extracting metadata:', error);
+    console.error('Error extracting CBOR metadata:', error);
     return null;
   }
 }

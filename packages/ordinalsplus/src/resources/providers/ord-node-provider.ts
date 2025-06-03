@@ -79,6 +79,29 @@ export class OrdNodeProvider implements ResourceProvider {
         return { inscription_ids: response.inscription_ids };
     }
 
+    async getSatNumber(outpoint: string): Promise<number> {
+        const response = await this.fetchApi<{
+            address: string;
+            confirmations: number;
+            indexed: boolean;
+            inscriptions: string[];
+            outpoint: string;
+            runes: any[];
+            sat_ranges: number[][] | null;
+            script_pubkey: string;
+            spent: boolean;
+            transaction: string;
+            value: number;
+        }>(`/output/${outpoint}`);
+        
+        if (!response.sat_ranges || response.sat_ranges.length === 0 || response.sat_ranges[0].length === 0) {
+            throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No sat ranges found for output ${outpoint}`);
+        }
+        
+        // Return the first number from the first range (ranges are [inclusive, exclusive])
+        return response.sat_ranges[0][0];
+    }
+
     async resolve(resourceId: string): Promise<LinkedResource> {
         const parsed = parseResourceId(resourceId);
         if (!parsed) {

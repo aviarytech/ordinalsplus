@@ -58,18 +58,23 @@ export interface PreparedInscription {
  * @returns An OrdinalInscription object compatible with micro-ordinals
  */
 export function createOrdinalInscription(content: InscriptionContent): OrdinalInscription {
-  // Convert metadata to the format expected by micro-ordinals
-  const unknownTags = content.metadata 
-    ? Object.entries(content.metadata).map(
-        ([key, value]) => [utf8.decode(key), utf8.decode(value)] as [Uint8Array, Uint8Array]
-      )
-    : undefined;
+  // Build the tags object
+  const tags: ordinals.Tags = {
+    contentType: content.contentType,
+  };
+  
+  // For metadata, pass the raw object to micro-ordinals which will handle CBOR encoding automatically
+  // DO NOT pre-encode with CBOR since micro-ordinals already does this for the metadata field (tag 5)
+  if (content.metadata && Object.keys(content.metadata).length > 0) {
+    console.log(`[createOrdinalInscription] Adding metadata to tags:`, content.metadata);
+    
+    // Pass raw metadata object - micro-ordinals will CBOR-encode it automatically
+    // This ensures ordinals.com displays it as readable JSON instead of double-encoded hex
+    tags.metadata = content.metadata;
+  }
   
   return {
-    tags: {
-      contentType: content.contentType,
-      unknown: unknownTags
-    },
+    tags,
     body: content.content
   };
 }

@@ -73,6 +73,17 @@ export class OrdiscanProvider implements ResourceProvider {
         return { inscription_ids: response.data.inscription_ids };
     }
 
+    async getSatNumber(utxo: string): Promise<number> {
+        const response = await this.fetchApi<number[][]>(`/utxo/${utxo}/sat-ranges`);
+        
+        if (!response.data || response.data.length === 0 || response.data[0].length === 0) {
+            throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No sat ranges found for UTXO ${utxo}`);
+        }
+        
+        // Return the first number from the first range (ranges are [inclusive, exclusive])
+        return response.data[0][0];
+    }
+
     async resolve(resourceId: string): Promise<LinkedResource> {
         const parsed = parseResourceId(resourceId);
         if (!parsed) {

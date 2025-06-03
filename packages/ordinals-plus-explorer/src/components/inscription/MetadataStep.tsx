@@ -8,14 +8,17 @@ import { fetchWorkflowConfiguration, createExchange, participateInExchange } fro
 
 /**
  * MetadataStep handles the configuration of metadata for the resource inscription.
- * Simplified to only include verifiable credential options.
+ * Supports both standard JSON metadata and verifiable credential options.
  */
 const MetadataStep: React.FC = () => {
-  const { state, setMetadata, nextStep, previousStep, validationErrors, setError } = useResourceInscription();
+  const { state, setMetadata, nextStep, previousStep, validationErrors, setError, clearError } = useResourceInscription();
   
   // Local state for form handling
   const [isVerifiableCredential, setIsVerifiableCredential] = useState<boolean>(
     state.metadata.isVerifiableCredential
+  );
+  const [standardMetadata, setStandardMetadata] = useState<string>(
+    JSON.stringify(state.metadata.standard, null, 2)
   );
   const [selectedVcProviderId, setSelectedVcProviderId] = useState<string | null>(
     state.metadata.verifiableCredential.provider
@@ -35,6 +38,11 @@ const MetadataStep: React.FC = () => {
     if (!checked) {
       setSelectedVcProviderId(null);
     }
+  };
+
+  const handleStandardMetadataChange = (value: string) => {
+    setStandardMetadata(value);
+    clearError('standardMetadata');
   };
   
   const handleVcProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -94,9 +102,28 @@ const MetadataStep: React.FC = () => {
     }
   }, [isVerifiableCredential, selectedVcProviderId]);
   
+  // Validate standard metadata JSON
+  const validateStandardMetadata = (): boolean => {
+    if (!isVerifiableCredential && standardMetadata.trim()) {
+      try {
+        JSON.parse(standardMetadata);
+        return true;
+      } catch (err) {
+        setError('standardMetadata', 'Invalid JSON format. Please check your syntax.');
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Validate VC provider and variables if enabled
   const validateForm = (): boolean => {
     let isValid = true;
+    
+    // Validate standard metadata if not using verifiable credentials
+    if (!validateStandardMetadata()) {
+      isValid = false;
+    }
     
     if (isVerifiableCredential) {
       // Validate provider selection
@@ -123,6 +150,17 @@ const MetadataStep: React.FC = () => {
   const handleContinue = async () => {
     if (!validateForm()) {
       return;
+    }
+    
+    // Parse standard metadata
+    let parsedStandardMetadata = {};
+    if (!isVerifiableCredential && standardMetadata.trim()) {
+      try {
+        parsedStandardMetadata = JSON.parse(standardMetadata);
+      } catch (err) {
+        setError('standardMetadata', 'Invalid JSON format. Please check your syntax.');
+        return;
+      }
     }
     
     // If verifiable credential is enabled, create and participate in an exchange
@@ -163,7 +201,7 @@ const MetadataStep: React.FC = () => {
             // Update metadata in state with complete exchange data
             setMetadata({
               isVerifiableCredential,
-              standard: {}, // Empty standard metadata
+              standard: parsedStandardMetadata, // Include any standard metadata even with VC
               verifiableCredential: {
                 provider: selectedVcProviderId,
                 exchangeVariables: exchangeVariables,
@@ -190,7 +228,7 @@ const MetadataStep: React.FC = () => {
       // If verifiable credential is disabled, just update metadata and continue
       setMetadata({
         isVerifiableCredential,
-        standard: {}, // Empty standard metadata
+        standard: parsedStandardMetadata, // Use parsed standard metadata
         verifiableCredential: {
           provider: null,
           exchangeVariables: {},
@@ -209,6 +247,33 @@ const MetadataStep: React.FC = () => {
       </h2>
       
       <div className="space-y-4">
+        {/* Standard Metadata Section */}
+        {!isVerifiableCredential && (
+          <div className="pb-4">
+            <div>
+              <label htmlFor="standardMetadata" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Standard Metadata (JSON)
+              </label>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                Enter metadata as valid JSON. Leave empty if no metadata is needed.
+              </p>
+              <textarea
+                id="standardMetadata"
+                value={standardMetadata}
+                onChange={(e) => handleStandardMetadataChange(e.target.value)}
+                placeholder='{\n  "name": "My Resource",\n  "description": "A sample resource",\n  "author": "Creator Name",\n  "tags": ["tag1", "tag2"]\n}'
+                rows={10}
+                className={`w-full p-3 border ${
+                  validationErrors.standardMetadata ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                } rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm`}
+              />
+              {validationErrors.standardMetadata && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.standardMetadata}</p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Verifiable Credential Toggle */}
         <div className="pb-4">
           <div className="flex items-center justify-between">

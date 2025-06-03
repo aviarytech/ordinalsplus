@@ -574,6 +574,18 @@ class ApiService {
     }
     return { txid: data.txid };
   }
+
+  /**
+   * Gets the first sat number from a UTXO's sat ranges
+   */
+  async getSatNumber(networkType: string, utxo: string): Promise<number> {
+    const url = this.buildUrl(`/api/utxo/${utxo}/sat-number`, networkType);
+    console.log(`[ApiService] Getting sat number for UTXO: ${url}`);
+    
+    const response = await fetch(url);
+    const result = await handleApiResponse<{ satNumber: number }>(response);
+    return result.satNumber;
+  }
 }
 
 export default ApiService; 
