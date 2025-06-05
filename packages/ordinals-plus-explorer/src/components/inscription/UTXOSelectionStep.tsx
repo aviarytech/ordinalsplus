@@ -4,6 +4,7 @@ import UtxoSelector from '../create/UtxoSelector';
 import { useWallet, Utxo } from '../../context/WalletContext';
 import { Button } from '../ui';
 import { AlertCircle, Info, Edit, Check } from 'lucide-react';
+import { useApi } from '../../context/ApiContext';
 
 /**
  * UTXOSelectionStep handles the selection of a UTXO for the resource inscription.
@@ -14,8 +15,10 @@ const UTXOSelectionStep: React.FC = () => {
   const { 
     connected: walletConnected,
     getUtxos,
-    address
+    address,
+    network
   } = useWallet();
+  const { apiService } = useApi();
   
   // State for UTXOs and UI
   const [availableUtxos, setAvailableUtxos] = useState<Utxo[]>([]);
@@ -72,6 +75,7 @@ const UTXOSelectionStep: React.FC = () => {
           const largestUtxo = findLargestUtxo(utxos);
           if (largestUtxo) {
             setUtxoSelection([largestUtxo]);
+            fetchSatNumberForUtxo(largestUtxo); // Fetch satNumber for the automatically selected UTXO
           }
         }
       }
@@ -85,18 +89,30 @@ const UTXOSelectionStep: React.FC = () => {
     }
   };
   
+  // Fetch satNumber for a selected UTXO
+  const fetchSatNumberForUtxo = async (utxo: Utxo) => {
+    if (!apiService) {
+      console.error('API service not available');
+      return;
+    }
+    try {
+      const networkType = network || 'mainnet'; // Use network from WalletContext or default to mainnet
+      const satNumber = await apiService.getSatNumber(networkType, `${utxo.txid}:${utxo.vout}`);
+      const updatedUtxo = { ...utxo, satNumber };
+      setUtxoSelection([updatedUtxo]); // Update the selection with satNumber
+      console.log(`Fetched satNumber: ${satNumber} for UTXO: ${utxo.txid}:${utxo.vout} on network: ${networkType}`);
+    } catch (error) {
+      console.error('Error fetching sat number:', error);
+    }
+  };
+
   // Handle UTXO selection change
   const handleUtxoSelectionChange = (utxo: Utxo, isSelected: boolean) => {
-    // For resource inscriptions, we only need one UTXO to inscribe on
-    // This simplifies the selection to just the primary UTXO
     if (isSelected) {
-      // Set this as the only selected UTXO
-      setUtxoSelection([utxo]);
+      fetchSatNumberForUtxo(utxo); // Fetch satNumber when a UTXO is selected
       clearError('utxoSelection');
     } else {
-      // If deselecting the current UTXO, clear the selection
       setUtxoSelection([]);
-      // Only set error after user has interacted with the component
       handleUtxoInteraction();
     }
   };
@@ -238,6 +254,7 @@ const UTXOSelectionStep: React.FC = () => {
               )}
             </p>
             <p className="text-xs mt-1">Value: <span className="font-medium">{formatBtcValue(state.utxoSelection[0].value)} BTC</span></p>
+            <p className="text-xs mt-1">Sat Number: <span className="font-medium">{state.utxoSelection[0].satNumber}</span></p>
           </div>
         </div>
       )}

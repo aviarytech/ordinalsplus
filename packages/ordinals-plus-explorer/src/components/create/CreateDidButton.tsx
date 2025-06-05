@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Button } from '../ui';
-import { Key, Download, Loader2, Shield, TestTube } from 'lucide-react';
+import { Key, Download, Loader2, Shield } from 'lucide-react';
 import { useWallet } from '../../context/WalletContext';
 import { useToast } from '../../contexts/ToastContext';
-import { generateEd25519KeyPair, publicKeyToMultibase } from '../../lib/utils/keyUtils';
+import { generateEd25519KeyPair, privateKeyToMultibase, publicKeyToMultibase } from '../../lib/utils/keyUtils';
 import { useResourceInscription } from '../inscription/ResourceInscriptionWizard';
-import { loadCborJs, testCborEncoding } from '../../utils/testCbor';
 import { useApi } from '../../context/ApiContext';
 import { useNetwork } from '../../context/NetworkContext';
 
@@ -40,15 +39,6 @@ const CreateDidButton: React.FC<CreateDidButtonProps> = ({ className, onDidCreat
     const networkType = network?.type || walletNetwork || 'mainnet';
     const satNumber = await apiService.getSatNumber(networkType, utxo);
     return satNumber.toString();
-  };
-
-  // Generate a DID identifier based on a random satoshi number
-  // This is a fallback when no UTXO is selected yet
-  const generateRandomSatoshiNumber = (): string => {
-    // Generate a random number between 0 and 2099999997689999 (max satoshis)
-    const maxSatoshis = 2099999997689999n;
-    const randomBigInt = BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)) % maxSatoshis;
-    return randomBigInt.toString();
   };
 
   // Get network-specific DID prefix
@@ -119,50 +109,14 @@ const CreateDidButton: React.FC<CreateDidButtonProps> = ({ className, onDidCreat
     return { did, didDocument, keyId: fullKeyId, multibaseKey };
   };
 
-  // Test CBOR encoding in browser
-  const handleTestCbor = async () => {
-    setIsTesting(true);
-    
-    try {
-      // Load cbor-js library
-      await loadCborJs();
-      
-      // Generate a test DID document
-      const keyPair = generateEd25519KeyPair();
-      const satNumber = generateRandomSatoshiNumber();
-      const { didDocument } = createDidDocument(satNumber, keyPair);
-      
-      // Test CBOR encoding
-      const testResult = testCborEncoding(didDocument);
-      
-      if (testResult.success && testResult.roundTripSuccess) {
-        addToast(
-          `✅ CBOR Test Passed!\n` +
-          `📊 Size: ${testResult.cborSize} bytes\n` +
-          `🔍 Hex (first 50 chars): ${testResult.cborHex.substring(0, 50)}...\n` +
-          `This hex is what will be stored as metadata in the inscription.`,
-          'success'
-        );
-        
-        // Log full hex to console for copying
-        console.log('🔍 Full CBOR hex for testing:', testResult.cborHex);
-        console.log('📋 DID document that was encoded:', didDocument);
-      } else {
-        addErrorToast(new Error(`CBOR test failed: ${testResult.error || 'Round-trip failed'}`));
-      }
-    } catch (error) {
-      addErrorToast(error instanceof Error ? error : new Error('CBOR test failed'));
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  // Download the private key as a JSON file
   const downloadPrivateKey = (did: string, keyId: string, multibaseKey: string, privateKey: Uint8Array) => {
+    const secretKeyMultibase = privateKeyToMultibase(privateKey);
+
     const keyData = {
       did,
       keyId, // Include the key ID derived from the multibase key
       publicKeyMultibase: multibaseKey, // Include the multibase public key
+      secretKeyMultibase, // Include the multibase secret key
       privateKey: Array.from(privateKey), // Convert Uint8Array to regular array for JSON
       privateKeyHex: Buffer.from(privateKey).toString('hex'),
       type: 'Ed25519',
@@ -208,9 +162,8 @@ const CreateDidButton: React.FC<CreateDidButtonProps> = ({ className, onDidCreat
         satNumber = await getSatNumberFromUtxo(utxo.txid, utxo.vout);
         addToast(`Using satoshi number ${satNumber} from UTXO: ${utxo.txid}:${utxo.vout}`, 'info');
       } else {
-        // Generate a random satoshi number and inform user they need to select a UTXO
-        satNumber = generateRandomSatoshiNumber();
-        addToast('Generated temporary DID. You will need to select a UTXO in the transaction step.', 'warning');
+        addErrorToast(new Error('Please select a UTXO to create a DID.'));
+        return;
       }
       
       // 3. Create the DID document
@@ -271,26 +224,6 @@ const CreateDidButton: React.FC<CreateDidButtonProps> = ({ className, onDidCreat
 
   return (
     <div className="flex gap-2">
-      {/* Test CBOR Button */}
-      <Button
-        onClick={handleTestCbor}
-        disabled={isTesting}
-        className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white"
-        variant="secondary"
-      >
-        {isTesting ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Testing...
-          </>
-        ) : (
-          <>
-            <TestTube className="w-4 h-4" />
-            Test CBOR
-          </>
-        )}
-      </Button>
-
       {/* Create DID Button */}
       <Button
         onClick={handleCreateDid}

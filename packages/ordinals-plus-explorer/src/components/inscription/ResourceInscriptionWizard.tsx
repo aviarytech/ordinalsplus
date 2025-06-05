@@ -19,6 +19,7 @@ export interface UtxoSelection {
   vout: number;
   value: number;
   scriptPubKey?: string;
+  satNumber?: number;
 }
 
 export interface ContentData {

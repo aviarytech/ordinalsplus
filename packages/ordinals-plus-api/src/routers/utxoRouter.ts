@@ -1,6 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { getAddressUtxos } from 'ordinalsplus';
-import type { ResourceProvider } from 'ordinalsplus';
+import { getAddressUtxos, ResourceProvider } from 'ordinalsplus';
 import { getProvider } from '../services/providerService';
 import type { NetworkType, Utxo } from '../types';
 

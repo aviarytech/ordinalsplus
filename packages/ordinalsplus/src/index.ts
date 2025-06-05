@@ -6,8 +6,7 @@ import { OrdNodeProvider } from './resources/providers/ord-node-provider';
 export * from './types';
 
 // --- DID Exports ---
-export { BtcoDid, createDidFromInscriptionData, isBtcoDid } from './did/index';
-export { BtcoDidResolver } from './did/btco-did-resolver';
+export { BtcoDidResolver, createDidFromInscriptionData, isBtcoDid } from './did/index';
 export type { BtcoDidResolutionResult, BtcoDidResolutionOptions } from './did/btco-did-resolver';
 
 // --- Key Management Exports ---
@@ -36,7 +35,8 @@ export {
     isValidResourceId, 
     parseBtcoDid, 
     extractSatNumber, 
-    extractIndexFromInscription, 
+    extractIndexFromInscription,
+    encoding,
     BTCO_METHOD, 
     ERROR_CODES, 
     MAX_SAT_NUMBER 

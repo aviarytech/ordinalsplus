@@ -1,11 +1,10 @@
 import { DidDocument, VerificationMethod, Service } from '../types/did';
 import { BitcoinNetwork } from '../types';
-import { generateEd25519KeyPair, publicKeyToMultibase } from '../utils/keyUtils';
+import { generateEd25519KeyPair } from '../utils/keyUtils';
 import { getDidPrefix } from './did-utils';
-import { KeyPair, KeyType } from '../key-management/key-pair-generator';
-import { KeyManager } from '../key-management/key-manager';
-import { addTamperProtection, verifyTamperProtection, checkDidDocumentSecurity } from '../utils/security';
+import { KeyPair } from '../key-management/key-pair-generator';
 import { logDidDocumentCreation, logDidDocumentUpdate, AuditSeverity, logSecurityEvent } from '../utils/audit-logger';
+import { MULTICODEC_ED25519_PUB_HEADER, multikey } from '../utils/encoding';
 
 /**
  * Interface for a DID Document with associated key material
@@ -104,7 +103,7 @@ export async function createDidDocument(
     id: `${did}#key-1`,
     type: 'Ed25519VerificationKey2020',
     controller: options.controller || did,
-    publicKeyMultibase: publicKeyToMultibase(keyPair.publicKey)
+    publicKeyMultibase: multikey.encode(MULTICODEC_ED25519_PUB_HEADER, keyPair.publicKey)
   };
   
   // Create the DID Document
@@ -131,55 +130,7 @@ export async function createDidDocument(
     document.deactivated = true;
   }
 
-  // Add tamper protection if requested
   let finalDocument = document;
-  if (options.tamperProtection) {
-    try {
-      // Create a KeyManager to add the tamper protection signature
-      const keyManager = KeyManager.getInstance();
-      const keyId = await keyManager.createKey({
-        type: 'Ed25519',
-        aliases: [`${did}-tamper-protection-key`]
-      });
-
-      // Add tamper protection with the key
-      finalDocument = await addTamperProtection(document, keyManager, keyId, {
-        includeTimestamp: true
-      });
-      
-      // Log successful tamper protection addition
-      await logSecurityEvent(
-        'tamper_protection_added',
-        AuditSeverity.INFO,
-        did,
-        options.actor,
-        { keyId }
-      );
-    } catch (error) {
-      console.error('Failed to add tamper protection:', error);
-      // Log the failure but continue with the document creation
-      await logSecurityEvent(
-        'tamper_protection_failed',
-        AuditSeverity.WARNING,
-        did,
-        options.actor,
-        { error: error instanceof Error ? error.message : String(error) }
-      );
-    }
-  }
-  
-  // Check for security issues
-  const securityIssues = await checkDidDocumentSecurity(finalDocument);
-  if (securityIssues.length > 0) {
-    // Log security issues but don't prevent document creation
-    await logSecurityEvent(
-      'security_issues_detected',
-      AuditSeverity.WARNING,
-      did,
-      options.actor,
-      { issues: securityIssues.map(issue => issue.type) }
-    );
-  }
   
   // Log the document creation
   await logDidDocumentCreation(did, options.actor, {
@@ -246,7 +197,7 @@ export async function addKeyToDidDocument(
     id: keyId,
     type: keyType,
     controller: options.controller || updatedDocument.id,
-    publicKeyMultibase: publicKeyToMultibase(keyPair.publicKey)
+    publicKeyMultibase: multikey.encode(MULTICODEC_ED25519_PUB_HEADER, keyPair.publicKey)
   };
   
   // Add the verification method to the document
@@ -270,19 +221,6 @@ export async function addKeyToDidDocument(
     keyType: keyPair.type,
     purposes: options.relationships || []
   });
-  
-  // Check for security issues after key addition
-  const securityIssues = await checkDidDocumentSecurity(updatedDocument);
-  if (securityIssues.length > 0) {
-    // Log security issues but don't prevent document update
-    await logSecurityEvent(
-      'security_issues_detected',
-      AuditSeverity.WARNING,
-      document.id,
-      options.actor,
-      { issues: securityIssues.map(issue => issue.type) }
-    );
-  }
   
   return updatedDocument;
 }
@@ -344,7 +282,7 @@ export async function rotateKeyInDidDocument(
     id: newKeyId,
     type: keyType,
     controller: options.controller || oldVerificationMethod.controller,
-    publicKeyMultibase: publicKeyToMultibase(newKeyPair.publicKey)
+    publicKeyMultibase: multikey.encode(MULTICODEC_ED25519_PUB_HEADER, newKeyPair.publicKey)
   };
   
   // If we're marking the old key as revoked, update it
@@ -401,19 +339,6 @@ export async function rotateKeyInDidDocument(
     keyType: newKeyPair.type,
     revoked: options.markAsRevoked
   });
-  
-  // Check for security issues after key rotation
-  const securityIssues = await checkDidDocumentSecurity(updatedDocument);
-  if (securityIssues.length > 0) {
-    // Log security issues but don't prevent document update
-    await logSecurityEvent(
-      'security_issues_detected',
-      AuditSeverity.WARNING,
-      document.id,
-      options.actor,
-      { issues: securityIssues.map(issue => issue.type) }
-    );
-  }
   
   return updatedDocument;
 }
@@ -557,60 +482,6 @@ export async function validateDidDocument(
         if (!svc.type) errors.push(`service[${index}] is missing type`);
         if (!svc.serviceEndpoint) errors.push(`service[${index}] is missing serviceEndpoint`);
       });
-    }
-  }
-  
-  // Check for tamper protection
-  if ('tamperProtection' in document) {
-    try {
-      // Get key manager to verify signatures if needed
-      const keyManager = KeyManager.getInstance();
-      const tamperResult = await verifyTamperProtection(document, keyManager);
-      
-      if (!tamperResult.isValid) {
-        errors.push(...tamperResult.errors);
-        
-        // Log tamper detection to audit log
-        await logSecurityEvent(
-          'tamper_detected',
-          AuditSeverity.ERROR,
-          document.id,
-          actor,
-          { errors: tamperResult.errors }
-        );
-      }
-    } catch (error) {
-      errors.push(`Tamper protection validation failed: ${error instanceof Error ? error.message : String(error)}`);
-      
-      // Log validation failure to audit log
-      await logSecurityEvent(
-        'tamper_validation_failed',
-        AuditSeverity.ERROR,
-        document.id,
-        actor,
-        { error: error instanceof Error ? error.message : String(error) }
-      );
-    }
-  }
-  
-  // Check for security issues
-  const securityIssues = await checkDidDocumentSecurity(document);
-  if (securityIssues.length > 0) {
-    securityIssues.forEach(issue => {
-      if (issue.severity === AuditSeverity.ERROR) {
-        errors.push(issue.message);
-      }
-    });
-    
-    // Only log if there are actual issues, not just warnings
-    if (securityIssues.some(issue => issue.severity === AuditSeverity.ERROR)) {
-      await logSecurityEvent(
-        'validation_security_issues',
-        AuditSeverity.WARNING,
-        document.id,
-        actor,
-        { issues: securityIssues.map(issue => issue.type) }
-      );
     }
   }
   

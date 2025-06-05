@@ -144,7 +144,18 @@ interface ApiResolutionResult {
   message?: string;
   data?: {
     didDocument?: DidDocument;
-    resolutionMetadata?: ResolutionMetadata;
+    inscriptions?: Array<{
+      inscriptionId: string;
+      content: string;
+      metadata: any;
+      contentUrl?: string;
+      isValidDid?: boolean;
+      didDocument?: DidDocument | null;
+      error?: string;
+    }>;
+    resolutionMetadata?: ResolutionMetadata & {
+      totalInscriptions?: number;
+    };
     didDocumentMetadata?: any;
     error?: string;
     inscriptionId?: string;
@@ -161,6 +172,15 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
   const [didDocument, setDidDocument] = useState<DidDocument | null>(null);
   const [didString, setDidString] = useState<string>('');
   const [resolutionResult, setResolutionResult] = useState<ApiResolutionResult | null>(null);
+  const [allInscriptions, setAllInscriptions] = useState<Array<{
+    inscriptionId: string;
+    content: string;
+    metadata: any;
+    contentUrl?: string;
+    isValidDid?: boolean;
+    didDocument?: DidDocument | null;
+    error?: string;
+  }> | null>(null);
   const [_, setCurrentPage] = useState(0);
   const [__, setTotalPages] = useState(0);
   const { network } = useNetwork();
@@ -173,6 +193,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     setError(null);
     setDidDocument(null);
     setResolutionResult(null);
+    setAllInscriptions(null);
 
     try {
       if (!apiService) {
@@ -180,22 +201,29 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
       }
 
       // Use the backend API endpoint for DID resolution
-      // Note: The API service returns { didDocument: any } format
       try {
         const result = await apiService.resolveDid(searchQuery.trim());
         
-        // Create a mock resolution result that matches our interface
-        const mockResult: ApiResolutionResult = {
+        // Create a result structure that matches our interface
+        const apiResult: ApiResolutionResult = {
           status: 'success',
           data: {
             didDocument: result.didDocument,
+            inscriptions: result.inscriptions,
             resolutionMetadata: {
-              contentType: 'application/did+ld+json'
-            }
+              contentType: result.resolutionMetadata?.contentType || 'application/did+ld+json',
+              inscriptionId: result.resolutionMetadata?.inscriptionId,
+              satNumber: result.resolutionMetadata?.satNumber,
+              network: result.resolutionMetadata?.network,
+              deactivated: result.resolutionMetadata?.deactivated,
+              totalInscriptions: result.resolutionMetadata?.totalInscriptions
+            },
+            didDocumentMetadata: result.didDocumentMetadata
           }
         };
         
-        setResolutionResult(mockResult);
+        setResolutionResult(apiResult);
+        setAllInscriptions(result.inscriptions || null);
 
         if (result.didDocument) {
           setDidDocument(result.didDocument);
@@ -203,7 +231,18 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
           setTotalPages(1);
           setCurrentPage(0);
         } else {
-          setError('No DID document found in response');
+          // Check if we have inscriptions - if so, just show them without treating as error
+          if (result.inscriptions && result.inscriptions.length > 0) {
+            const validDidInscriptions = result.inscriptions.filter(i => i.isValidDid);
+            if (validDidInscriptions.length > 0) {
+              setError(`Found ${result.inscriptions.length} inscription(s) on this satoshi, ${validDidInscriptions.length} contain(s) DID references, but no valid DID document could be extracted. Check the metadata or inscription content.`);
+            } else {
+              // Don't set error for this case - just show the inscriptions
+              console.log(`Found ${result.inscriptions.length} inscription(s) on this satoshi, but none contain valid BTCO DID references.`);
+            }
+          } else {
+            setError('No inscriptions found on this satoshi');
+          }
         }
       } catch (apiError) {
         // Handle specific API errors
@@ -287,7 +326,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           {metadata.inscriptionId && (
             <div>
-              <span className="font-medium text-gray-600 dark:text-gray-400">Inscription ID:</span>
+              <span className="font-medium text-gray-600 dark:text-gray-400">Latest Valid Inscription:</span>
               <div className="flex items-center gap-2">
                 <code className="bg-white dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">
                   {metadata.inscriptionId}
@@ -323,6 +362,15 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
             </div>
           )}
           
+          {metadata.totalInscriptions && (
+            <div>
+              <span className="font-medium text-gray-600 dark:text-gray-400">Total Inscriptions:</span>
+              <code className="bg-white dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono ml-2">
+                {metadata.totalInscriptions}
+              </code>
+            </div>
+          )}
+          
           {metadata.contentType && (
             <div>
               <span className="font-medium text-gray-600 dark:text-gray-400">Content Type:</span>
@@ -340,6 +388,104 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
               </div>
             </div>
           )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAllInscriptions = () => {
+    if (!allInscriptions || allInscriptions.length === 0) return null;
+
+    return (
+      <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg space-y-3">
+        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+          <Search className="w-5 h-5 text-blue-500" />
+          All Inscriptions on Satoshi ({allInscriptions.length})
+        </h3>
+        
+        <div className="space-y-3">
+          {allInscriptions.map((inscription, index) => (
+            <div key={inscription.inscriptionId} className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700">
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                    #{index + 1}
+                  </span>
+                  {inscription.isValidDid && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
+                      Valid DID
+                    </span>
+                  )}
+                  {inscription.didDocument && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                      Has DID Document
+                    </span>
+                  )}
+                  {inscription.error && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100">
+                      Error
+                    </span>
+                  )}
+                </div>
+                <a
+                  href={`https://ordiscan.com/inscription/${inscription.inscriptionId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-2 text-sm">
+                <div>
+                  <span className="font-medium text-gray-600 dark:text-gray-400">Inscription ID:</span>
+                  <code className="bg-gray-100 dark:bg-gray-600 px-2 py-1 rounded text-xs font-mono ml-2">
+                    {inscription.inscriptionId}
+                  </code>
+                </div>
+                
+                {inscription.contentUrl && (
+                  <div>
+                    <span className="font-medium text-gray-600 dark:text-gray-400">Content URL:</span>
+                    <a 
+                      href={inscription.contentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-500 hover:text-blue-600 text-xs ml-2 break-all"
+                    >
+                      {inscription.contentUrl}
+                    </a>
+                  </div>
+                )}
+                
+                <div>
+                  <span className="font-medium text-gray-600 dark:text-gray-400">Content:</span>
+                  <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-600 rounded text-xs font-mono break-all max-h-20 overflow-y-auto">
+                    {inscription.content || 'No content available'}
+                  </div>
+                </div>
+                
+                {inscription.metadata && (
+                  <div>
+                    <span className="font-medium text-gray-600 dark:text-gray-400">Metadata:</span>
+                    <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-600 rounded text-xs font-mono break-all max-h-20 overflow-y-auto">
+                      {JSON.stringify(inscription.metadata, null, 2)}
+                    </div>
+                  </div>
+                )}
+                
+                {inscription.error && (
+                  <div>
+                    <span className="font-medium text-red-600 dark:text-red-400">Error:</span>
+                    <div className="text-red-600 dark:text-red-400 text-xs ml-2">
+                      {inscription.error}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -404,6 +550,9 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
 
       {/* Resolution Metadata */}
       {resolutionResult && !error && renderResolutionMetadata()}
+
+      {/* All Inscriptions */}
+      {renderAllInscriptions()}
 
       {/* DID Document and Resources */}
       {didDocument && (

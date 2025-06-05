@@ -120,6 +120,27 @@ export class OrdiscanProvider implements ResourceProvider {
         };
     }
 
+    async getMetadata(inscriptionId: string): Promise<any> {
+        const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
+        
+        // Extract CBOR metadata if available
+        // Note: This is a placeholder implementation - the actual metadata extraction
+        // would depend on how Ordiscan provides metadata in their API response
+        const metadata = {
+            inscription_id: response.data.inscription_id,
+            inscription_number: response.data.inscription_number,
+            content_type: response.data.content_type,
+            sat: response.data.sat,
+            timestamp: response.data.timestamp,
+            genesis_address: response.data.genesis_address,
+            owner_address: response.data.owner_address
+        };
+
+        // If the API provides CBOR metadata, it would be decoded here
+        // For now, we return the basic metadata structure
+        return metadata;
+    }
+
     async resolveCollection(did: string, options: {
         type?: string;
         limit?: number;

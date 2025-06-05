@@ -3,16 +3,33 @@ import { ResourceProvider } from '../resources/providers/types';
 import { ProviderFactory, ProviderType } from '../resources/providers/provider-factory';
 import { extractCborMetadata } from '../utils/cbor-utils';
 import { DidDocument } from '../types/did';
-import { AuditCategory, AuditSeverity, logDidDocumentResolution } from '../utils/audit-logger';
+
+/**
+ * Individual inscription data for BTCO DID resources
+ */
+export interface BtcoInscriptionData {
+  inscriptionId: string;
+  content: string;
+  metadata: any;
+  contentUrl?: string;
+  isValidDid?: boolean;
+  didDocument?: DidDocument | null;
+  error?: string;
+}
 
 /**
  * BTCO DID Resolution result
  */
 export interface BtcoDidResolutionResult {
   /**
-   * The resolved DID document, null if resolution failed
+   * The resolved DID document, null if resolution failed (for compatibility)
    */
   didDocument: DidDocument | null;
+  
+  /**
+   * All inscriptions found on the satoshi with their data
+   */
+  inscriptions?: BtcoInscriptionData[];
   
   /**
    * Resolution metadata including any errors
@@ -26,6 +43,7 @@ export interface BtcoDidResolutionResult {
     created?: string;
     deactivated?: boolean;
     network?: string;
+    totalInscriptions?: number;
   };
   
   /**
@@ -45,34 +63,9 @@ export interface BtcoDidResolutionResult {
  */
 export interface BtcoDidResolutionOptions {
   /**
-   * Bitcoin network to use (mainnet, testnet, signet)
+   * Resource provider for ordinals/inscriptions data
    */
-  network?: BitcoinNetwork;
-  
-  /**
-   * API endpoint for the Ordinals indexer
-   */
-  apiEndpoint?: string;
-  
-  /**
-   * API key for the Ordinals indexer
-   */
-  apiKey?: string;
-  
-  /**
-   * Timeout for network requests in milliseconds
-   */
-  timeout?: number;
-  
-  /**
-   * Whether to enable audit logging
-   */
-  enableAudit?: boolean;
-  
-  /**
-   * The actor performing the resolution (for auditing)
-   */
-  actor?: string;
+  provider?: ResourceProvider;
 }
 
 /**
@@ -87,11 +80,9 @@ export interface BtcoDidResolutionOptions {
  * 4. Ensure the inscription is on the sat specified in the method-specific identifier.
  */
 export class BtcoDidResolver {
-  private readonly defaultNetwork: BitcoinNetwork;
   private readonly options: BtcoDidResolutionOptions;
 
   constructor(options: BtcoDidResolutionOptions = {}) {
-    this.defaultNetwork = options.network || 'mainnet';
     this.options = options;
   }
 
@@ -134,52 +125,60 @@ export class BtcoDidResolver {
   }
 
   /**
-   * Create a provider for the specified network
+   * Create a default provider if none is provided
    */
-  private createProviderForNetwork(network: string): ResourceProvider {
+  private createDefaultProvider(network: string): ResourceProvider {
     // Map network names to BitcoinNetwork type
     let bitcoinNetwork: BitcoinNetwork;
     switch (network) {
+      case 'mainnet':
+      case 'main':
+      default:
+        bitcoinNetwork = 'mainnet';
+        const apiKey = process.env.ORDISCAN_API_KEY;
+        if (!apiKey) {
+          throw new Error('Ordiscan API key is required. Please provide a configured provider via options.provider or set the ORDISCAN_API_KEY environment variable.');
+        }
+        const providerConfig = {
+          type: ProviderType.ORDISCAN,
+          options: {
+            apiKey,
+            apiEndpoint: 'https://api.ordiscan.com/v1',
+            timeout: 30000,
+            network: bitcoinNetwork
+          }
+        };
+        return ProviderFactory.createProvider(providerConfig);
       case 'test':
       case 'testnet':
         bitcoinNetwork = 'testnet';
-        break;
+        return ProviderFactory.createProvider({
+          type: ProviderType.ORD,
+          options: {
+            nodeUrl: process.env.TESTNET_ORD_NODE_URL!,
+            timeout: 30000,
+            network: bitcoinNetwork
+          }
+        });
       case 'sig':
       case 'signet':
         bitcoinNetwork = 'signet';
-        break;
-      default:
-        bitcoinNetwork = 'mainnet';
-        break;
+        return ProviderFactory.createProvider({
+          type: ProviderType.ORD,
+          options: {
+            nodeUrl: process.env.SIGNET_ORD_NODE_URL!,
+            timeout: 30000,
+            network: bitcoinNetwork
+          }
+        });
     }
-
-    // Use provided API key or try environment variables
-    const apiKey = this.options.apiKey || 
-                   process.env.ORDISCAN_API_KEY || 
-                   (typeof window !== 'undefined' && (window as any).ORDISCAN_API_KEY);
-
-    if (!apiKey) {
-      throw new Error('Ordiscan API key is required. Please provide it via options.apiKey or set the ORDISCAN_API_KEY environment variable.');
-    }
-
-    const providerConfig = {
-      type: ProviderType.ORDISCAN,
-      options: {
-        apiKey,
-        apiEndpoint: this.options.apiEndpoint || 'https://api.ordiscan.com/v1',
-        timeout: this.options.timeout || 30000,
-        network: bitcoinNetwork
-      }
-    };
-    return ProviderFactory.createProvider(providerConfig);
   }
 
   /**
    * Resolve a BTCO DID according to the specification
+   * Returns all inscriptions on the satoshi with their metadata
    */
   async resolve(did: string, options: BtcoDidResolutionOptions = {}): Promise<BtcoDidResolutionResult> {
-    const startTime = Date.now();
-    
     try {
       // Step 1: Parse the DID
       const parsed = this.parseBtcoDid(did);
@@ -189,183 +188,141 @@ export class BtcoDidResolver {
 
       const { satNumber, path, network } = parsed;
       
-      // Create a provider for the network specified in the DID
-      const provider = this.createProviderForNetwork(network);
+      // Use provided provider or create a default one for the network
+      const provider = options.provider || this.options.provider || this.createDefaultProvider(network);
 
-      // Step 2: Get inscriptions on this satoshi
-      let inscriptionId: string;
+      // Step 2: Get all inscriptions on this satoshi
+      let inscriptionIds: string[];
       try {
         const satInfo = await provider.getSatInfo(satNumber);
-        
         if (!satInfo || !satInfo.inscription_ids || satInfo.inscription_ids.length === 0) {
           return this.createErrorResult('notFound', 
             `No inscriptions found on satoshi ${satNumber}`
           );
         }
         
-        // Get the most recent inscription (last in the array)
-        inscriptionId = satInfo.inscription_ids[satInfo.inscription_ids.length - 1];
-        
+        inscriptionIds = satInfo.inscription_ids;
       } catch (error) {
         return this.createErrorResult('notFound', 
           `Failed to retrieve inscriptions for satoshi ${satNumber}: ${error instanceof Error ? error.message : 'Unknown error'}`
         );
       }
 
-      // Step 3: Retrieve the inscription content and metadata
-      let inscriptionContent: string;
-      let metadata: any;
-      
-      try {
-        const inscription = await provider.resolveInscription(inscriptionId);
-        
-        if (!inscription) {
-          return this.createErrorResult('notFound', 
-            `Inscription ${inscriptionId} not found`
-          );
-        }
-        
-        // Fetch the actual content from the content URL
-        try {
-          const response = await fetch(inscription.content_url);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-          inscriptionContent = await response.text();
-        } catch (error) {
-          return this.createErrorResult('notFound', 
-            `Failed to fetch inscription content from ${inscription.content_url}: ${error instanceof Error ? error.message : 'Unknown error'}`
-          );
-        }
-        
-        // Extract CBOR metadata if present
-        if (inscription.metadata) {
-          try {
-            metadata = extractCborMetadata(inscription.metadata);
-          } catch (error) {
-            console.warn('Failed to decode CBOR metadata:', error);
-            metadata = null;
-          }
-        }
-        
-      } catch (error) {
-        return this.createErrorResult('notFound', 
-          `Failed to retrieve inscription ${inscriptionId}: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-      }
-
-      // Step 4: Check if inscription content contains a valid DID
+      // Step 3: Retrieve content and metadata for ALL inscriptions
+      const inscriptionDataList: BtcoInscriptionData[] = [];
       const expectedDid = `${this.getDidPrefix(network)}:${satNumber}`;
       const didPattern = new RegExp(`^(?:BTCO DID: )?(${expectedDid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i');
       
-      if (!didPattern.test(inscriptionContent)) {
-        return this.createErrorResult('invalidDidDocument', 
-          `Inscription content does not contain expected DID ${expectedDid}. Content: ${inscriptionContent.substring(0, 100)}...`
-        );
-      }
-
-      // Step 5: Check for deactivation
-      if (inscriptionContent.includes('🔥') && !metadata) {
-        return {
-          didDocument: null,
-          resolutionMetadata: {
-            inscriptionId,
-            satNumber,
-            deactivated: true,
-            message: 'DID has been deactivated'
-          },
-          didDocumentMetadata: {
-            deactivated: true,
-            inscriptionId
-          }
+      for (const inscriptionId of inscriptionIds) {
+        const inscriptionData: BtcoInscriptionData = {
+          inscriptionId,
+          content: '',
+          metadata: null
         };
-      }
 
-      // Step 6: Extract DID document from metadata
-      if (!metadata) {
-        return this.createErrorResult('invalidDidDocument', 
-          'No CBOR metadata found containing DID document'
-        );
-      }
-
-      let didDocument: DidDocument;
-      try {
-        // The DID document should be in the metadata
-        if (typeof metadata === 'object' && metadata !== null) {
-          didDocument = metadata as DidDocument;
-        } else {
-          return this.createErrorResult('invalidDidDocument', 
-            'Invalid DID document format in metadata'
-          );
-        }
-      } catch (error) {
-        return this.createErrorResult('invalidDidDocument', 
-          `Failed to parse DID document: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
-      }
-
-      // Step 7: Validate DID document
-      if (!didDocument.id) {
-        return this.createErrorResult('invalidDidDocument', 
-          'DID document missing required id field'
-        );
-      }
-
-      // Ensure the document ID matches the expected DID
-      if (didDocument.id !== expectedDid) {
-        return this.createErrorResult('invalidDidDocument', 
-          `DID document id (${didDocument.id}) does not match expected DID (${expectedDid})`
-        );
-      }
-
-      // Step 8: Validate DID document structure
-      if (!this.isValidDidDocument(didDocument)) {
-        return this.createErrorResult('invalidDidDocument', 
-          'DID document does not conform to DID Core specification'
-        );
-      }
-
-      // Log successful resolution
-      if (options.enableAudit || this.options.enableAudit) {
-        await logDidDocumentResolution(
-          didDocument.id,
-          options.actor || this.options.actor,
-          {
-            inscriptionId,
-            satNumber,
-            network,
-            resolutionTimeMs: Date.now() - startTime
+        try {
+          // Get inscription details
+          const inscription = await provider.resolveInscription(inscriptionId);
+          if (!inscription) {
+            inscriptionData.error = `Inscription ${inscriptionId} not found`;
+            inscriptionDataList.push(inscriptionData);
+            continue;
           }
-        );
+          
+          inscriptionData.contentUrl = inscription.content_url;
+
+          // Fetch the actual content from the content URL
+          try {
+            const response = await fetch(inscription.content_url);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            inscriptionData.content = await response.text();
+          } catch (error) {
+            inscriptionData.error = `Failed to fetch content: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            inscriptionDataList.push(inscriptionData);
+            continue;
+          }
+
+          console.log(`[BtcoDidResolver] Inscription ${inscriptionId}: ${inscriptionData.content}`);
+          
+          // Extract CBOR metadata
+          try {
+            inscriptionData.metadata = await provider.getMetadata(inscriptionId);
+            console.log(`[BtcoDidResolver] Metadata for ${inscriptionId}: ${JSON.stringify(inscriptionData.metadata)}`);
+          } catch (error) {
+            console.warn(`Failed to decode CBOR metadata for ${inscriptionId}:`, error);
+            inscriptionData.metadata = null;
+          }
+
+          // Check if this inscription contains a valid DID
+          inscriptionData.isValidDid = didPattern.test(inscriptionData.content);
+
+          // If it's a valid DID inscription, try to extract the DID document
+          if (inscriptionData.isValidDid && inscriptionData.metadata) {
+            try {
+              if (typeof inscriptionData.metadata === 'object' && inscriptionData.metadata !== null) {
+                const didDocument = inscriptionData.metadata as DidDocument;
+                
+                // Validate the DID document
+                if (this.isValidDidDocument(didDocument) && didDocument.id === expectedDid) {
+                  inscriptionData.didDocument = didDocument;
+                } else {
+                  inscriptionData.error = 'Invalid DID document structure or mismatched ID';
+                }
+              }
+            } catch (error) {
+              inscriptionData.error = `Failed to parse DID document: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            }
+          }
+
+          // Check for deactivation marker
+          if (inscriptionData.content.includes('🔥')) {
+            inscriptionData.didDocument = null;
+            if (!inscriptionData.error) {
+              inscriptionData.error = 'DID has been deactivated';
+            }
+          }
+
+        } catch (error) {
+          inscriptionData.error = `Failed to process inscription: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        }
+
+        inscriptionDataList.push(inscriptionData);
+      }
+
+      // Find the most recent valid DID document for backward compatibility
+      let latestValidDidDocument: DidDocument | null = null;
+      let latestInscriptionId: string | undefined;
+
+      // Process inscriptions in reverse order (most recent first)
+      for (let i = inscriptionDataList.length - 1; i >= 0; i--) {
+        const inscriptionData = inscriptionDataList[i];
+        if (inscriptionData.didDocument && !inscriptionData.error) {
+          latestValidDidDocument = inscriptionData.didDocument;
+          latestInscriptionId = inscriptionData.inscriptionId;
+          break;
+        }
       }
 
       return {
-        didDocument,
+        didDocument: latestValidDidDocument,
+        inscriptions: inscriptionDataList,
         resolutionMetadata: {
           contentType: 'application/did+ld+json',
-          inscriptionId,
+          inscriptionId: latestInscriptionId,
           satNumber,
-          network
+          network,
+          totalInscriptions: inscriptionDataList.length
         },
         didDocumentMetadata: {
-          inscriptionId,
+          inscriptionId: latestInscriptionId,
           network
         }
       };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error during resolution';
-      
-      if (options.enableAudit || this.options.enableAudit) {
-        await logDidDocumentResolution(
-          did,
-          options.actor || this.options.actor,
-          {
-            error: errorMessage,
-            resolutionTimeMs: Date.now() - startTime
-          }
-        );
-      }
       
       return this.createErrorResult('internalError', errorMessage);
     }

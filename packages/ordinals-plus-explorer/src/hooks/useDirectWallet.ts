@@ -9,6 +9,7 @@ export interface Utxo {
   vout: number;
   value: number; // Amount in satoshis
   scriptPubKey?: string; // Optional script pubkey hex
+  satNumber?: number; // Add satNumber property
 }
 
 interface DirectWalletHook {

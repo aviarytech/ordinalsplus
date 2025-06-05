@@ -4,6 +4,8 @@ import { parseResourceId, parseBtcoDid } from '../../utils/validators';
 import { fetchWithTimeout } from '../../utils/fetch-utils';
 import { createLinkedResourceFromInscription } from '../../resources/linked-resource';
 import { ResourceProvider, ResourceCrawlOptions, ResourceBatch, InscriptionRefWithLocation } from './types';
+import { extractCborMetadata } from '../../utils/cbor-utils';
+import { hexToBytes } from '@noble/hashes/utils';
 
 export interface OrdNodeProviderOptions {
     nodeUrl: string;
@@ -47,20 +49,18 @@ interface OrdNodeFullInscriptionResponse {
 
 export class OrdNodeProvider implements ResourceProvider {
     private readonly nodeUrl: string;
-    private readonly apiKey?: string;
     private readonly timeout: number;
     private readonly network: BitcoinNetwork;
     private readonly batchSize: number;
 
     constructor(options: OrdNodeProviderOptions, batchSize: number = 100) {
         this.nodeUrl = options.nodeUrl.endsWith('/') ? options.nodeUrl.slice(0, -1) : options.nodeUrl;
-        this.apiKey = options.apiKey;
         this.timeout = options.timeout || 5000;
         this.network = options.network || 'mainnet';
         this.batchSize = batchSize;
     }
 
-    protected async fetchApi<T>(endpoint: string): Promise<OrdNodeApiResponse<T>> {
+    protected async fetchApi<T>(endpoint: string): Promise<OrdNodeApiResponse<T> | T> {
         const response = await fetchWithTimeout<OrdNodeApiResponse<T>>(
             `${this.nodeUrl}${endpoint}`,
             {
@@ -93,7 +93,6 @@ export class OrdNodeProvider implements ResourceProvider {
             transaction: string;
             value: number;
         }>(`/output/${outpoint}`);
-        
         if (!response.sat_ranges || response.sat_ranges.length === 0 || response.sat_ranges[0].length === 0) {
             throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No sat ranges found for output ${outpoint}`);
         }
@@ -104,8 +103,9 @@ export class OrdNodeProvider implements ResourceProvider {
 
     async getMetadata(inscriptionId: string): Promise<any> {
         try {
-            const response = await this.fetchApi<any>(`/r/metadata/${inscriptionId}`);
-            return response;
+            const response = await this.fetchApi<string>(`/r/metadata/${inscriptionId}`);
+            console.log(`[OrdNodeProvider] Metadata response: ${JSON.stringify(response)}`);
+            return extractCborMetadata(hexToBytes(response as string));
         } catch (error) {
             console.warn(`[OrdNodeProvider] Failed to retrieve metadata for inscription ${inscriptionId}:`, error);
             return null;
@@ -145,7 +145,7 @@ export class OrdNodeProvider implements ResourceProvider {
     async resolveInfo(inscriptionId: string): Promise<ResourceInfo> {
         const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
-            id: response.inscription_id,
+            id: response.id,
             type: response.content_type,
             contentType: response.content_type,
             createdAt: new Date().toISOString(),
@@ -270,7 +270,7 @@ export class OrdNodeProvider implements ResourceProvider {
     async getInscription(inscriptionId: string): Promise<Inscription> {
         const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
-            id: response.inscription_id,
+            id: response.id,
             sat: response.sat,
             content_type: response.content_type,
             content_url: response.content_url
