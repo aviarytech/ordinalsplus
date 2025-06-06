@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import DidDocumentViewer from './DidDocumentViewer';
 import LinkedResourceList from './LinkedResourceList';
+import VerifiableMetadataViewer from './VerifiableMetadataViewer';
 import { DidDocument, LinkedResource } from 'ordinalsplus';
 import { useNetwork } from '../context/NetworkContext';
 import { useApi } from '../context/ApiContext';
@@ -166,7 +167,7 @@ interface ApiResolutionResult {
 }
 
 const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplorerProps) => {
-  const [searchQuery, setSearchQuery] = useState('did:btco:sig:YOUR_SATOSHI_NUMBER_HERE');
+  const [searchQuery, setSearchQuery] = useState('did:btco:sig:1157280385118455');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [didDocument, setDidDocument] = useState<DidDocument | null>(null);
@@ -211,7 +212,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
             didDocument: result.didDocument,
             inscriptions: result.inscriptions,
             resolutionMetadata: {
-              contentType: result.resolutionMetadata?.contentType || 'application/did+ld+json',
+              contentType: result.resolutionMetadata?.contentType,
               inscriptionId: result.resolutionMetadata?.inscriptionId,
               satNumber: result.resolutionMetadata?.satNumber,
               network: result.resolutionMetadata?.network,
@@ -467,12 +468,11 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
                 </div>
                 
                 {inscription.metadata && (
-                  <div>
-                    <span className="font-medium text-gray-600 dark:text-gray-400">Metadata:</span>
-                    <div className="mt-1 p-2 bg-gray-100 dark:bg-gray-600 rounded text-xs font-mono break-all max-h-20 overflow-y-auto">
-                      {JSON.stringify(inscription.metadata, null, 2)}
-                    </div>
-                  </div>
+                  <VerifiableMetadataViewer 
+                    inscriptionId={inscription.inscriptionId}
+                    metadata={inscription.metadata}
+                    autoVerify={false}
+                  />
                 )}
                 
                 {inscription.error && (

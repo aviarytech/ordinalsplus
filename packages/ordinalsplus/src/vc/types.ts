@@ -157,8 +157,12 @@ export interface CredentialIssuanceParams {
   issuerDid: string;
   /** Metadata from the inscription */
   metadata: InscriptionMetadata;
-  /** Technical information about the content */
-  contentInfo: ContentInfo;
+  /** Pre-computed technical information about the content */
+  contentInfo?: ContentInfo;
+  /** Raw content bytes (alternative to contentInfo) */
+  content?: Uint8Array;
+  /** MIME type of the content (required if content is provided) */
+  contentType?: string;
 }
 
 /**

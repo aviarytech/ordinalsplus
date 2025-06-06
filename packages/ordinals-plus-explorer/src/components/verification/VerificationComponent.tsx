@@ -23,6 +23,12 @@ interface VerificationComponentProps {
   autoVerify?: boolean;
   /** Whether to show detailed results by default */
   showDetailedResults?: boolean;
+  /** Optional inscription data if already available */
+  inscriptionData?: {
+    contentBase64?: string;
+    contentType?: string;
+    metadata?: any;
+  };
 }
 
 /**
@@ -33,7 +39,8 @@ export const VerificationComponent: React.FC<VerificationComponentProps> = ({
   verificationService,
   className = '',
   autoVerify = false,
-  showDetailedResults = true
+  showDetailedResults = true,
+  inscriptionData
 }) => {
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [loading, setLoading] = useState(autoVerify);
@@ -42,7 +49,21 @@ export const VerificationComponent: React.FC<VerificationComponentProps> = ({
   const verifyInscription = async (id: string) => {
     setLoading(true);
     try {
-      const verificationResult = await verificationService.verifyInscription(id);
+      let verificationResult: VerificationResult;
+      
+      if (inscriptionData) {
+        // Use the provided inscription data directly
+        verificationResult = await verificationService.verifyInscriptionData(inscriptionData, id);
+      } else {
+        // This will result in an error since verifyInscription requires data
+        // We'll create a helpful error message instead
+        verificationResult = {
+          status: VerificationStatus.ERROR,
+          message: 'Inscription data not available - cannot verify without fetching data first',
+          error: new Error('Inscription data required for verification')
+        };
+      }
+      
       setResult(verificationResult);
     } catch (error) {
       setResult({
@@ -60,7 +81,7 @@ export const VerificationComponent: React.FC<VerificationComponentProps> = ({
     if (autoVerify) {
       verifyInscription(inscriptionId);
     }
-  }, [inscriptionId, autoVerify]);
+  }, [inscriptionId, autoVerify, inscriptionData]);
 
   return (
     <div className={`verification-container ${className}`}>
@@ -73,19 +94,28 @@ export const VerificationComponent: React.FC<VerificationComponentProps> = ({
             inscriptionId={inscriptionId}
             onVerify={verifyInscription}
             status={result?.status}
-            disabled={loading}
+            disabled={loading || !inscriptionData}
           />
         ) : (
           <button
             type="button"
             onClick={() => verifyInscription(inscriptionId)}
             className="text-xs text-indigo-600 hover:text-indigo-800"
-            disabled={loading}
+            disabled={loading || !inscriptionData}
           >
             Verify Again
           </button>
         )}
       </div>
+      
+      {/* Warning if no inscription data */}
+      {!inscriptionData && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+          <p className="text-sm text-yellow-800">
+            Inscription data not available - verification disabled
+          </p>
+        </div>
+      )}
       
       {/* Verification Status */}
       {(loading || result) && (

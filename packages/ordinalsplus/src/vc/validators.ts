@@ -362,24 +362,6 @@ export function validateCredential(credential: any): ValidationResult {
     errors.push(...issuerResult.errors);
   }
   
-  // Validate issuanceDate
-  if (!credential.issuanceDate) {
-    errors.push('Credential must have an issuanceDate property');
-  } else {
-    const dateResult = validateDate(credential.issuanceDate, 'issuanceDate');
-    if (!dateResult.valid && dateResult.errors) {
-      errors.push(...dateResult.errors);
-    }
-  }
-  
-  // Validate expirationDate if present
-  if (credential.expirationDate) {
-    const dateResult = validateDate(credential.expirationDate, 'expirationDate');
-    if (!dateResult.valid && dateResult.errors) {
-      errors.push(...dateResult.errors);
-    }
-  }
-  
   // Validate credentialSubject
   const subjectResult = validateSubject(credential.credentialSubject);
   if (!subjectResult.valid && subjectResult.errors) {

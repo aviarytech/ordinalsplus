@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@digitalcredentials/vc": "^10.0.0",
     "@noble/curves": "^1.9.0",
     "@noble/secp256k1": "^2.2.3",
     "@scure/btc-signer": "^1.8.0",

@@ -649,15 +649,60 @@ class ApiService {
   }
 
   /**
-   * Gets the first sat number from a UTXO's sat ranges
+   * Get satoshi number for a given UTXO
    */
   async getSatNumber(networkType: string, utxo: string): Promise<number> {
-    const url = this.buildUrl(`/api/utxo/${utxo}/sat-number`, networkType);
-    console.log(`[ApiService] Getting sat number for UTXO: ${url}`);
+    const url = this.buildUrl(`/api/sat-number/${encodeURIComponent(utxo)}`, networkType);
+    console.log(`[ApiService] Getting sat number: ${url}`);
     
     const response = await fetch(url);
     const result = await handleApiResponse<{ satNumber: number }>(response);
     return result.satNumber;
+  }
+
+  /**
+   * Verify a credential using backend verification
+   */
+  async verifyCredential(credential: any): Promise<{
+    status: string;
+    message?: string;
+    issuer?: any;
+    verifiedAt?: Date;
+  }> {
+    const url = `${this.baseUrl}/api/verify/credential`;
+    console.log(`[ApiService] Verifying credential: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential })
+    });
+    
+    return await handleApiResponse<{
+      status: string;
+      message?: string;
+      issuer?: any;
+      verifiedAt?: Date;
+    }>(response);
+  }
+
+  /**
+   * Get issuer information for a DID
+   */
+  async getIssuerInfo(did: string): Promise<{
+    status: string;
+    message?: string;
+    issuer: any;
+  }> {
+    const url = `${this.baseUrl}/api/verify/issuer/${encodeURIComponent(did)}`;
+    console.log(`[ApiService] Getting issuer info: ${url}`);
+    
+    const response = await fetch(url);
+    return await handleApiResponse<{
+      status: string;
+      message?: string;
+      issuer: any;
+    }>(response);
   }
 }
 

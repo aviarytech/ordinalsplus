@@ -181,12 +181,14 @@ export class BtcoDidResolver {
   async resolve(did: string, options: BtcoDidResolutionOptions = {}): Promise<BtcoDidResolutionResult> {
     try {
       // Step 1: Parse the DID
+      console.log('resolving did', did);
       const parsed = this.parseBtcoDid(did);
       if (!parsed) {
         return this.createErrorResult('invalidDid', `Invalid BTCO DID format: ${did}`);
       }
 
       const { satNumber, path, network } = parsed;
+      console.log('network', network);
       
       // Use provided provider or create a default one for the network
       const provider = options.provider || this.options.provider || this.createDefaultProvider(network);
@@ -309,7 +311,6 @@ export class BtcoDidResolver {
         didDocument: latestValidDidDocument,
         inscriptions: inscriptionDataList,
         resolutionMetadata: {
-          contentType: 'application/did+ld+json',
           inscriptionId: latestInscriptionId,
           satNumber,
           network,

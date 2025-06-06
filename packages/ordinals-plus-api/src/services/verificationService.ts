@@ -4,15 +4,24 @@
  * This service handles verification of inscriptions and credentials by connecting
  * to verification providers and managing the verification process.
  */
-import { VerificationStatus, VerificationResult, IssuerInfo } from '../types/verification';
+import { VerificationStatus, type VerificationResult, type IssuerInfo } from '../types/verification';
 import { ApiService } from './apiService';
 import { logger } from '../utils/logger';
+import { BtcoDidResolver } from 'ordinalsplus';
 
 /**
  * Cache entry for verification results
  */
-interface CacheEntry {
+interface VerificationCacheEntry {
   result: VerificationResult;
+  timestamp: number;
+}
+
+/**
+ * Cache entry for issuer info
+ */
+interface IssuerCacheEntry {
+  result: IssuerInfo;
   timestamp: number;
 }
 
@@ -24,6 +33,11 @@ export interface VerificationServiceConfig {
   cacheTtlMs?: number;
   /** Whether to enable debug logging */
   enableDebugLogging?: boolean;
+  /** ACES API configuration for VC verification */
+  acesApiUrl?: string;
+  acesApiKey?: string;
+  /** Platform DID for verification operations */
+  platformDid?: string;
 }
 
 /**
@@ -38,8 +52,10 @@ const DEFAULT_CONFIG: VerificationServiceConfig = {
  * Service for verifying inscriptions and credentials
  */
 export class VerificationService {
-  private cache: Map<string, CacheEntry> = new Map();
+  private verificationCache: Map<string, VerificationCacheEntry> = new Map();
+  private issuerCache: Map<string, IssuerCacheEntry> = new Map();
   private config: VerificationServiceConfig;
+  private didResolver: BtcoDidResolver;
 
   /**
    * Create a new verification service
@@ -53,6 +69,9 @@ export class VerificationService {
   ) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logDebug('VerificationService initialized');
+    
+    // Initialize DID resolver with server-side capabilities
+    this.didResolver = new BtcoDidResolver();
   }
 
   /**
@@ -66,29 +85,52 @@ export class VerificationService {
     
     // Check cache first
     const cacheKey = `inscription:${inscriptionId}`;
-    const cachedResult = this.getCachedResult(cacheKey);
+    const cachedResult = this.getCachedVerificationResult(cacheKey);
     if (cachedResult) {
       this.logDebug(`Cache hit for inscription: ${inscriptionId}`);
       return cachedResult;
     }
 
     try {
-      // Fetch the credential metadata from the inscription
-      const response = await this.apiService.get(`/inscriptions/${inscriptionId}/metadata`);
+      // Try to get metadata from inscription using Ordiscan API
+      let metadata: any = null;
       
-      if (!response.data || !response.data.credential) {
+      try {
+        metadata = await this.fetchInscriptionMetadata(inscriptionId);
+      } catch (fetchError) {
+        this.logDebug(`Failed to get metadata: ${fetchError}`);
+        // Fallback to existing API call if available
+        try {
+          const response = await this.apiService.get(`/inscriptions/${inscriptionId}/metadata`);
+          metadata = response.data;
+        } catch (apiError) {
+          this.logDebug(`Failed to get metadata from API: ${apiError}`);
+        }
+      }
+      
+      if (!metadata) {
         const noMetadataResult: VerificationResult = {
           status: VerificationStatus.NO_METADATA,
           message: 'No verifiable metadata found for this inscription',
           inscriptionId
         };
-        this.cacheResult(cacheKey, noMetadataResult);
+        this.cacheVerificationResult(cacheKey, noMetadataResult);
         return noMetadataResult;
       }
       
+      // Check if metadata is a verifiable credential
+      if (!this.isVerifiableCredential(metadata)) {
+        const notVcResult: VerificationResult = {
+          status: VerificationStatus.NO_METADATA,
+          message: 'Inscription metadata is not a verifiable credential',
+          inscriptionId
+        };
+        this.cacheVerificationResult(cacheKey, notVcResult);
+        return notVcResult;
+      }
+      
       // Verify the credential
-      const credential = response.data.credential;
-      const result = await this.verifyCredential(credential);
+      const result = await this.verifyCredential(metadata);
       
       // Add inscription ID to the result for reference
       const resultWithInscription = {
@@ -96,7 +138,7 @@ export class VerificationService {
         inscriptionId
       };
       
-      this.cacheResult(cacheKey, resultWithInscription);
+      this.cacheVerificationResult(cacheKey, resultWithInscription);
       return resultWithInscription;
     } catch (error) {
       this.logDebug(`Error verifying inscription: ${error}`);
@@ -108,7 +150,7 @@ export class VerificationService {
         inscriptionId
       };
       
-      this.cacheResult(cacheKey, errorResult);
+      this.cacheVerificationResult(cacheKey, errorResult);
       return errorResult;
     }
   }
@@ -120,30 +162,19 @@ export class VerificationService {
    * @returns Promise resolving to verification result
    */
   async verifyCredential(credential: any): Promise<VerificationResult> {
-    if (!credential || !credential.id) {
-      return {
-        status: VerificationStatus.ERROR,
-        message: 'Invalid credential: missing ID'
-      };
-    }
+    this.logDebug(`Verifying credential: ${credential.id || 'no-id'}`);
     
-    this.logDebug(`Verifying credential: ${credential.id}`);
-    
-    // Check cache first
-    const cacheKey = `credential:${credential.id}`;
-    const cachedResult = this.getCachedResult(cacheKey);
+    // Check cache first (use id or generate cache key from content)
+    const cacheKey = `credential:${credential.id || JSON.stringify(credential).substring(0, 100)}`;
+    const cachedResult = this.getCachedVerificationResult(cacheKey);
     if (cachedResult) {
-      this.logDebug(`Cache hit for credential: ${credential.id}`);
+      this.logDebug(`Cache hit for credential`);
       return cachedResult;
     }
 
     try {
-      // Call the API to verify the credential
-      const response = await this.apiService.post('/verifiable-credentials/verify', {
-        credential
-      });
-      
-      const isValid = response.data?.valid === true;
+      // Basic verification without external dependencies
+      const isValid = await this.basicVerifyCredential(credential);
       
       let result: VerificationResult;
       
@@ -165,12 +196,12 @@ export class VerificationService {
       } else {
         result = {
           status: VerificationStatus.INVALID,
-          message: response.data?.message || 'Credential verification failed',
+          message: 'Credential verification failed',
           credential
         };
       }
       
-      this.cacheResult(cacheKey, result);
+      this.cacheVerificationResult(cacheKey, result);
       return result;
     } catch (error) {
       this.logDebug(`Error verifying credential: ${error}`);
@@ -182,46 +213,198 @@ export class VerificationService {
         error: error instanceof Error ? error : new Error(String(error))
       };
       
-      this.cacheResult(cacheKey, errorResult);
+      this.cacheVerificationResult(cacheKey, errorResult);
       return errorResult;
     }
   }
 
   /**
-   * Get issuer information for a DID
+   * Basic verification of a credential structure and DID resolution
+   * 
+   * @param credential - The credential to verify
+   * @returns Promise resolving to verification result
+   */
+  private async basicVerifyCredential(credential: any): Promise<boolean> {
+    try {
+      // Basic structure validation
+      if (!this.isVerifiableCredential(credential)) {
+        return false;
+      }
+      
+      // Verify issuer DID exists and is valid
+      const issuerDid = typeof credential.issuer === 'string' 
+        ? credential.issuer 
+        : credential.issuer.id;
+      
+      if (!issuerDid) {
+        return false;
+      }
+      
+      // Resolve the DID to verify it exists and is valid
+      try {
+        const didResolution = await this.didResolver.resolve(issuerDid);
+        
+        if (didResolution.resolutionMetadata.error) {
+          this.logDebug(`DID resolution failed: ${didResolution.resolutionMetadata.error}`);
+          return false;
+        }
+        
+        if (!didResolution.didDocument) {
+          this.logDebug('No DID document found');
+          return false;
+        }
+        
+        // Verify the DID document ID matches the issuer DID
+        if (didResolution.didDocument.id !== issuerDid) {
+          this.logDebug(`DID document ID mismatch: expected ${issuerDid}, got ${didResolution.didDocument.id}`);
+          return false;
+        }
+        
+        return true;
+      } catch (error) {
+        this.logDebug(`DID resolution error: ${error}`);
+        return false;
+      }
+    } catch (error) {
+      this.logDebug(`Basic verification error: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Fetch inscription metadata using the Ordiscan API
+   * 
+   * @param inscriptionId - The inscription ID
+   * @returns Promise resolving to metadata
+   */
+  private async fetchInscriptionMetadata(inscriptionId: string): Promise<any> {
+    const apiKey = process.env.ORDISCAN_API_KEY;
+    if (!apiKey) {
+      throw new Error('Ordiscan API key not configured');
+    }
+    
+    try {
+      const response = await fetch(`https://api.ordiscan.com/v1/inscription/${inscriptionId}/metadata`, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.text();
+      
+      // Try to decode CBOR if it's hex-encoded
+      if (data && data.length > 0) {
+        try {
+          // Simple hex decode and assume JSON content for now
+          const hexMatch = data.match(/^[0-9a-fA-F]+$/);
+          if (hexMatch) {
+            // Convert hex to bytes and try to decode as JSON
+            const bytes = new Uint8Array(data.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+            const decoded = new TextDecoder().decode(bytes);
+            return JSON.parse(decoded);
+          } else {
+            // Try to parse as JSON directly
+            return JSON.parse(data);
+          }
+        } catch (parseError) {
+          // If parsing fails, return the raw data
+          return { rawData: data };
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      throw new Error(`Failed to fetch inscription metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Check if an object is a valid verifiable credential
+   * 
+   * @param obj - Object to check
+   * @returns True if it's a valid VC structure
+   */
+  private isVerifiableCredential(obj: any): boolean {
+    if (!obj || typeof obj !== 'object') {
+      return false;
+    }
+    
+    // Check for required VC fields according to W3C VC spec
+    return (
+      obj['@context'] &&
+      obj.type &&
+      (Array.isArray(obj.type) ? obj.type.includes('VerifiableCredential') : obj.type === 'VerifiableCredential') &&
+      obj.issuer &&
+      obj.credentialSubject
+    );
+  }
+
+  /**
+   * Get issuer information for a DID using BTCO DID resolution
    * 
    * @param did - The DID to get information for
    * @returns Promise resolving to issuer information
    */
   async getIssuerInfo(did: string): Promise<IssuerInfo> {
-    this.logDebug(`Getting issuer info for DID: ${did}`);
+    this.logDebug(`Getting issuer info for: ${did}`);
     
     // Check cache first
-    const cacheKey = `issuer:${did}`;
-    const cachedResult = this.getCachedResult(cacheKey);
+    const cacheKey = did;
+    const cachedResult = this.getCachedIssuerInfo(cacheKey);
     if (cachedResult) {
       this.logDebug(`Cache hit for issuer: ${did}`);
       return cachedResult;
     }
 
     try {
-      // Call the API to get issuer info
-      const response = await this.apiService.get(`/did/${did}`);
+      // Resolve the DID using BTCO DID resolver
+      const didResolution = await this.didResolver.resolve(did);
+      
+      if (didResolution.resolutionMetadata.error) {
+        throw new Error(`DID resolution failed: ${didResolution.resolutionMetadata.error}`);
+      }
+      
+      const didDocument = didResolution.didDocument;
+      
+      if (!didDocument) {
+        throw new Error('No DID document found');
+      }
+      
+      // Extract service endpoint URL, handling array case
+      let serviceUrl: string | undefined;
+      if (didDocument.service && Array.isArray(didDocument.service) && didDocument.service.length > 0) {
+        const firstService = didDocument.service[0];
+        if (firstService) {
+          serviceUrl = typeof firstService.serviceEndpoint === 'string' 
+            ? firstService.serviceEndpoint 
+            : undefined;
+        }
+      }
       
       const issuerInfo: IssuerInfo = {
         did,
-        name: response.data?.name,
-        url: response.data?.url,
-        avatar: response.data?.avatar
+        name: didDocument.id || did,
+        url: serviceUrl,
+        avatar: (didDocument as any).image || undefined,
+        didDocument: didDocument // Include the full DID document for frontend use
       };
       
-      this.cacheResult(cacheKey, issuerInfo);
+      // Cache the issuer info
+      this.cacheIssuerInfo(cacheKey, issuerInfo);
+      
       return issuerInfo;
     } catch (error) {
       this.logDebug(`Error getting issuer info: ${error}`);
       
-      // Return basic info if we can't get detailed info
-      return { did };
+      // Return basic info with just the DID if resolution fails
+      const basicIssuerInfo: IssuerInfo = { did };
+      this.cacheIssuerInfo(cacheKey, basicIssuerInfo);
+      return basicIssuerInfo;
     }
   }
 
@@ -229,34 +412,64 @@ export class VerificationService {
    * Clear the verification cache
    */
   clearCache(): void {
-    this.cache.clear();
+    this.verificationCache.clear();
+    this.issuerCache.clear();
     this.logDebug('Verification cache cleared');
   }
 
   /**
-   * Get a cached result if it exists and is not expired
+   * Get a cached verification result if it exists and is not expired
    * 
    * @param key - Cache key
    * @returns Cached result or undefined
    */
-  private getCachedResult<T>(key: string): T | undefined {
-    const entry = this.cache.get(key);
+  private getCachedVerificationResult(key: string): VerificationResult | undefined {
+    const entry = this.verificationCache.get(key);
     
     if (entry && Date.now() - entry.timestamp < this.config.cacheTtlMs!) {
-      return entry.result as T;
+      return entry.result;
     }
     
     return undefined;
   }
 
   /**
-   * Cache a result
+   * Get a cached issuer info if it exists and is not expired
+   * 
+   * @param key - Cache key
+   * @returns Cached result or undefined
+   */
+  private getCachedIssuerInfo(key: string): IssuerInfo | undefined {
+    const entry = this.issuerCache.get(key);
+    
+    if (entry && Date.now() - entry.timestamp < this.config.cacheTtlMs!) {
+      return entry.result;
+    }
+    
+    return undefined;
+  }
+
+  /**
+   * Cache a verification result
    * 
    * @param key - Cache key
    * @param result - Result to cache
    */
-  private cacheResult<T>(key: string, result: T): void {
-    this.cache.set(key, {
+  private cacheVerificationResult(key: string, result: VerificationResult): void {
+    this.verificationCache.set(key, {
+      result,
+      timestamp: Date.now()
+    });
+  }
+
+  /**
+   * Cache issuer info
+   * 
+   * @param key - Cache key
+   * @param result - Result to cache
+   */
+  private cacheIssuerInfo(key: string, result: IssuerInfo): void {
+    this.issuerCache.set(key, {
       result,
       timestamp: Date.now()
     });

@@ -350,14 +350,15 @@ const TransactionStep: React.FC = () => {
       // Process metadata
       let metadataObj: Record<string, any> = {};
       
-      // Add standard metadata fields
-      if (state.metadata.standard) {
-        metadataObj = { ...state.metadata.standard };
+      // Add verifiable credential properties directly at the top level if available
+      if (state.metadata.verifiableCredential && state.metadata.verifiableCredential.credential) {
+        // Place VC properties directly at the top level (W3C VC spec compliant)
+        metadataObj = { ...state.metadata.verifiableCredential.credential };
       }
       
-      // Add verifiable credential if available
-      if (state.metadata.verifiableCredential && state.metadata.verifiableCredential.credential) {
-        metadataObj.verifiableCredential = state.metadata.verifiableCredential.credential;
+      // Add standard metadata fields (these will merge with or override VC properties if both exist)
+      if (state.metadata.standard) {
+        metadataObj = { ...metadataObj, ...state.metadata.standard };
       }
       
       // Convert walletNetwork to the expected BitcoinNetwork type for ordinalsplus

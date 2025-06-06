@@ -1,5 +1,6 @@
 import { OrdiscanProvider } from './resources/providers/ordiscan-provider';
 import { OrdNodeProvider } from './resources/providers/ord-node-provider';
+import { StaticDataProvider } from './resources/providers/static-data-provider';
 
 // --- Type Exports ---
 // Export all types directly from the types index
@@ -74,7 +75,7 @@ export {
 
 export { OrdiscanProvider } from './resources/providers/ordiscan-provider';
 
-export { OrdiscanProvider as default, OrdNodeProvider };
+export { OrdiscanProvider as default, OrdNodeProvider, StaticDataProvider };
 
 export * from './utils/constants';
 
@@ -124,3 +125,7 @@ export {
   OrdinalsIndexer,
   MemoryIndexerDatabase
 } from './indexer';
+
+export {
+    VCService
+} from './vc/service';

@@ -69,6 +69,8 @@ export interface IssuerInfo {
   url?: string;
   /** Avatar/logo of the issuer, if available */
   avatar?: string;
+  /** The resolved DID document, if available */
+  didDocument?: any;
 }
 
 /**
@@ -97,9 +99,19 @@ export interface IVerificationService {
    * Verify an inscription by its ID
    * 
    * @param inscriptionId - The ID of the inscription to verify
+   * @param existingInscriptionData - The existing inscription data to verify (required to avoid refetching)
+   * @param network - Optional network override
    * @returns Promise resolving to verification result
    */
-  verifyInscription(inscriptionId: string): Promise<VerificationResult>;
+  verifyInscription(
+    inscriptionId: string,
+    existingInscriptionData: {
+      contentBase64?: string;
+      contentType?: string;
+      metadata?: any;
+    },
+    network?: 'mainnet' | 'testnet' | 'signet'
+  ): Promise<VerificationResult>;
   
   /**
    * Verify a credential directly

@@ -1,17 +1,19 @@
 /**
  * Verification Service
  * 
- * This service handles verification of inscriptions and credentials by connecting
- * to the Ordinals Plus API's VCService.
+ * This service handles verification of inscriptions and credentials by calling
+ * the backend API which performs DID resolution server-side.
  */
-import { ApiService } from './apiService';
-import type { VerifiableCredential } from 'ordinalsplus';
+import ApiService from './apiService';
 import { 
   VerificationStatus, 
   VerificationResult, 
   IssuerInfo,
-  IVerificationService 
+  IVerificationService,
+  VerifiableCredential 
 } from '../types/verification';
+import { VCService } from 'ordinalsplus'
+import { StaticDataProvider, StaticSatData } from '../../../ordinalsplus/src/resources/providers/static-data-provider'
 
 /**
  * Cache entry for verification results
@@ -40,7 +42,8 @@ const DEFAULT_CONFIG: VerificationServiceConfig = {
 };
 
 /**
- * Service for verifying inscriptions and credentials
+ * Frontend service for verifying inscriptions and credentials
+ * This service calls the backend API for verification and DID resolution
  */
 export class VerificationService implements IVerificationService {
   private cache: Map<string, CacheEntry> = new Map();
@@ -64,10 +67,26 @@ export class VerificationService implements IVerificationService {
    * Verify an inscription by its ID
    * 
    * @param inscriptionId - The ID of the inscription to verify
+   * @param existingInscriptionData - The existing inscription data to verify (required to avoid refetching)
+   * @param network - Optional network override
    * @returns Promise resolving to verification result
    */
-  async verifyInscription(inscriptionId: string): Promise<VerificationResult> {
+  async verifyInscription(
+    inscriptionId: string,
+    existingInscriptionData: {
+      contentBase64?: string;
+      contentType?: string;
+      metadata?: any;
+    },
+    network?: 'mainnet' | 'testnet' | 'signet'
+  ): Promise<VerificationResult> {
     this.logDebug(`Verifying inscription: ${inscriptionId}`);
+    this.logDebug(`Inscription data received: ${JSON.stringify({
+      hasContentBase64: !!existingInscriptionData?.contentBase64,
+      hasContentType: !!existingInscriptionData?.contentType,
+      hasMetadata: !!existingInscriptionData?.metadata,
+      contentLength: existingInscriptionData?.contentBase64?.length || 0
+    })}`);
     
     // Check cache first
     const cacheKey = `inscription:${inscriptionId}`;
@@ -78,35 +97,78 @@ export class VerificationService implements IVerificationService {
     }
 
     try {
-      // Set initial loading state
-      const loadingResult: VerificationResult = {
-        status: VerificationStatus.LOADING
-      };
+      // Validate that inscription data was provided
+      if (!existingInscriptionData) {
+        const errorResult: VerificationResult = {
+          status: VerificationStatus.ERROR,
+          message: 'No inscription data provided - data is required to avoid API calls'
+        };
+        this.cacheResult(cacheKey, errorResult);
+        return errorResult;
+      }
+
+      // Use provided network or default
+      const targetNetwork = network || 'signet';
+      this.logDebug(`Using network: ${targetNetwork} for inscription ${inscriptionId}`);
+
+      let metadata: any;
+
+      // Always use existing data since it's now required
+      this.logDebug(`Using provided inscription data for ${inscriptionId}`);
       
-      // Fetch the credential metadata from the inscription
-      const response = await this.apiService.get(`/inscriptions/${inscriptionId}/metadata`);
-      
-      if (!response.data || !response.data.credential) {
+      if (existingInscriptionData.metadata) {
+        // If metadata is directly provided, use it
+        metadata = existingInscriptionData.metadata;
+        this.logDebug(`Using directly provided metadata for ${inscriptionId}`);
+      } else if (existingInscriptionData.contentBase64) {
+        // If we have content, try to extract metadata from it
+        try {
+          const contentBuffer = Buffer.from(existingInscriptionData.contentBase64, 'base64');
+          const contentString = contentBuffer.toString('utf8');
+          metadata = JSON.parse(contentString);
+          this.logDebug(`Extracted metadata from content for ${inscriptionId}`);
+        } catch (parseError) {
+          this.logDebug(`Existing content is not JSON: ${parseError}`);
+          const noMetadataResult: VerificationResult = {
+            status: VerificationStatus.NO_METADATA,
+            message: 'Inscription content is not valid JSON metadata'
+          };
+          this.cacheResult(cacheKey, noMetadataResult);
+          return noMetadataResult;
+        }
+      } else {
         const noMetadataResult: VerificationResult = {
           status: VerificationStatus.NO_METADATA,
-          message: 'No verifiable metadata found for this inscription'
+          message: 'No content or metadata provided in inscription data'
         };
         this.cacheResult(cacheKey, noMetadataResult);
         return noMetadataResult;
       }
-      
+        
+      // If we still don't have metadata, the inscription doesn't contain a VC
+      if (!metadata) {
+        const noMetadataResult: VerificationResult = {
+          status: VerificationStatus.NO_METADATA,
+          message: 'Inscription does not contain verifiable credential metadata'
+        };
+        this.cacheResult(cacheKey, noMetadataResult);
+        return noMetadataResult;
+      }
+
+      // Check if metadata is a verifiable credential
+      if (!this.isVerifiableCredential(metadata)) {
+        const notVcResult: VerificationResult = {
+          status: VerificationStatus.NO_METADATA,
+          message: 'Inscription metadata is not a verifiable credential'
+        };
+        this.cacheResult(cacheKey, notVcResult);
+        return notVcResult;
+      }
+
       // Verify the credential
-      const credential = response.data.credential as VerifiableCredential;
-      const result = await this.verifyCredential(credential);
-      
-      // Add inscription ID to the result for reference
-      const resultWithInscription = {
-        ...result,
-        inscriptionId
-      };
-      
-      this.cacheResult(cacheKey, resultWithInscription);
-      return resultWithInscription;
+      const result = await this.verifyCredential(metadata);
+      this.cacheResult(cacheKey, result);
+      return result;
     } catch (error) {
       this.logDebug(`Error verifying inscription: ${error}`);
       
@@ -122,62 +184,32 @@ export class VerificationService implements IVerificationService {
   }
 
   /**
-   * Verify a credential directly
+   * Verify a credential directly using BtcoDidResolver for DID verification
    * 
    * @param credential - The credential to verify
    * @returns Promise resolving to verification result
    */
   async verifyCredential(credential: VerifiableCredential): Promise<VerificationResult> {
-    if (!credential || !credential.id) {
+    if (!credential || (!credential.id && !credential.issuer)) {
       return {
         status: VerificationStatus.ERROR,
-        message: 'Invalid credential: missing ID'
+        message: 'Invalid credential: missing required fields'
       };
     }
     
-    this.logDebug(`Verifying credential: ${credential.id}`);
+    this.logDebug(`Verifying credential: ${credential.id || 'no-id'}`);
     
     // Check cache first
-    const cacheKey = `credential:${credential.id}`;
+    const cacheKey = `credential:${credential.id || JSON.stringify(credential).substring(0, 100)}`;
     const cachedResult = this.getCachedResult(cacheKey);
     if (cachedResult) {
-      this.logDebug(`Cache hit for credential: ${credential.id}`);
+      this.logDebug(`Cache hit for credential`);
       return cachedResult;
     }
 
     try {
-      // Call the API to verify the credential
-      const response = await this.apiService.post('/verifiable-credentials/verify', {
-        credential
-      });
-      
-      const isValid = response.data?.valid === true;
-      
-      let result: VerificationResult;
-      
-      if (isValid) {
-        // Get issuer info if verification succeeded
-        const issuerDid = typeof credential.issuer === 'string' 
-          ? credential.issuer 
-          : credential.issuer.id;
-          
-        const issuerInfo = await this.getIssuerInfo(issuerDid);
-        
-        result = {
-          status: VerificationStatus.VALID,
-          message: 'Credential successfully verified',
-          credential,
-          issuer: issuerInfo,
-          verifiedAt: new Date()
-        };
-      } else {
-        result = {
-          status: VerificationStatus.INVALID,
-          message: response.data?.message || 'Credential verification failed',
-          credential
-        };
-      }
-      
+      // Use basic verification with DID resolution
+      const result = await this.basicVerifyCredential(credential);
       this.cacheResult(cacheKey, result);
       return result;
     } catch (error) {
@@ -196,7 +228,75 @@ export class VerificationService implements IVerificationService {
   }
 
   /**
-   * Get issuer information for a DID
+   * Basic verification using backend API
+   * 
+   * @param credential - The credential to verify
+   * @returns Promise resolving to verification result
+   */
+  private async basicVerifyCredential(credential: VerifiableCredential): Promise<VerificationResult> {
+    try {
+      // Basic structure validation
+      if (!this.isVerifiableCredential(credential)) {
+        return {
+          status: VerificationStatus.INVALID,
+          message: 'Invalid credential structure',
+          credential
+        };
+      }
+      
+      // Create a static data provider with known DIDs that need to be resolved
+      const staticDataProvider = await this.createStaticDataProvider([typeof credential.issuer === 'string' ? credential.issuer : credential.issuer.id]);
+      const service = new VCService({ resourceProvider: staticDataProvider });
+
+      const result = await service.verifyCredential(credential as any) ? {
+        status: VerificationStatus.VALID,
+        message: 'Credential structure valid and issuer DID resolved successfully',
+        credential,
+        issuer: typeof credential.issuer === 'string' 
+          ? { did: credential.issuer } as IssuerInfo
+          : { did: credential.issuer.id, ...credential.issuer } as IssuerInfo,
+        verifiedAt: new Date()
+      } : {
+        status: VerificationStatus.ERROR,
+        message: 'Credential verification failed',
+        credential
+      };
+      
+      if (result.status === 'error') {
+        return {
+          status: VerificationStatus.ERROR,
+          message: result.message || 'Backend verification failed',
+          credential
+        };
+      }
+      
+      if (result.status === 'valid') {
+        return {
+          status: VerificationStatus.VALID,
+          message: 'Credential structure valid and issuer DID resolved successfully',
+          credential,
+          issuer: result.issuer,
+          verifiedAt: result.verifiedAt ? new Date(result.verifiedAt) : new Date()
+        };
+      } else {
+        return {
+          status: VerificationStatus.INVALID,
+          message: result.message || 'Credential verification failed',
+          credential
+        };
+      }
+    } catch (error) {
+      return {
+        status: VerificationStatus.ERROR,
+        message: `Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        credential,
+        error: error instanceof Error ? error : new Error(String(error))
+      };
+    }
+  }
+
+  /**
+   * Get issuer information for a DID using the backend API
    * 
    * @param did - The DID to get information for
    * @returns Promise resolving to issuer information
@@ -213,14 +313,19 @@ export class VerificationService implements IVerificationService {
     }
 
     try {
-      // Resolve the DID to get issuer information
-      const response = await this.apiService.get(`/did/${did}`);
+      // Get issuer info from backend API
+      const result = await this.apiService.getIssuerInfo(did);
+      
+      if (result.status === 'error') {
+        throw new Error(result.message || 'Failed to get issuer info');
+      }
       
       const issuerInfo: IssuerInfo = {
         did,
-        name: response.data?.name || response.data?.alias || undefined,
-        url: response.data?.url || undefined,
-        avatar: response.data?.image || undefined
+        name: result.issuer.name,
+        url: result.issuer.url,
+        avatar: result.issuer.avatar,
+        didDocument: result.issuer.didDocument
       };
       
       // Cache the issuer info
@@ -233,6 +338,54 @@ export class VerificationService implements IVerificationService {
       // Return basic info with just the DID if resolution fails
       return { did };
     }
+  }
+
+  /**
+   * Verify metadata directly as a Verifiable Credential
+   * 
+   * @param metadata - The metadata object that contains VC properties at top level
+   * @returns Promise resolving to verification result
+   */
+  async verifyMetadataAsCredential(metadata: any): Promise<VerificationResult> {
+    if (!metadata || typeof metadata !== 'object') {
+      return {
+        status: VerificationStatus.ERROR,
+        message: 'Invalid metadata: not an object'
+      };
+    }
+
+    // Check if metadata has VC structure at top level
+    if (!this.isVerifiableCredential(metadata)) {
+      return {
+        status: VerificationStatus.NO_METADATA,
+        message: 'Metadata does not contain a valid Verifiable Credential structure'
+      };
+    }
+
+    // Treat the metadata as the credential directly
+    return this.verifyCredential(metadata as VerifiableCredential);
+  }
+
+  /**
+   * Check if an object is a valid verifiable credential according to W3C spec
+   * 
+   * @param obj - Object to check
+   * @returns True if it's a valid VC structure
+   */
+  private isVerifiableCredential(obj: any): boolean {
+    if (!obj || typeof obj !== 'object') {
+      return false;
+    }
+    
+    // Check for required VC fields according to W3C VC spec
+    // Note: 'id' is optional in W3C VC spec, so we don't require it
+    return (
+      obj['@context'] &&
+      obj.type &&
+      (Array.isArray(obj.type) ? obj.type.includes('VerifiableCredential') : obj.type === 'VerifiableCredential') &&
+      obj.issuer &&
+      obj.credentialSubject
+    );
   }
 
   /**
@@ -288,5 +441,132 @@ export class VerificationService implements IVerificationService {
     if (this.config.enableDebugLogging) {
       console.debug(`[VerificationService] ${message}`);
     }
+  }
+
+  /**
+   * Verify inscription data directly (when you already have the inscription loaded)
+   * 
+   * @param inscriptionData - The inscription data to verify
+   * @param inscriptionId - Optional inscription ID for caching
+   * @returns Promise resolving to verification result
+   */
+  async verifyInscriptionData(
+    inscriptionData: {
+      contentBase64?: string;
+      contentType?: string;
+      metadata?: any;
+      id?: string;
+    },
+    inscriptionId?: string
+  ): Promise<VerificationResult> {
+    const id = inscriptionId || inscriptionData.id || 'unknown';
+    this.logDebug(`Verifying inscription data for: ${id}`);
+    
+    let metadata: any;
+
+    // Extract metadata from the provided data
+    if (inscriptionData.metadata) {
+      // If metadata is directly provided, use it
+      metadata = inscriptionData.metadata;
+      this.logDebug(`Using directly provided metadata for ${id}`);
+    } else if (inscriptionData.contentBase64) {
+      // If we have content, try to extract metadata from it
+      try {
+        const contentBuffer = Buffer.from(inscriptionData.contentBase64, 'base64');
+        const contentString = contentBuffer.toString('utf8');
+        metadata = JSON.parse(contentString);
+        this.logDebug(`Extracted metadata from content for ${id}`);
+      } catch (parseError) {
+        this.logDebug(`Content is not JSON for ${id}: ${parseError}`);
+        return {
+          status: VerificationStatus.NO_METADATA,
+          message: 'Inscription content is not valid JSON metadata'
+        };
+      }
+    } else {
+      return {
+        status: VerificationStatus.NO_METADATA,
+        message: 'No content or metadata provided in inscription data'
+      };
+    }
+
+    // Check if metadata is a verifiable credential
+    if (!this.isVerifiableCredential(metadata)) {
+      return {
+        status: VerificationStatus.NO_METADATA,
+        message: 'Inscription metadata is not a verifiable credential'
+      };
+    }
+
+    // Verify the credential
+    return this.verifyCredential(metadata);
+  }
+
+  /**
+   * Create a static data provider with known DIDs that need to be resolved
+   * This pre-loads DID data for common DIDs to avoid API calls during verification
+   */
+  private async createStaticDataProvider(dids: string[]): Promise<StaticDataProvider> {
+    // Start with an empty provider
+    const provider = new StaticDataProvider([]);
+    
+    // Loop through each DID and resolve it
+    for (const did of dids) {
+      try {
+        this.logDebug(`Resolving DID: ${did}`);
+        
+        // Parse the DID to extract sat number (e.g., "did:btco:123456789" -> "123456789")
+        const satNumber = this.extractSatNumberFromDid(did);
+        if (!satNumber) {
+          this.logDebug(`Invalid DID format: ${did}`);
+          continue;
+        }
+        
+        // Use the proper DID resolution API that actually resolves the DID
+        const result = await this.apiService.resolveDid(did);
+        
+        if (result.didDocument && result.inscriptions && result.inscriptions.length > 0) {
+          // Convert the API response inscriptions to StaticSatData format
+          const staticSat: StaticSatData = {
+            satNumber,
+            inscriptions: result.inscriptions.map(inscription => ({
+              inscriptionId: inscription.inscriptionId,
+              content: inscription.content,
+              metadata: inscription.metadata,
+              contentUrl: inscription.contentUrl
+            }))
+          };
+          
+          provider.addSatData(staticSat);
+          this.logDebug(`Successfully loaded DID data for ${did} with ${result.inscriptions.length} inscriptions`);
+        } else {
+          this.logDebug(`No DID document or inscriptions found for ${did}`);
+        }
+        
+      } catch (error) {
+        this.logDebug(`Failed to resolve DID ${did}: ${error}`);
+        // Continue with other DIDs even if one fails
+        continue;
+      }
+    }
+    
+    return provider;
+  }
+
+  /**
+   * Extract sat number from a BTCO DID
+   * @param did - The DID (e.g., "did:btco:123456789")
+   * @returns The sat number as string or null if invalid
+   */
+  private extractSatNumberFromDid(did: string): string | null {
+    // BTCO DID format: did:btco[:[network]]:<sat-number>[/<path>]
+    const regex = /^did:btco(?::(test|sig))?:([0-9]+)(?:\/(.+))?$/;
+    const match = did.match(regex);
+    
+    if (!match) {
+      return null;
+    }
+    
+    return match[2]; // The sat number
   }
 }

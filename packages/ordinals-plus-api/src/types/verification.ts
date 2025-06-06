@@ -28,6 +28,8 @@ export interface IssuerInfo {
   url?: string;
   /** Avatar/logo of the issuer, if available */
   avatar?: string;
+  /** The resolved DID document, if available */
+  didDocument?: any;
 }
 
 /**

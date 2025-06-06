@@ -6,7 +6,7 @@
  */
 
 import { createFetchClient, FetchRequestConfig, FetchError, FetchResponse } from '../utils/fetchUtils';
-import { decodeCbor } from '../utils/cbor-utils';
+import { extractCborMetadata } from '../utils/cbor-utils';
 import { 
   OrdinalsIndexerConfig, 
   IndexerInscription, 
@@ -362,7 +362,7 @@ export class OrdinalsIndexer {
         let metadata;
         try {
           this.logger.debug(`Decoding metadata for inscription: ${inscriptionId}`);
-          metadata = decodeCbor(new Uint8Array(metadataBuffer));
+          metadata = extractCborMetadata(new Uint8Array(metadataBuffer));
         } catch (error) {
           throw new DataParsingError(
             `Failed to decode CBOR metadata for inscription ${inscriptionId}`,
@@ -572,10 +572,11 @@ export class OrdinalsIndexer {
         }
 
         // Check if this is a verifiable credential
-        if (metadata.verifiableCredential &&
-            metadata.verifiableCredential.type?.includes('VerifiableCredential')) {
+        // VC properties should be at the top level according to W3C VC spec
+        if (metadata.type?.includes('VerifiableCredential') ||
+            (Array.isArray(metadata.type) && metadata.type.includes('VerifiableCredential'))) {
           this.logger.info(`Found verifiable credential in inscription: ${inscriptionId}`);
-          await this.db.storeCredential(inscriptionId, metadata.verifiableCredential);
+          await this.db.storeCredential(inscriptionId, metadata);
         }
       },
       {

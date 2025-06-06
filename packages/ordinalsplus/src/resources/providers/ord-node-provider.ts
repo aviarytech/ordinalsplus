@@ -104,7 +104,6 @@ export class OrdNodeProvider implements ResourceProvider {
     async getMetadata(inscriptionId: string): Promise<any> {
         try {
             const response = await this.fetchApi<string>(`/r/metadata/${inscriptionId}`);
-            console.log(`[OrdNodeProvider] Metadata response: ${JSON.stringify(response)}`);
             return extractCborMetadata(hexToBytes(response as string));
         } catch (error) {
             console.warn(`[OrdNodeProvider] Failed to retrieve metadata for inscription ${inscriptionId}:`, error);
