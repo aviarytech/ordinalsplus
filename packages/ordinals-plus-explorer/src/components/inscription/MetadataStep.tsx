@@ -5,6 +5,253 @@ import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { VCApiProvider } from '../settings/VCApiProviderSettings';
 import { Switch } from '../ui';
 import { fetchWorkflowConfiguration, createExchange, participateInExchange } from '../../services/vcApiService';
+import DidPreview from './DidPreview';
+import { Shield, Check, Copy, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
+
+/**
+ * Component to display the issued verifiable credential
+ */
+const VerifiableCredentialDisplay: React.FC<{ credential: any }> = ({ credential }) => {
+  const [showRawCredential, setShowRawCredential] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(true);
+
+  /**
+   * Copy text to clipboard with feedback
+   */
+  const copyToClipboard = async (text: string, fieldName: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+    }
+  };
+
+  /**
+   * Get credential type display name
+   */
+  const getCredentialType = () => {
+    if (!credential?.type) return 'Verifiable Credential';
+    
+    const types = Array.isArray(credential.type) ? credential.type : [credential.type];
+    const nonVcTypes = types.filter((t: string) => t !== 'VerifiableCredential');
+    
+    return nonVcTypes.length > 0 ? nonVcTypes.join(', ') : 'Verifiable Credential';
+  };
+
+  /**
+   * Get issuer display name
+   */
+  const getIssuerName = () => {
+    if (typeof credential?.issuer === 'string') {
+      return credential.issuer;
+    }
+    return credential?.issuer?.id || credential?.issuer?.name || 'Unknown Issuer';
+  };
+
+  if (!credential) return null;
+
+  return (
+    <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+      {/* Success Header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center justify-center w-8 h-8 bg-green-100 dark:bg-green-900/30 rounded-full">
+          <Shield className="w-4 h-4 text-green-600 dark:text-green-400" />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
+            Verifiable Credential Issued Successfully!
+          </h3>
+          <p className="text-sm text-green-700 dark:text-green-300">
+            Your credential has been created and will be included in the inscription
+          </p>
+        </div>
+      </div>
+
+      {/* Toggle Details */}
+      <button
+        onClick={() => setShowDetails(!showDetails)}
+        className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-300 hover:text-green-800 dark:hover:text-green-200 mb-3"
+      >
+        {showDetails ? (
+          <>
+            <ChevronUp className="w-4 h-4" />
+            Hide Details
+          </>
+        ) : (
+          <>
+            <ChevronDown className="w-4 h-4" />
+            Show Details
+          </>
+        )}
+      </button>
+
+      {showDetails && (
+        <div className="space-y-4">
+          {/* Credential Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Basic Info */}
+            <div className="space-y-3">
+              {/* Credential ID */}
+              {credential.id && (
+                <div className="p-3 bg-white dark:bg-gray-800 rounded border">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                      Credential ID
+                    </span>
+                    <button
+                      onClick={() => copyToClipboard(credential.id, 'credentialId')}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      {copiedField === 'credentialId' ? (
+                        <Check className="w-3 h-3 text-green-500" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  </div>
+                  <code className="text-xs text-gray-600 dark:text-gray-400 break-all">
+                    {credential.id}
+                  </code>
+                </div>
+              )}
+
+              {/* Credential Type */}
+              <div className="p-3 bg-white dark:bg-gray-800 rounded border">
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                  Type
+                </span>
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                  {getCredentialType()}
+                </span>
+              </div>
+
+              {/* Issuer */}
+              <div className="p-3 bg-white dark:bg-gray-800 rounded border">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    Issuer
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(getIssuerName(), 'issuer')}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    {copiedField === 'issuer' ? (
+                      <Check className="w-3 h-3 text-green-500" />
+                    ) : (
+                      <Copy className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+                <code className="text-xs text-gray-600 dark:text-gray-400 break-all">
+                  {getIssuerName()}
+                </code>
+              </div>
+            </div>
+
+            {/* Dates and Subject */}
+            <div className="space-y-3">
+              {/* Issuance Date */}
+              {credential.issuanceDate && (
+                <div className="p-3 bg-white dark:bg-gray-800 rounded border">
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                    Issued
+                  </span>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    {new Date(credential.issuanceDate).toLocaleString()}
+                  </div>
+                </div>
+              )}
+
+              {/* Expiration Date */}
+              {credential.expirationDate && (
+                <div className="p-3 bg-white dark:bg-gray-800 rounded border">
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-1">
+                    Expires
+                  </span>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                    {new Date(credential.expirationDate).toLocaleString()}
+                  </div>
+                </div>
+              )}
+
+              {/* Credential Subject Preview */}
+              {credential.credentialSubject && (
+                <div className="p-3 bg-white dark:bg-gray-800 rounded border">
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-300 block mb-2">
+                    Subject Summary
+                  </span>
+                  <div className="space-y-1">
+                    {Object.entries(credential.credentialSubject).slice(0, 3).map(([key, value]) => (
+                      <div key={key} className="flex justify-between text-xs">
+                        <span className="text-gray-500 dark:text-gray-400 capitalize truncate">
+                          {key}:
+                        </span>
+                        <span className="text-gray-600 dark:text-gray-300 truncate ml-2 max-w-[60%]">
+                          {typeof value === 'string' ? value : JSON.stringify(value)}
+                        </span>
+                      </div>
+                    ))}
+                    {Object.keys(credential.credentialSubject).length > 3 && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                        ...and {Object.keys(credential.credentialSubject).length - 3} more fields
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Raw Credential Toggle */}
+          <div className="border-t border-green-200 dark:border-green-800 pt-4">
+            <button
+              onClick={() => setShowRawCredential(!showRawCredential)}
+              className="flex items-center gap-2 text-sm text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200"
+            >
+              {showRawCredential ? (
+                <>
+                  <EyeOff className="w-4 h-4" />
+                  Hide Raw Credential
+                </>
+              ) : (
+                <>
+                  <Eye className="w-4 h-4" />
+                  Show Raw Credential
+                </>
+              )}
+            </button>
+
+            {showRawCredential && (
+              <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Raw Credential (JSON)
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(JSON.stringify(credential, null, 2), 'rawCredential')}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    {copiedField === 'rawCredential' ? (
+                      <Check className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <pre className="text-xs font-mono text-gray-700 dark:text-gray-300 overflow-auto max-h-60 bg-gray-50 dark:bg-gray-700 p-2 rounded border">
+                  {JSON.stringify(credential, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /**
  * MetadataStep handles the configuration of metadata for the resource inscription.
@@ -30,7 +277,7 @@ const MetadataStep: React.FC = () => {
   const [isCreatingExchange, setIsCreatingExchange] = useState(false);
   const [exchangeError, setExchangeError] = useState<string | null>(null);
   
-  // Get VC API providers from local storage
+  // Get VC API providers from local storage  
   const [vcApiProviders] = useLocalStorage<VCApiProvider[]>('vc-api-providers', []);
   
   const handleVcToggle = (checked: boolean) => {
@@ -246,6 +493,9 @@ const MetadataStep: React.FC = () => {
         Configure Resource Metadata
       </h2>
       
+      {/* DID Preview - Always visible at top */}
+      <DidPreview />
+      
       <div className="space-y-4">
         {/* Standard Metadata Section */}
         {!isVerifiableCredential && (
@@ -397,6 +647,11 @@ const MetadataStep: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* Display issued verifiable credential if available */}
+      {isVerifiableCredential && state.metadata.verifiableCredential?.credential && (
+        <VerifiableCredentialDisplay credential={state.metadata.verifiableCredential.credential} />
+      )}
       
       {/* Navigation Buttons */}
       <div className="flex justify-between mt-6">

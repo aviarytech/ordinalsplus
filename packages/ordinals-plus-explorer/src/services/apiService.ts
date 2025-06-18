@@ -652,7 +652,7 @@ class ApiService {
    * Get satoshi number for a given UTXO
    */
   async getSatNumber(networkType: string, utxo: string): Promise<number> {
-    const url = this.buildUrl(`/api/sat-number/${encodeURIComponent(utxo)}`, networkType);
+    const url = this.buildUrl(`/api/utxo/${encodeURIComponent(utxo)}/sat-number`, networkType);
     console.log(`[ApiService] Getting sat number: ${url}`);
     
     const response = await fetch(url);

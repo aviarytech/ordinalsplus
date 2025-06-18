@@ -225,4 +225,90 @@ describe('Commit Transaction Process', () => {
     // Verify the commit address matches the one from the original inscription
     expect(result.commitAddress).toBe(minimalInscription.commitAddress.address);
   });
+
+  test('should prioritize user-selected UTXO for inscription as first input', async () => {
+    // Create a simple inscription for testing
+    const inscription = createTextInscription('Hello, World!', mockNetwork);
+    
+    // Define a specific UTXO that the user wants to inscribe on
+    const selectedInscriptionUtxo: Utxo = {
+      txid: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      vout: 0,
+      value: 50000, // Lower value than the mock UTXOs to ensure it's not chosen by normal selection
+      scriptPubKey: '0014d85c2b71d0060b09c9886aeb815e50991dda124d'
+    };
+    
+    // Prepare the commit transaction params with the selected UTXO
+    const params: CommitTransactionParams = {
+      inscription,
+      utxos: mockUtxos, // Other UTXOs available for funding
+      changeAddress: mockChangeAddress,
+      feeRate: 2,
+      network: mockNetwork,
+      selectedInscriptionUtxo // CRITICAL: The user's chosen UTXO
+    };
+    
+    // Execute the commit transaction preparation
+    const result = await prepareCommitTransaction(params);
+    
+    // Verify the selected UTXO is included in the transaction
+    expect(result.selectedUtxos.length).toBeGreaterThan(0);
+    
+    // CRITICAL: The first UTXO in the selection should be the user's chosen one
+    const firstUtxo = result.selectedUtxos[0];
+    expect(firstUtxo.txid).toBe(selectedInscriptionUtxo.txid);
+    expect(firstUtxo.vout).toBe(selectedInscriptionUtxo.vout);
+    expect(firstUtxo.value).toBe(selectedInscriptionUtxo.value);
+    
+    // Additional UTXOs may be present for funding, but the inscription UTXO must be first
+    console.log(`Selected UTXOs count: ${result.selectedUtxos.length}`);
+    console.log(`First UTXO (inscription): ${firstUtxo.txid}:${firstUtxo.vout}`);
+    
+    // Verify the transaction was created successfully
+    expect(result.commitPsbtBase64).toBeDefined();
+    expect(result.commitAddress).toBe(inscription.commitAddress.address);
+  });
+
+  test('should add funding UTXOs when selected UTXO has insufficient funds', async () => {
+    // Create a simple inscription for testing
+    const inscription = createTextInscription('Hello, World!', mockNetwork);
+    
+    // Define a UTXO with very low value that needs additional funding
+    const lowValueUtxo: Utxo = {
+      txid: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      vout: 0,
+      value: 1000, // Very low value, will need additional funding
+      scriptPubKey: '0014d85c2b71d0060b09c9886aeb815e50991dda124d'
+    };
+    
+    // Prepare the commit transaction params
+    const params: CommitTransactionParams = {
+      inscription,
+      utxos: mockUtxos, // Funding UTXOs
+      changeAddress: mockChangeAddress,
+      feeRate: 2,
+      network: mockNetwork,
+      selectedInscriptionUtxo: lowValueUtxo
+    };
+    
+    // Execute the commit transaction preparation
+    const result = await prepareCommitTransaction(params);
+    
+    // Should have multiple UTXOs (selected + funding)
+    expect(result.selectedUtxos.length).toBeGreaterThan(1);
+    
+    // First UTXO should still be the user's selected one
+    const firstUtxo = result.selectedUtxos[0];
+    expect(firstUtxo.txid).toBe(lowValueUtxo.txid);
+    expect(firstUtxo.vout).toBe(lowValueUtxo.vout);
+    
+    // Additional UTXOs should be from the funding pool
+    const fundingUtxos = result.selectedUtxos.slice(1);
+    expect(fundingUtxos.length).toBeGreaterThan(0);
+    
+    // All funding UTXOs should be from the mockUtxos array
+    fundingUtxos.forEach(utxo => {
+      expect(mockUtxos.find(mu => mu.txid === utxo.txid && mu.vout === utxo.vout)).toBeDefined();
+    });
+  });
 }); 

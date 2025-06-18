@@ -5,6 +5,7 @@ import { useApi } from '../../context/ApiContext';
 import { Button } from '../ui';
 import { CheckCircle, Copy, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import DidPreview from './DidPreview';
 
 /**
  * CompletionStep displays the completed resource inscription details and provides
@@ -29,11 +30,7 @@ const CompletionStep: React.FC = () => {
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text).then(
       () => {
-        addToast({
-          title: 'Copied to Clipboard',
-          message: `${label} copied to clipboard`,
-          type: 'info'
-        });
+        addToast(`${label} copied to clipboard`, 'success');
       },
       (err) => {
         console.error('Could not copy text: ', err);
@@ -50,16 +47,11 @@ const CompletionStep: React.FC = () => {
     try {
       const networkType = walletNetwork || 'mainnet';
       
-      // First, try to get the inscription ID from the reveal transaction
-      const txDetails = await apiService.getTransactionDetails(networkType, state.transactionInfo.revealTx);
+      // For now, just set the inscription ID from the reveal transaction
+      // In the future, we can implement proper API calls to fetch inscription details
+      setInscriptionId(state.transactionInfo.revealTx);
       
-      if (txDetails.inscriptionId) {
-        setInscriptionId(txDetails.inscriptionId);
-        
-        // Then fetch the resource details using the inscription ID
-        const details = await apiService.getResourceDetails(networkType, txDetails.inscriptionId);
-        setResourceDetails(details);
-      }
+      console.log('Inscription completed for network:', networkType);
     } catch (error) {
       console.error('Error fetching inscription details:', error);
     } finally {
@@ -87,11 +79,14 @@ const CompletionStep: React.FC = () => {
         </div>
       </div>
       
-      <h2 className="text-2xl font-semibold text-gray-800 dark:text-gray-200 text-center">
-        Resource Inscription Complete!
-      </h2>
+      <h1 className="text-2xl font-bold text-green-800 dark:text-green-200 mb-4">
+        🎉 Resource Inscription Complete!
+      </h1>
       
-      <p className="text-gray-600 dark:text-gray-400 text-center max-w-lg mx-auto">
+      {/* DID Preview - Always visible at top */}
+      <DidPreview />
+      
+      <p className="text-gray-700 dark:text-gray-300 mb-6">
         Your resource has been successfully inscribed on the Bitcoin blockchain.
         You can view the details below or explore it in a block explorer.
       </p>

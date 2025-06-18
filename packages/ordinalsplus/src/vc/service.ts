@@ -296,9 +296,10 @@ export class VCService {
    * Verifies a credential's authenticity
    * 
    * @param credential - The credential to verify
+   * @param satNumber - Optional sat number being verified (to validate credential is about this sat)
    * @returns Whether the credential is valid
    */
-  async verifyCredential(credential: VerifiableCredential): Promise<boolean> {
+  async verifyCredential(credential: VerifiableCredential, satNumber?: string): Promise<boolean> {
     // First perform local validation of the credential structure
     console.log(`[VCService] Verifying credential: ${JSON.stringify(credential)}`);
     const validationResult = validateCredential(credential);
@@ -308,8 +309,30 @@ export class VCService {
       return false;
     }
     
-    // Resolve the issuer DID to get verification method
+    // Extract issuer DID and credential subject ID
     const issuerDid = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer.id;
+    const subjectId = Array.isArray(credential.credentialSubject) 
+      ? credential.credentialSubject[0]?.id 
+      : credential.credentialSubject.id;
+    
+    // Validate that the credential subject matches the sat being verified
+    if (satNumber && subjectId && subjectId.startsWith('did:btco')) {
+      const subjectSatNumber = this.extractSatNumberFromDid(subjectId);
+      
+      if (!subjectSatNumber) {
+        console.error('Failed to extract sat number from credential subject DID:', subjectId);
+        return false;
+      }
+      
+      if (subjectSatNumber !== satNumber) {
+        console.error(`Sat mismatch: credential is about sat ${subjectSatNumber} but verifying sat ${satNumber}`);
+        return false;
+      }
+      
+      console.log(`[VCService] Sat validation passed: credential subject references sat ${subjectSatNumber} which matches verification target`);
+    }
+    
+    // Resolve the issuer DID to get verification method
     const didResolution = await this.didResolver.resolve(issuerDid);
     console.log('didResolution', didResolution);
     if (didResolution.resolutionMetadata.error) {
@@ -357,6 +380,23 @@ export class VCService {
       console.error('API verification failed:', error);
       return false;
     }
+  }
+
+  /**
+   * Extract sat number from a BTCO DID
+   * @param did - The DID (e.g., "did:btco:sig:123456789")
+   * @returns The sat number as string or null if invalid
+   */
+  private extractSatNumberFromDid(did: string): string | null {
+    // BTCO DID format: did:btco[:[network]]:<sat-number>[/<path>]
+    const regex = /^did:btco(?::(test|sig))?:([0-9]+)(?:\/(.+))?$/;
+    const match = did.match(regex);
+    
+    if (!match) {
+      return null;
+    }
+    
+    return match[2]; // The sat number
   }
   
   /**

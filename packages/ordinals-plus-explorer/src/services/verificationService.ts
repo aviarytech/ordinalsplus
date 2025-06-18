@@ -244,11 +244,30 @@ export class VerificationService implements IVerificationService {
         };
       }
       
+      // Extract the sat number from the credential subject to validate against
+      let satNumber: string | undefined;
+      const subjectId = Array.isArray(credential.credentialSubject) 
+        ? credential.credentialSubject[0]?.id 
+        : credential.credentialSubject.id;
+      
+      if (subjectId && subjectId.startsWith('did:btco')) {
+        const extractedSatNumber = this.extractSatNumberFromDid(subjectId);
+        if (!extractedSatNumber) {
+          return {
+            status: VerificationStatus.ERROR,
+            message: 'Failed to extract sat number from credential subject DID',
+            credential
+          };
+        }
+        satNumber = extractedSatNumber;
+        this.logDebug(`Extracted sat number ${satNumber} from credential subject: ${subjectId}`);
+      }
+      
       // Create a static data provider with known DIDs that need to be resolved
       const staticDataProvider = await this.createStaticDataProvider([typeof credential.issuer === 'string' ? credential.issuer : credential.issuer.id]);
       const service = new VCService({ resourceProvider: staticDataProvider });
 
-      const result = await service.verifyCredential(credential as any) ? {
+      const result = await service.verifyCredential(credential as any, satNumber) ? {
         status: VerificationStatus.VALID,
         message: 'Credential structure valid and issuer DID resolved successfully',
         credential,

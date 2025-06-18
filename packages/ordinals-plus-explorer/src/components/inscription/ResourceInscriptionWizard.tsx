@@ -50,9 +50,9 @@ export interface TransactionInfo {
     commitFeeRate: number;
     commitFee: number;
     commitVSize: number;
-    revealFeeRate: number;
-    revealFee: number;
-    revealVSize: number;
+    revealFeeRate?: number;
+    revealFee?: number;
+    revealVSize?: number;
     totalFees: number;
   };
 }
@@ -60,7 +60,9 @@ export interface TransactionInfo {
 // Define the main state interface
 export interface ResourceInscriptionState {
   currentStep: number;
-  utxoSelection: UtxoSelection[];
+  utxoSelection: UtxoSelection[]; // legacy, will be replaced
+  inscriptionUtxo: UtxoSelection | null; // NEW: the UTXO to inscribe on
+  fundingUtxos: UtxoSelection[];         // NEW: UTXOs to fund the transaction
   contentData: ContentData;
   metadata: MetadataState;
   transactionInfo: TransactionInfo;
@@ -71,6 +73,8 @@ export interface ResourceInscriptionState {
 export const initialState: ResourceInscriptionState = {
   currentStep: 0,
   utxoSelection: [],
+  inscriptionUtxo: null,
+  fundingUtxos: [],
   contentData: {
     type: null,
     content: null,
@@ -88,7 +92,8 @@ export const initialState: ResourceInscriptionState = {
   transactionInfo: {
     commitTx: null,
     revealTx: null,
-    status: 'not_started'
+    status: 'not_started',
+    feeDetails: undefined
   },
   errors: {}
 };
@@ -99,6 +104,8 @@ export type ResourceInscriptionAction =
   | { type: 'NEXT_STEP' }
   | { type: 'PREVIOUS_STEP' }
   | { type: 'SET_UTXO_SELECTION'; payload: UtxoSelection[] }
+  | { type: 'SET_INSCRIPTION_UTXO'; payload: UtxoSelection | null }
+  | { type: 'SET_FUNDING_UTXOS'; payload: UtxoSelection[] }
   | { type: 'SET_CONTENT_DATA'; payload: Partial<ContentData> }
   | { type: 'SET_METADATA'; payload: Partial<MetadataState> }
   | { type: 'SET_TRANSACTION_INFO'; payload: Partial<TransactionInfo> }
@@ -132,6 +139,16 @@ export const resourceInscriptionReducer = (
       return {
         ...state,
         utxoSelection: action.payload
+      };
+    case 'SET_INSCRIPTION_UTXO':
+      return {
+        ...state,
+        inscriptionUtxo: action.payload
+      };
+    case 'SET_FUNDING_UTXOS':
+      return {
+        ...state,
+        fundingUtxos: action.payload
       };
     case 'SET_CONTENT_DATA':
       return {
@@ -192,6 +209,8 @@ interface ResourceInscriptionContextType {
   nextStep: () => boolean;
   previousStep: () => boolean;
   setUtxoSelection: (utxos: UtxoSelection[]) => void;
+  setInscriptionUtxo: (utxo: UtxoSelection | null) => void;
+  setFundingUtxos: (utxos: UtxoSelection[]) => void;
   setContentData: (data: Partial<ContentData>) => void;
   setMetadata: (data: Partial<MetadataState>) => void;
   setTransactionInfo: (info: Partial<TransactionInfo>) => void;
@@ -258,6 +277,14 @@ export const ResourceInscriptionProvider: React.FC<ResourceInscriptionProviderPr
       setValidationErrors(newErrors);
     }
   }, [validationErrors]);
+
+  const setInscriptionUtxo = useCallback((utxo: UtxoSelection | null) => {
+    dispatch({ type: 'SET_INSCRIPTION_UTXO', payload: utxo });
+  }, []);
+
+  const setFundingUtxos = useCallback((utxos: UtxoSelection[]) => {
+    dispatch({ type: 'SET_FUNDING_UTXOS', payload: utxos });
+  }, []);
 
   const setContentData = useCallback((data: Partial<ContentData>) => {
     dispatch({ type: 'SET_CONTENT_DATA', payload: data });
@@ -353,6 +380,8 @@ export const ResourceInscriptionProvider: React.FC<ResourceInscriptionProviderPr
     nextStep,
     previousStep,
     setUtxoSelection,
+    setInscriptionUtxo,
+    setFundingUtxos,
     setContentData,
     setMetadata,
     setTransactionInfo,

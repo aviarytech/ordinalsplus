@@ -5,13 +5,14 @@ import { useWallet, Utxo } from '../../context/WalletContext';
 import { Button } from '../ui';
 import { AlertCircle, Info, Edit, Check } from 'lucide-react';
 import { useApi } from '../../context/ApiContext';
+import DidPreview from './DidPreview';
 
 /**
  * UTXOSelectionStep handles the selection of a UTXO for the resource inscription.
  * This is the first step where the user selects which sat will be inscribed.
  */
 const UTXOSelectionStep: React.FC = () => {
-  const { state, setUtxoSelection, nextStep, setError, clearError } = useResourceInscription();
+  const { state, setInscriptionUtxo, nextStep, setError, clearError } = useResourceInscription();
   const { 
     connected: walletConnected,
     getUtxos,
@@ -71,10 +72,10 @@ const UTXOSelectionStep: React.FC = () => {
         
         // Automatically select the largest UTXO if not in manual mode
         // and if no UTXO is currently selected
-        if (!manualSelectionMode && state.utxoSelection.length === 0) {
+        if (!manualSelectionMode && state.inscriptionUtxo === null) {
           const largestUtxo = findLargestUtxo(utxos);
           if (largestUtxo) {
-            setUtxoSelection([largestUtxo]);
+            setInscriptionUtxo(largestUtxo);
             fetchSatNumberForUtxo(largestUtxo); // Fetch satNumber for the automatically selected UTXO
           }
         }
@@ -99,7 +100,7 @@ const UTXOSelectionStep: React.FC = () => {
       const networkType = network || 'mainnet'; // Use network from WalletContext or default to mainnet
       const satNumber = await apiService.getSatNumber(networkType, `${utxo.txid}:${utxo.vout}`);
       const updatedUtxo = { ...utxo, satNumber };
-      setUtxoSelection([updatedUtxo]); // Update the selection with satNumber
+      setInscriptionUtxo(updatedUtxo); // Set as the inscription UTXO
       console.log(`Fetched satNumber: ${satNumber} for UTXO: ${utxo.txid}:${utxo.vout} on network: ${networkType}`);
     } catch (error) {
       console.error('Error fetching sat number:', error);
@@ -112,7 +113,7 @@ const UTXOSelectionStep: React.FC = () => {
       fetchSatNumberForUtxo(utxo); // Fetch satNumber when a UTXO is selected
       clearError('utxoSelection');
     } else {
-      setUtxoSelection([]);
+      setInscriptionUtxo(null);
       handleUtxoInteraction();
     }
   };
@@ -126,7 +127,8 @@ const UTXOSelectionStep: React.FC = () => {
     if (!newMode && availableUtxos.length > 0) {
       const largestUtxo = findLargestUtxo(availableUtxos);
       if (largestUtxo) {
-        setUtxoSelection([largestUtxo]);
+        setInscriptionUtxo(largestUtxo);
+        fetchSatNumberForUtxo(largestUtxo); // Fetch satNumber for the automatically selected UTXO
       }
     }
   };
@@ -134,19 +136,10 @@ const UTXOSelectionStep: React.FC = () => {
   // Continue to next step
   const handleContinue = () => {
     // Validate that a UTXO is selected before proceeding
-    if (state.utxoSelection.length === 0) {
+    if (!state.inscriptionUtxo) {
       setError('utxoSelection', 'Please select a UTXO for inscription');
       return;
     }
-    
-    // Check if the UTXO is confirmed (optional warning)
-    const selectedUtxo = state.utxoSelection[0];
-    const utxoStatus = (selectedUtxo as any).status;
-    if (utxoStatus && utxoStatus.confirmed === false) {
-      // Just log a warning but allow proceeding
-      console.warn('Selected UTXO is unconfirmed, which may cause issues with the inscription');
-    }
-    
     // Proceed to next step
     clearError('utxoSelection');
     nextStep();
@@ -167,12 +160,12 @@ const UTXOSelectionStep: React.FC = () => {
   
   // Only set error when user has interacted with UTXOs but hasn't selected any
   const handleUtxoInteraction = useCallback(() => {
-    if (state.utxoSelection.length === 0 && availableUtxos.length > 0) {
+    if (state.inscriptionUtxo === null && availableUtxos.length > 0) {
       setError('utxoSelection', 'Please select a UTXO for inscription');
-    } else if (state.utxoSelection.length > 0) {
+    } else if (state.inscriptionUtxo !== null) {
       clearError('utxoSelection');
     }
-  }, [state.utxoSelection.length, availableUtxos.length, setError, clearError]);
+  }, [state.inscriptionUtxo, availableUtxos.length, setError, clearError]);
   
   return (
     <div className="space-y-6">
@@ -189,12 +182,23 @@ const UTXOSelectionStep: React.FC = () => {
           <Info className="h-5 w-5" />
         </button>
       </div>
+
+      {/* DID Preview - Always visible at top */}
+      <DidPreview />
       
       {/* UTXO Selection Guide - hidden by default */}
       {showGuidance && (
         <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-md text-sm text-blue-800 dark:text-blue-200 mb-4">
           <h3 className="font-medium mb-2">About Sat Selection</h3>
           <p className="mb-2">Select a UTXO that contains the sat you want to inscribe your resource on.</p>
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded mb-2">
+            <p className="text-amber-800 dark:text-amber-200 font-medium mb-1">⚠️ CRITICAL:</p>
+            <p className="text-amber-700 dark:text-amber-300 text-xs">
+              The UTXO you select here will be the one that gets inscribed on. 
+              The first sat from this specific UTXO will carry your inscription permanently.
+              Additional UTXOs may be used for funding, but only this one will be inscribed.
+            </p>
+          </div>
           <ul className="list-disc list-inside space-y-1 mb-2">
             <li><span className="font-medium">Confirmed UTXOs</span> are recommended for reliable inscriptions.</li>
             <li><span className="font-medium">Automatic selection</span> chooses the largest UTXO by default.</li>
@@ -243,28 +247,32 @@ const UTXOSelectionStep: React.FC = () => {
       </div>
       
       {/* UTXO Selection summary - simplified */}
-      {state.utxoSelection.length > 0 && (
+      {state.inscriptionUtxo && (
         <div className="p-3 bg-green-50 dark:bg-green-900/10 rounded-md text-sm text-green-800 dark:text-green-200">
           <h3 className="font-medium mb-1">Selected Sat</h3>
           <div className="mt-1">
             <p className="text-xs">UTXO: 
-              <span className="font-mono ml-1">{state.utxoSelection[0].txid.substring(0, 8)}...:{state.utxoSelection[0].vout}</span>
-              {(state.utxoSelection[0] as any).status?.confirmed === false && (
+              <span className="font-mono ml-1">{state.inscriptionUtxo.txid.substring(0, 8)}...:{state.inscriptionUtxo.vout}</span>
+              {(state.inscriptionUtxo as any).status?.confirmed === false && (
                 <span className="ml-2 text-amber-600 dark:text-amber-400">(Unconfirmed)</span>
               )}
             </p>
-            <p className="text-xs mt-1">Value: <span className="font-medium">{formatBtcValue(state.utxoSelection[0].value)} BTC</span></p>
-            <p className="text-xs mt-1">Sat Number: <span className="font-medium">{state.utxoSelection[0].satNumber}</span></p>
+            <p className="text-xs mt-1">Value: <span className="font-medium">{formatBtcValue(state.inscriptionUtxo.value)} BTC</span></p>
+            <p className="text-xs mt-1">Sat Number: <span className="font-medium">
+              {state.inscriptionUtxo.satNumber !== undefined 
+                ? state.inscriptionUtxo.satNumber 
+                : 'Loading...'}
+            </span></p>
           </div>
         </div>
       )}
       
       {/* Only show the UTXO selector in manual mode or when no UTXOs are selected */}
-      {(manualSelectionMode || state.utxoSelection.length === 0) && (
+      {(manualSelectionMode || state.inscriptionUtxo === null) && (
         <UtxoSelector
           walletConnected={walletConnected}
           utxos={availableUtxos}
-          selectedUtxos={state.utxoSelection}
+          selectedUtxos={state.inscriptionUtxo ? [state.inscriptionUtxo] : []}
           isFetchingUtxos={isFetchingUtxos}
           utxoError={utxoError}
           flowState="awaitingUtxoSelection"
@@ -276,7 +284,7 @@ const UTXOSelectionStep: React.FC = () => {
       
       <div className="flex justify-between mt-6">
         <div className="text-sm text-gray-500 dark:text-gray-400 self-center">
-          {state.utxoSelection.length > 0 ? (
+          {state.inscriptionUtxo ? (
             <span className="text-green-600 dark:text-green-400">✓ Ready to continue</span>
           ) : (
             <span>Please select a UTXO for inscription</span>
@@ -284,7 +292,7 @@ const UTXOSelectionStep: React.FC = () => {
         </div>
         <Button
           onClick={handleContinue}
-          disabled={state.utxoSelection.length === 0}
+          disabled={state.inscriptionUtxo === null}
           className="px-4 py-2"
         >
           Continue

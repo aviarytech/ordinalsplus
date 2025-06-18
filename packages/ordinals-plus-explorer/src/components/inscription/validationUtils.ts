@@ -362,13 +362,13 @@ export const validateStep = (
   
   switch (step) {
     case 'utxo':
-      // Validate UTXO selection
-      const utxoResult = validateUtxoSelection(
-        formData.utxoSelection,
-        'utxoSelection',
-        'UTXOs'
-      );
-      errors.push(...utxoResult.errors);
+      // Validate UTXO selection - check the new inscriptionUtxo field
+      if (!formData.inscriptionUtxo) {
+        errors.push({
+          field: 'utxoSelection',
+          message: 'Please select a UTXO for inscription'
+        });
+      }
       break;
       
     case 'content':

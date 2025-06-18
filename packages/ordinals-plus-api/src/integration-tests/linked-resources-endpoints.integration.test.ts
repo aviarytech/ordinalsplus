@@ -144,7 +144,7 @@ describe('Linked Resources API Endpoints', () => {
       const validRequest: CreateLinkedResourceRequest = {
         type: 'TestResource',
         name: 'Resource with DID Reference',
-        didReference: 'did:btco:test:123'
+        didReference: 'did:btco:956424811897629'
       };
 
       // Act
@@ -164,8 +164,8 @@ describe('Linked Resources API Endpoints', () => {
       
       // Check response structure
       expect(result).toBeDefined();
-      expect(result.didReference).toBe('did:btco:test:123');
-      expect(result.content).toHaveProperty('didReference', 'did:btco:test:123');
+      expect(result.didReference).toBe('did:btco:956424811897629');
+      expect(result.content).toHaveProperty('didReference', 'did:btco:956424811897629');
     });
 
     it('should return 400 when type is missing', async () => {

@@ -48,8 +48,8 @@ describe('ResourceInscriptionService', () => {
     
     mockInscriptionRepository.getInscriptionById.mockResolvedValue({
       id: 'test-inscription-id',
-      parentDid: 'did:btco:123456/0',
-      requesterDid: 'did:btco:654321/0',
+      parentDid: 'did:btco:1908770696977240/0',
+      requesterDid: 'did:btco:1908770696991731/0',
       label: 'Test Resource',
       resourceType: 'image',
       contentType: 'image/png',
@@ -69,8 +69,8 @@ describe('ResourceInscriptionService', () => {
     
     mockInscriptionRepository.updateInscription.mockImplementation(async (id, update) => ({
       id,
-      parentDid: 'did:btco:123456/0',
-      requesterDid: 'did:btco:654321/0',
+      parentDid: 'did:btco:1908770696977240/0',
+      requesterDid: 'did:btco:1908770696991731/0',
       label: 'Test Resource',
       resourceType: 'image',
       contentType: 'image/png',
@@ -87,8 +87,8 @@ describe('ResourceInscriptionService', () => {
     it('should create a new resource inscription request', async () => {
       // Arrange
       const request: ResourceInscriptionRequest = {
-        parentDid: 'did:btco:123456/0',
-        requesterDid: 'did:btco:654321/0',
+        parentDid: 'did:btco:1908770696977240/0',
+        requesterDid: 'did:btco:1908770696991731/0',
         content: Buffer.from('test content'),
         contentType: 'image/png',
         label: 'Test Resource',
@@ -110,7 +110,7 @@ describe('ResourceInscriptionService', () => {
       // Arrange
       const request: ResourceInscriptionRequest = {
         parentDid: 'invalid-did',
-        requesterDid: 'did:btco:654321/0',
+        requesterDid: 'did:btco:1908770696991731/0',
         content: Buffer.from('test content'),
         contentType: 'image/png',
         label: 'Test Resource',
@@ -134,8 +134,8 @@ describe('ResourceInscriptionService', () => {
       );
       
       const request: ResourceInscriptionRequest = {
-        parentDid: 'did:btco:123456/0',
-        requesterDid: 'did:btco:654321/0',
+        parentDid: 'did:btco:1908770696977240/0',
+        requesterDid: 'did:btco:1908770696991731/0',
         content: Buffer.from('test content that is too large'),
         contentType: 'image/png',
         label: 'Test Resource',
@@ -154,8 +154,8 @@ describe('ResourceInscriptionService', () => {
       
       // Arrange
       const request: ResourceInscriptionRequest = {
-        parentDid: 'did:btco:123456/0',
-        requesterDid: 'did:btco:654321/0',
+        parentDid: 'did:btco:1908770696977240/0',
+        requesterDid: 'did:btco:1908770696991731/0',
         content: Buffer.from('test content'),
         contentType: 'image/png',
         label: 'Test Resource',
@@ -194,8 +194,8 @@ describe('ResourceInscriptionService', () => {
       orchestrator.executeRevealTransaction.mockRejectedValueOnce(new Error('Reveal transaction failed'));
       
       const request: ResourceInscriptionRequest = {
-        parentDid: 'did:btco:123456/0',
-        requesterDid: 'did:btco:654321/0',
+        parentDid: 'did:btco:1908770696977240/0',
+        requesterDid: 'did:btco:1908770696991731/0',
         content: Buffer.from('test content'),
         contentType: 'image/png',
         label: 'Test Resource',

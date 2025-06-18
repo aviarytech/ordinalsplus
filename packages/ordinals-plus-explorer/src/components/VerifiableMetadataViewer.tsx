@@ -18,6 +18,12 @@ interface VerifiableMetadataViewerProps {
   className?: string;
   /** Whether to auto-verify if VC is detected */
   autoVerify?: boolean;
+  /** Whether to show only verification (no metadata info) */
+  verificationOnly?: boolean;
+  /** Callback when verification completes */
+  onVerificationComplete?: (result: any) => void;
+  /** Expected sat number for validation (extracted from inscription data) */
+  expectedSatNumber?: string;
 }
 
 /**
@@ -62,7 +68,10 @@ export const VerifiableMetadataViewer: React.FC<VerifiableMetadataViewerProps> =
   inscriptionId,
   metadata,
   className = '',
-  autoVerify = false
+  autoVerify = true,
+  verificationOnly = false,
+  onVerificationComplete,
+  expectedSatNumber
 }) => {
   const [showRawMetadata, setShowRawMetadata] = useState(false);
   const [verificationService, setVerificationService] = useState<VerificationService | null>(null);
@@ -87,107 +96,161 @@ export const VerifiableMetadataViewer: React.FC<VerifiableMetadataViewerProps> =
   }
 
   return (
-    <div className={`${className}`}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-600 dark:text-gray-400">Metadata:</span>
-          {isVC && (
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-blue-500" />
-              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
-                Verifiable Credential
-              </span>
-              <span className="text-xs text-gray-500">
-                {getCredentialTypeDescription(metadata)}
-              </span>
-            </div>
-          )}
-        </div>
-        
-        <button
-          onClick={() => setShowRawMetadata(!showRawMetadata)}
-          className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-        >
-          {showRawMetadata ? (
-            <>
-              <EyeOff className="w-3 h-3" />
-              Hide Raw
-            </>
-          ) : (
-            <>
-              <Eye className="w-3 h-3" />
-              Show Raw
-            </>
-          )}
-        </button>
-      </div>
-
+    <div className={`w-full ${className}`}>
       {isVC && verificationService ? (
-        <div className="space-y-3">
-          {/* VC Summary */}
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-              {metadata.id && (
-                <div>
-                  <span className="font-medium text-blue-700 dark:text-blue-300">ID:</span>
-                  <div className="text-blue-600 dark:text-blue-400 text-xs font-mono break-all">
-                    {metadata.id}
-                  </div>
-                </div>
-              )}
-              
-              {metadata.issuer && (
-                <div>
-                  <span className="font-medium text-blue-700 dark:text-blue-300">Issuer:</span>
-                  <div className="text-blue-600 dark:text-blue-400 text-xs font-mono break-all">
-                    {typeof metadata.issuer === 'string' ? metadata.issuer : metadata.issuer.id || 'Unknown'}
-                  </div>
-                </div>
-              )}
-              
-              {metadata.issuanceDate && (
-                <div>
-                  <span className="font-medium text-blue-700 dark:text-blue-300">Issued:</span>
-                  <div className="text-blue-600 dark:text-blue-400 text-xs">
-                    {new Date(metadata.issuanceDate).toLocaleDateString()}
-                  </div>
-                </div>
-              )}
-              
-              {metadata.expirationDate && (
-                <div>
-                  <span className="font-medium text-blue-700 dark:text-blue-300">Expires:</span>
-                  <div className="text-blue-600 dark:text-blue-400 text-xs">
-                    {new Date(metadata.expirationDate).toLocaleDateString()}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Verification Component */}
+        verificationOnly ? (
+          // Verification only mode - just show the verification component
           <VerificationComponent
             inscriptionId={inscriptionId}
             verificationService={verificationService}
             autoVerify={autoVerify}
             showDetailedResults={true}
             inscriptionData={{ metadata }}
-            className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-800"
+            className="w-full h-full"
+            onVerificationComplete={onVerificationComplete}
+            expectedSatNumber={expectedSatNumber}
           />
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs">
-          <AlertTriangle className="w-4 h-4 text-yellow-500" />
-          <span className="text-gray-600 dark:text-gray-400">
-            Not a Verifiable Credential - displaying raw metadata
-          </span>
-        </div>
-      )}
+        ) : (
+          // Full mode - show verification on left, metadata on right
+          <div className="w-full">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+              {/* Left Column - Verification Component (Full Height) */}
+              <div className="col-span-1">
+                <VerificationComponent
+                  inscriptionId={inscriptionId}
+                  verificationService={verificationService}
+                  autoVerify={autoVerify}
+                  showDetailedResults={true}
+                  inscriptionData={{ metadata }}
+                  className="w-full h-full"
+                  onVerificationComplete={onVerificationComplete}
+                  expectedSatNumber={expectedSatNumber}
+                />
+              </div>
 
-      {/* Raw Metadata Display */}
-      {showRawMetadata && (
-        <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-600 rounded text-xs font-mono break-all max-h-40 overflow-y-auto">
-          {JSON.stringify(metadata, null, 2)}
+              {/* Right Column - All Metadata Information */}
+              <div className="col-span-1 space-y-4">
+                {/* Metadata Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-600 dark:text-gray-400">Metadata:</span>
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-blue-500" />
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
+                        Verifiable Credential
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {getCredentialTypeDescription(metadata)}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <button
+                    onClick={() => setShowRawMetadata(!showRawMetadata)}
+                    className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    {showRawMetadata ? (
+                      <>
+                        <EyeOff className="w-3 h-3" />
+                        Hide Raw
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3 h-3" />
+                        Show Raw
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* VC Summary */}
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                  <div className="space-y-3 text-sm">
+                    {metadata.id && (
+                      <div>
+                        <span className="font-medium text-blue-700 dark:text-blue-300">ID:</span>
+                        <div className="text-blue-600 dark:text-blue-400 text-xs font-mono break-all mt-1">
+                          {metadata.id}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {metadata.issuer && (
+                      <div>
+                        <span className="font-medium text-blue-700 dark:text-blue-300">Issuer:</span>
+                        <div className="text-blue-600 dark:text-blue-400 text-xs font-mono break-all mt-1">
+                          {typeof metadata.issuer === 'string' ? metadata.issuer : metadata.issuer.id || 'Unknown'}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {metadata.issuanceDate && (
+                      <div>
+                        <span className="font-medium text-blue-700 dark:text-blue-300">Issued:</span>
+                        <div className="text-blue-600 dark:text-blue-400 text-xs mt-1">
+                          {new Date(metadata.issuanceDate).toLocaleDateString()}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {metadata.expirationDate && (
+                      <div>
+                        <span className="font-medium text-blue-700 dark:text-blue-300">Expires:</span>
+                        <div className="text-blue-600 dark:text-blue-400 text-xs mt-1">
+                          {new Date(metadata.expirationDate).toLocaleDateString()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Raw Metadata Display */}
+                {showRawMetadata && (
+                  <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded text-xs font-mono break-all max-h-40 overflow-y-auto">
+                    {JSON.stringify(metadata, null, 2)}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      ) : (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-medium text-gray-600 dark:text-gray-400">Metadata:</span>
+              <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 rounded text-xs">
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <span className="text-gray-600 dark:text-gray-400">
+                  Not a Verifiable Credential - displaying raw metadata
+                </span>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => setShowRawMetadata(!showRawMetadata)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              {showRawMetadata ? (
+                <>
+                  <EyeOff className="w-3 h-3" />
+                  Hide Raw
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3 h-3" />
+                  Show Raw
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Raw Metadata Display */}
+          {showRawMetadata && (
+            <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-600 rounded text-xs font-mono break-all max-h-40 overflow-y-auto">
+              {JSON.stringify(metadata, null, 2)}
+            </div>
+          )}
         </div>
       )}
     </div>

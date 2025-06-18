@@ -5,6 +5,16 @@ import { fetchWithTimeout } from '../../utils/fetch-utils';
 import { ResourceProvider, ResourceCrawlOptions, ResourceBatch, InscriptionRefWithLocation } from './types';
 import { createLinkedResourceFromInscription } from '../../resources/linked-resource';
 
+// Helper function to convert hex string to Uint8Array
+function hexToBytes(hex: string): Uint8Array {
+    const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+    const bytes = new Uint8Array(cleanHex.length / 2);
+    for (let i = 0; i < cleanHex.length; i += 2) {
+        bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
+    }
+    return bytes;
+}
+
 export interface OrdiscanProviderOptions {
     apiKey: string;
     apiEndpoint?: string;
@@ -36,6 +46,15 @@ interface OrdiscanInscriptionResponse {
     timestamp: string;
     sat: number;
     content_url: string;
+    metadata?: any; // CBOR metadata, can be object or string (hex-encoded)
+    metaprotocol?: string | null; // Metaprotocol identifier
+    parent_inscription_id?: string | null; // Parent inscription ID
+    delegate_inscription_id?: string | null; // Delegate inscription ID
+    satributes?: string[]; // Sat attributes
+    collection_slug?: string | null; // Collection identifier
+    brc20_action?: any | null; // BRC-20 action object
+    sats_name?: string | null; // Sats name
+    submodules?: string[]; // Recursive inscription modules
 }
 
 export class OrdiscanProvider implements ResourceProvider {
@@ -122,23 +141,32 @@ export class OrdiscanProvider implements ResourceProvider {
 
     async getMetadata(inscriptionId: string): Promise<any> {
         const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
+        // Check if the response contains metadata field
+        if ('metadata' in response.data && response.data.metadata !== null) {
+            // If metadata is already decoded JSON from Ordiscan API, return it directly
+            if (typeof response.data.metadata === 'object') {
+                return response.data.metadata;
+            }
+            
+            // If metadata is a string (hex-encoded CBOR), decode it
+            if (typeof response.data.metadata === 'string') {
+                try {
+                    const { extractCborMetadata } = await import('../../utils/cbor-utils');
+                    const metadataBytes = hexToBytes(response.data.metadata);
+                    const decodedMetadata = extractCborMetadata(metadataBytes);
+                    
+                    if (decodedMetadata !== null) {
+                        return decodedMetadata;
+                    }
+                } catch (error) {
+                    console.warn(`[OrdiscanProvider] Failed to decode CBOR metadata for inscription ${inscriptionId}:`, error);
+                    // Fall through to return null
+                }
+            }
+        }
         
-        // Extract CBOR metadata if available
-        // Note: This is a placeholder implementation - the actual metadata extraction
-        // would depend on how Ordiscan provides metadata in their API response
-        const metadata = {
-            inscription_id: response.data.inscription_id,
-            inscription_number: response.data.inscription_number,
-            content_type: response.data.content_type,
-            sat: response.data.sat,
-            timestamp: response.data.timestamp,
-            genesis_address: response.data.genesis_address,
-            owner_address: response.data.owner_address
-        };
-
-        // If the API provides CBOR metadata, it would be decoded here
-        // For now, we return the basic metadata structure
-        return metadata;
+        // If no metadata is available or decoding failed, return null
+        return null;
     }
 
     async resolveCollection(did: string, options: {

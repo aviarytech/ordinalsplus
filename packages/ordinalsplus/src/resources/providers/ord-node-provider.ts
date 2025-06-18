@@ -127,12 +127,12 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async resolveInscription(inscriptionId: string): Promise<Inscription> {
-        const response = await this.fetchApi<any>(`/inscription/${inscriptionId}`);
+        const response = await this.fetchApi<any>(`/r/inscription/${inscriptionId}`);
         
-        // Handle different possible response formats
-        let id = response.inscription_id || response.id || inscriptionId;
+        let id = response.id || inscriptionId;
         let sat = response.sat || 0;
         let content_type = response.content_type || 'application/octet-stream';
+        
         return {
             id: id,
             sat: sat,
@@ -142,14 +142,14 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async resolveInfo(inscriptionId: string): Promise<ResourceInfo> {
-        const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
+        const response = await this.fetchApi<any>(`/r/inscription/${inscriptionId}`);
         return {
             id: response.id,
             type: response.content_type,
             contentType: response.content_type,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            content_url: response.content_url
+            content_url: `${this.nodeUrl}/content/${inscriptionId}`
         };
     }
 
@@ -247,7 +247,7 @@ export class OrdNodeProvider implements ResourceProvider {
         const listResponse = await this.fetchApi<OrdNodeInscriptionListResponse>(`/inscriptions/${page}`);
         const resources = await Promise.all(
             listResponse.ids.map(async (id: string) => {
-                const inscriptionResponse = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${id}`);
+                const inscriptionResponse = await this.fetchApi<any>(`/r/inscription/${id}`);
                 
                 const inscriptionObj: Inscription = {
                     id: inscriptionResponse.id,
@@ -267,12 +267,12 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async getInscription(inscriptionId: string): Promise<Inscription> {
-        const response = await this.fetchApi<OrdNodeInscriptionResponse>(`/inscription/${inscriptionId}`);
+        const response = await this.fetchApi<any>(`/r/inscription/${inscriptionId}`);
         return {
             id: response.id,
             sat: response.sat,
             content_type: response.content_type,
-            content_url: response.content_url
+            content_url: `${this.nodeUrl}/content/${inscriptionId}`
         };
     }
 

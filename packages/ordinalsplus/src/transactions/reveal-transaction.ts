@@ -1,6 +1,7 @@
 import * as btc from '@scure/btc-signer';
 import { base64, hex } from '@scure/base';
 import * as ordinals from 'micro-ordinals';
+import * as bitcoin from 'bitcoinjs-lib';
 import { Utxo, BitcoinNetwork } from '../types';
 import { PreparedInscription } from '../inscription/scripts/ordinal-reveal';
 import { calculateFee } from './fee-calculation';
@@ -270,31 +271,98 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       // We need to calculate the actual transaction size including the full inscription
       const inscriptionSize = preparedInscription.inscription.body?.length || 0;
       
-      // For reveal transactions, the size calculation is:
-      // Base transaction (inputs/outputs): ~150 bytes
-      // Witness data: inscription content + script overhead (~300 bytes)
-      // The witness data gets a 75% discount in vsize calculation
+      // DEBUG: Log inscription structure to understand why we're getting 0 size
+      console.log('[Inscription Debug] Full inscription structure analysis:');
+      console.log('- preparedInscription keys:', Object.keys(preparedInscription));
+      console.log('- preparedInscription.inscription keys:', Object.keys(preparedInscription.inscription));
+      console.log('- preparedInscription.inscription:', JSON.stringify(preparedInscription.inscription, null, 2));
+      console.log('- inscription.body type:', typeof preparedInscription.inscription.body);
+      console.log('- inscription.body length:', preparedInscription.inscription.body?.length);
+      console.log('- inscription.body constructor:', preparedInscription.inscription.body?.constructor?.name);
+      console.log('- inscription.body is Array:', Array.isArray(preparedInscription.inscription.body));
+      console.log('- inscription body preview:', preparedInscription.inscription.body ? 
+        Array.from(preparedInscription.inscription.body).slice(0, 50) : 'undefined');
       
+      // Check if there are any tags that might contain size information
+      if (preparedInscription.inscription.tags) {
+        console.log('- inscription.tags:', preparedInscription.inscription.tags);
+      }
+      
+      // CRITICAL FIX: Check multiple possible paths for content size
+      let actualInscriptionSize = inscriptionSize;
+      if (actualInscriptionSize === 0) {
+        console.log('[Inscription Debug] Original size was 0, trying alternative paths...');
+        
+        // Try alternative paths to get content size
+        if (typeof preparedInscription.inscription.body === 'string') {
+          actualInscriptionSize = Buffer.from(preparedInscription.inscription.body).length;
+          console.log('[Inscription Debug] Body is string, calculated size:', actualInscriptionSize);
+        } else if (preparedInscription.inscription.body instanceof Buffer) {
+          actualInscriptionSize = preparedInscription.inscription.body.length;
+          console.log('[Inscription Debug] Body is Buffer, size:', actualInscriptionSize);
+        } else if (preparedInscription.inscription.body instanceof Uint8Array) {
+          actualInscriptionSize = preparedInscription.inscription.body.length;
+          console.log('[Inscription Debug] Body is Uint8Array, size:', actualInscriptionSize);
+        } else if (preparedInscription.inscription.body && typeof preparedInscription.inscription.body === 'object') {
+          // CRITICAL FIX: Check for serialized Buffer format: { type: "Buffer", data: [...] }
+          const body = preparedInscription.inscription.body as any;
+          if (body.type === 'Buffer' && Array.isArray(body.data)) {
+            actualInscriptionSize = body.data.length;
+            console.log('[Inscription Debug] Found serialized Buffer format, size:', actualInscriptionSize);
+          } else if (body.byteLength !== undefined) {
+            actualInscriptionSize = body.byteLength;
+            console.log('[Inscription Debug] Found byteLength property:', actualInscriptionSize);
+          } else if (body.length !== undefined) {
+            actualInscriptionSize = body.length;
+            console.log('[Inscription Debug] Found length property in object:', actualInscriptionSize);
+          } else {
+            console.log('[Inscription Debug] Body is object but no size property found:', Object.keys(body));
+          }
+        }
+        
+        // If still 0, check if we have the content elsewhere
+        if (actualInscriptionSize === 0) {
+          console.log('[Inscription Debug] Still no size found, checking other locations...');
+          
+          // Check if the content is in the original preparation parameters
+          if (localStorage.getItem('inscriptionData')) {
+            try {
+              const savedData = JSON.parse(localStorage.getItem('inscriptionData') || '{}');
+              if (savedData.inscription && savedData.inscription.body) {
+                console.log('[Inscription Debug] Found content in localStorage inscription.body');
+                const storedBody = savedData.inscription.body;
+                if (typeof storedBody === 'string') {
+                  actualInscriptionSize = Buffer.from(storedBody).length;
+                  console.log('[Inscription Debug] Size from localStorage (string):', actualInscriptionSize);
+                }
+              }
+            } catch (e) {
+              console.log('[Inscription Debug] Could not parse localStorage inscription data');
+            }
+          }
+        }
+        
+        console.log('[Inscription Debug] Final calculated size:', actualInscriptionSize);
+      } else {
+        console.log('[Inscription Debug] Original size was already valid:', actualInscriptionSize);
+      }
+      
+      // For reveal transactions, use simplified empirical formula
+      // Based on real transaction data where 4059 bytes = ~1130 vB
       let estimatedVsize: number;
-      if (inscriptionSize > 0) {
-        // Base transaction size (non-witness data)
-        // More accurate: version(4) + input_count(1) + input(37) + output_count(1) + outputs(~65) + locktime(4) = ~112 bytes
-        // Using 150 as conservative estimate to account for variable output sizes
-        const baseSize = 150;
+      if (actualInscriptionSize > 0) {
+        // Empirical formula based on actual Bitcoin transactions:
+        // Base overhead: ~100 vB for transaction structure and scripts
+        // Content scaling: each byte of content adds ~0.27 vB due to witness discount
+        // This gives results much closer to actual on-chain transactions
+        estimatedVsize = Math.ceil(100 + (actualInscriptionSize * 0.27));
         
-        // Witness data includes:
-        // - Signature: ~64 bytes
-        // - Inscription script: inscription content + script overhead (~300 bytes)
-        // - Control block: ~33 bytes
-        const witnessSize = inscriptionSize + 300;
-        
-        // vsize = (base_size * 3 + total_size) / 4
-        // where total_size = base_size + witness_size
-        const totalSize = baseSize + witnessSize;
-        estimatedVsize = Math.ceil((baseSize * 3 + totalSize) / 4);
+        console.log(`[Vsize Estimation] Content size: ${actualInscriptionSize} bytes`);
+        console.log(`[Vsize Estimation] Formula: 100 + (${actualInscriptionSize} * 0.27) = ${estimatedVsize} vB`);
       } else {
         // For non-inscription transactions, use a simpler calculation
         estimatedVsize = 200;
+        console.log('[Vsize Estimation] No content found, using fallback size: 200 vB');
       }
 
       const fee = BigInt(calculateFee(estimatedVsize, feeRate));
@@ -424,69 +492,24 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       const txBase64 = base64.encode(txBytes);
       
       // Calculate the actual vsize from the finalized transaction
-      // For SegWit transactions, vsize = (base_size * 3 + total_size) / 4
-      // We need to properly calculate this instead of using total size
-      
-      // Parse the transaction to separate witness and non-witness data
+      // Use bitcoinjs-lib to parse the raw transaction and get accurate virtual size
       let actualVsize: number;
       try {
-        // For SegWit transactions, we need to calculate vsize properly
-        // The transaction structure is: version(4) + marker(1) + flag(1) + inputs + outputs + witness + locktime(4)
-        // Non-witness data: version + inputs + outputs + locktime
-        // Witness data: marker + flag + witness
+        // Parse the raw transaction bytes
+        const parsedTx = bitcoin.Transaction.fromBuffer(Buffer.from(txBytes));
         
-        // Since @scure/btc-signer doesn't expose witness/non-witness separation directly,
-        // we'll use the same calculation method as the estimation but with actual data sizes
+        // Get the accurate virtual size directly from bitcoinjs-lib
+        actualVsize = parsedTx.virtualSize();
         
-        // Get the actual inscription size from the prepared inscription
-        const actualInscriptionSize = preparedInscription.inscription.body?.length || 0;
+        console.log(`[Vsize Debug] Total size: ${txBytes.length}, Virtual size: ${actualVsize} vB`);
+        console.log(`[Vsize Debug] Estimated vs Actual: estimated=${estimatedVsize}, actual=${actualVsize}, difference=${estimatedVsize - actualVsize} vB`);
+        console.log(`[Vsize Debug] Fee rate check: fee=${Number(fee)}, vsize=${actualVsize}, rate=${(Number(fee) / actualVsize).toFixed(2)} sat/vB`);
         
-        if (actualInscriptionSize > 0) {
-          // More accurate base transaction size calculation
-          // Base transaction (non-witness data) includes:
-          // - Version: 4 bytes
-          // - Input count: 1 byte (for 1 input)
-          // - Input: 36 bytes (txid + vout + sequence) + 1 byte (empty scriptSig length)
-          // - Output count: 1 byte (for 1-2 outputs)
-          // - Outputs: 8 bytes (value) + 1 byte (script length) + script bytes per output
-          // - Locktime: 4 bytes
-          
-          let baseSize = 4 + 1 + 37 + 1 + 4; // Version + input count + input + output count + locktime
-          
-          // Add output sizes
-          for (let i = 0; i < tx.outputsLength; i++) {
-            const output = tx.getOutput(i);
-            baseSize += 8 + 1 + (output.script?.length || 31); // value + script length + script
-          }
-          
-          // Witness data calculation:
-          // - Marker + Flag: 2 bytes (but these are counted as witness data)
-          // - Witness stack count for input: 1 byte
-          // - Signature: 64 bytes (Schnorr) + 1 byte length prefix
-          // - Inscription script: actual content + overhead + 1-3 bytes length prefix
-          // - Control block: 33 bytes + 1 byte length prefix
-          
-          const signatureBytes = 64 + 1; // Schnorr signature + length prefix
-          const controlBlockBytes = 33 + 1; // Control block + length prefix
-          
-          // Calculate inscription script size with proper length encoding
-          const inscriptionScriptSize = actualInscriptionSize + 50; // Content + OP codes overhead
-          const inscriptionScriptBytes = inscriptionScriptSize + (inscriptionScriptSize < 253 ? 1 : 3); // + length prefix
-          
-          const witnessSize = 2 + 1 + signatureBytes + inscriptionScriptBytes + controlBlockBytes; // marker+flag + stack count + signature + script + control block
-          
-          // vsize = (base_size * 3 + total_size) / 4
-          const totalSize = baseSize + witnessSize;
-          actualVsize = Math.ceil((baseSize * 3 + totalSize) / 4);
-          
-          console.log(`[Vsize Debug] Base size: ${baseSize}, Witness size: ${witnessSize}, Total size: ${totalSize}, Calculated vsize: ${actualVsize}`);
-        } else {
-          // For non-inscription transactions, use the total size as approximation
-          actualVsize = txBytes.length;
-        }
       } catch (error) {
-        console.warn('[Vsize Calculation] Failed to calculate proper vsize, using total size as fallback:', error);
-        actualVsize = txBytes.length;
+        console.warn('[Vsize Calculation] Failed to parse transaction with bitcoinjs-lib, using approximation:', error);
+        // Fallback: for SegWit transactions, vsize is typically about 75% of total size
+        // This is a rough approximation when parsing fails
+        actualVsize = Math.ceil(txBytes.length * 0.75);
       }
       
       // Log the comparison between estimated and actual size for debugging

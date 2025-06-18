@@ -12,6 +12,7 @@ export interface BtcoInscriptionData {
   content: string;
   metadata: any;
   contentUrl?: string;
+  contentType?: string;
   isValidDid?: boolean;
   didDocument?: DidDocument | null;
   error?: string;
@@ -232,6 +233,7 @@ export class BtcoDidResolver {
           }
           
           inscriptionData.contentUrl = inscription.content_url;
+          inscriptionData.contentType = inscription.content_type;
 
           // Fetch the actual content from the content URL
           try {
@@ -267,6 +269,7 @@ export class BtcoDidResolver {
                 const didDocument = inscriptionData.metadata as DidDocument;
                 
                 // Validate the DID document
+                console.log('didDocument', didDocument);
                 if (this.isValidDidDocument(didDocument) && didDocument.id === expectedDid) {
                   inscriptionData.didDocument = didDocument;
                 } else {

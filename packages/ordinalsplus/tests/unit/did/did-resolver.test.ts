@@ -220,6 +220,13 @@ describe('DidResolver', () => {
       
       spy.mockRestore();
     });
+    
+    it('should resolve a new DID', async () => {
+      const result = await resolver.resolve('did:btco:1908770696977240');
+      
+      expect(result.didDocument).toBeDefined();
+      expect(result.didDocument?.id).toBe('did:btco:1908770696977240');
+    });
   });
   
   describe('parseDidUrl', () => {

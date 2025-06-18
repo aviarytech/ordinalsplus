@@ -1,7 +1,7 @@
 {
   "scripts": {
     "btc:signet": "bitcoind -conf=./bitcoin.conf",
-    "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --data-dir=./data/signet index run",
+    "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --index-sats --data-dir=./data/signet index run",
     "ord:server": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --index-sats --data-dir=./data/signet server",
     "test": "npm run test:all",
     "test:all": "echo '\n📦 Testing all packages\n' && npm run test:summary:ordinalsplus && npm run test:summary:api && npm run test:summary:explorer && echo '\n✅ All tests completed successfully!\n'",
