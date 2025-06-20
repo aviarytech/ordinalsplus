@@ -90,9 +90,22 @@ describe('Commit Transaction Process', () => {
     expect(result.requiredCommitAmount).toBeGreaterThan(0);
   });
 
-  test('should handle commit transaction state management efficiently', () => {
-    // TODO: Implement test for state management approach
-    expect(true).toBe(true);
+  test('should handle commit transaction state management efficiently', async () => {
+    const inscription = createTextInscription('Hello, World!', mockNetwork);
+    const params: CommitTransactionParams = {
+      inscription,
+      utxos: mockUtxos,
+      changeAddress: mockChangeAddress,
+      feeRate: 2,
+      network: mockNetwork
+    };
+
+    const addSpy = vi.spyOn(transactionTracker, 'addTransaction');
+    const statusSpy = vi.spyOn(transactionTracker, 'setTransactionStatus');
+
+    const result = await prepareCommitTransaction(params);
+    expect(addSpy).toHaveBeenCalled();
+    expect(statusSpy).toHaveBeenCalledWith(result.transactionId, TransactionStatus.CONFIRMING);
   });
 
   test('should properly handle errors in commit transaction creation', async () => {
@@ -124,9 +137,18 @@ describe('Commit Transaction Process', () => {
     await expect(prepareCommitTransaction(invalidFeeParams)).rejects.toThrow(/Invalid fee rate/);
   });
 
-  test('should remove unnecessary code from the implementation', () => {
-    // TODO: Implement test to verify removal of unused variables, functions, and imports
-    expect(true).toBe(true);
+  test('should produce a PSBT with inputs matching selected UTXOs', async () => {
+    const inscription = createTextInscription('Hello, World!', mockNetwork);
+    const params: CommitTransactionParams = {
+      inscription,
+      utxos: mockUtxos,
+      changeAddress: mockChangeAddress,
+      feeRate: 2,
+      network: mockNetwork
+    };
+
+    const result = await prepareCommitTransaction(params);
+    expect(result.commitPsbt.inputsLength).toBe(result.selectedUtxos.length);
   });
 
   test('should maintain proper type definitions throughout commit process', async () => {

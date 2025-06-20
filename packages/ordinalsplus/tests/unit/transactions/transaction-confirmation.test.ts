@@ -209,7 +209,13 @@ describe('TransactionConfirmationService', () => {
 
   });
 
-  // TODO: Add tests for RPC fallback if mempoolApiUrl is not provided or fails in a specific way
-  // TODO: Add tests for configuration errors (no mempoolApiUrl and no rpcClient)
-  // TODO: Test dispose method clears timers and listeners correctly
-}); 
+  test('dispose should clear watchers and listeners correctly', () => {
+    confirmationService.watchTransaction(testTxid, mockPsbt);
+    const handler = vi.fn();
+    confirmationService.on(ConfirmationEvent.CONFIRMED, handler);
+    confirmationService.dispose();
+    // @ts-expect-error access private watchedTransactions for test
+    expect(confirmationService.watchedTransactions.size).toBe(0);
+    expect(confirmationService.listenerCount(ConfirmationEvent.CONFIRMED)).toBe(0);
+  });
+});

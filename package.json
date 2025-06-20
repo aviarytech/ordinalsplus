@@ -12,7 +12,11 @@
     "test:api": "echo '\n📋 Running full tests for ordinals-plus-api package...' && cd packages/ordinals-plus-api && bun test",
     "test:explorer": "echo '\n📋 Running full tests for ordinals-plus-explorer package...' && cd packages/ordinals-plus-explorer && vitest run",
     "test:watch": "echo \"Running tests in watch mode is only supported in individual packages\"",
-    "test:windsurf": "node scripts/run-tests-in-windsurf.js"
+    "test:windsurf": "node scripts/run-tests-in-windsurf.js",
+    "test:coverage": "npm run coverage:ordinalsplus && npm run coverage:api && npm run coverage:explorer",
+    "coverage:ordinalsplus": "cd packages/ordinalsplus && bun test --coverage",
+    "coverage:api": "cd packages/ordinals-plus-api && bun test --coverage",
+    "coverage:explorer": "cd packages/ordinals-plus-explorer && vitest run --coverage"
   },
   "devDependencies": {
     "@ljharb/tsconfig": "^0.3.2",
