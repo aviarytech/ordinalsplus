@@ -111,7 +111,7 @@ export type {
 } from './transactions/transaction-status-tracker';
 
 // --- Component Exports ---
-export * from './components';
+// UI components have moved to the explorer package
 
 // --- Inscription Exports ---
 export {
