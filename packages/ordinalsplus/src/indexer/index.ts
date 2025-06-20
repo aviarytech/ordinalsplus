@@ -5,6 +5,7 @@
 
 export * from './ordinals-indexer';
 export * from './memory-db';
+export * from '../db/storage-backend';
 export * from './logger';
 export * from './errors';
 export * from './error-handling';

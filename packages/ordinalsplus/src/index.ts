@@ -123,7 +123,9 @@ export {
 // --- Indexer Exports ---
 export {
   OrdinalsIndexer,
-  MemoryIndexerDatabase
+  MemoryIndexerDatabase,
+  StorageBackend,
+  InMemoryBackend
 } from './indexer';
 
 export {
