@@ -68,3 +68,11 @@ Run the `configure.sh` script to install Bun and all project dependencies:
 ```bash
 ./scripts/configure.sh
 ```
+
+Create a `.env` file for each package using the provided `.env.example` templates:
+```bash
+cp .env.example .env
+cp packages/ordinals-plus-api/.env.example packages/ordinals-plus-api/.env
+cp packages/ordinals-plus-explorer/.env.example packages/ordinals-plus-explorer/.env
+```
+Update these `.env` files with your API keys and other settings before running tests.
