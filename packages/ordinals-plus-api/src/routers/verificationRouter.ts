@@ -18,6 +18,7 @@ import type { CollectionInscriptionRepository } from '../types/collectionInscrip
 import { InMemoryCredentialRepository } from '../repositories/credentialRepository';
 import { InMemoryCollectionRepository } from '../repositories/collectionRepository';
 import { InMemoryCollectionInscriptionRepository } from '../repositories/collectionInscriptionRepository';
+import { env } from '../config/envConfig';
 
 // Create services
 const apiService = new ApiService();
@@ -112,7 +113,7 @@ async function verifyCredentialBasic(credential: any): Promise<{ valid: boolean;
  * Fetch inscription metadata using the Ordiscan API
  */
 async function fetchInscriptionMetadata(inscriptionId: string): Promise<any> {
-  const apiKey = process.env.ORDISCAN_API_KEY;
+  const apiKey = env.ORDISCAN_API_KEY;
   if (!apiKey) {
     throw new Error('Ordiscan API key not configured');
   }

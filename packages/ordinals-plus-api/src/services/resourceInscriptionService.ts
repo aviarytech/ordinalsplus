@@ -25,9 +25,10 @@ import { DEFAULT_VALIDATION_RULES, ResourceValidationRules } from '../validation
 import { DIDService, DID_REGEX } from './didService';
 import { VCService } from './vcService';
 import { logger } from '../utils/logger';
+import { env } from '../config/envConfig';
 
 // Environment variable for Ord node URL (default to localhost:80 if not set)
-const ORD_NODE_URL = process.env.ORD_NODE_URL || 'http://127.0.0.1:80';
+const ORD_NODE_URL = env.ORD_NODE_URL || 'http://127.0.0.1:80';
 
 /**
  * Custom Error class for Resource Inscription errors

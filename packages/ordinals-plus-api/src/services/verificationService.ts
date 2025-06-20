@@ -8,6 +8,7 @@ import { VerificationStatus, type VerificationResult, type IssuerInfo } from '..
 import { ApiService } from './apiService';
 import { logger } from '../utils/logger';
 import { BtcoDidResolver } from 'ordinalsplus';
+import { env } from '../config/envConfig';
 
 /**
  * Cache entry for verification results
@@ -278,7 +279,7 @@ export class VerificationService {
    * @returns Promise resolving to metadata
    */
   private async fetchInscriptionMetadata(inscriptionId: string): Promise<any> {
-    const apiKey = process.env.ORDISCAN_API_KEY;
+    const apiKey = env.ORDISCAN_API_KEY;
     if (!apiKey) {
       throw new Error('Ordiscan API key not configured');
     }

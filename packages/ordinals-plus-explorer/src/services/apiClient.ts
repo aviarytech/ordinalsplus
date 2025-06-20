@@ -1,9 +1,10 @@
 import { createFetchClient } from '../utils/fetchUtils';
 import type { FetchRequestConfig, FetchResponse } from '../utils/fetchUtils';
+import { env } from '../config/envConfig';
 
 // Create a fetch client instance with default configuration
 const baseApiClient = createFetchClient({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001/api',
+  baseURL: env.VITE_BACKEND_URL || 'http://localhost:3001/api',
   headers: {
     'Content-Type': 'application/json',
   },

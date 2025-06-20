@@ -1,8 +1,9 @@
 import type { InscriptionResponse } from '../types';
 import type { Inscription } from 'ordinalsplus';
 import { OrdiscanProvider } from 'ordinalsplus';
+import { env } from '../config/envConfig';
 
-const ORDISCAN_API_KEY = process.env.ORDISCAN_API_KEY;
+const ORDISCAN_API_KEY = env.ORDISCAN_API_KEY;
 let provider: OrdiscanProvider;
 
 // Local options type definition might be slightly different from the actual one,

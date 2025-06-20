@@ -2,6 +2,7 @@ import { fetchInscriptions } from '../services/ordinalsService';
 import { createDidFromInscription, isValidDid } from '../services/didService';
 import { processInscriptionsForLinkedResources } from '../services/linkedResourcesService';
 import type { ExplorerApiResponse, DID } from '../types';
+import { env } from '../config/envConfig';
 
 // Simple cache to avoid refetching on every request
 let cachedResponse: ExplorerApiResponse | null = null;
@@ -11,7 +12,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 export const exploreDidsOrd = async (page = 0, itemsPerPage = 50): Promise<ExplorerApiResponse> => {
   try {
     // Check if API key is set
-    if (!process.env.ORDISCAN_API_KEY) {
+    if (!env.ORDISCAN_API_KEY) {
       console.error('ORDISCAN_API_KEY is not set in environment variables.');
       return {
         dids: [],

@@ -1,4 +1,5 @@
 import fetchClient from '../utils/fetchUtils';
+import { env } from '../config/envConfig';
 
 // Collection types
 export enum CollectionVisibility {
@@ -62,7 +63,7 @@ export interface CreateCollectionParams {
 }
 
 // API client setup
-const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const apiBaseUrl = env.VITE_BACKEND_URL || 'http://localhost:3001/api';
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('authToken');
