@@ -1,4 +1,5 @@
 import { OrdiscanProvider, OrdNodeProvider, type BitcoinNetwork, type ResourceProvider } from 'ordinalsplus';
+import { env } from '../config/envConfig';
 
 // Cache for provider instances per network
 const providerCache: Partial<Record<string, ResourceProvider>> = {};
@@ -22,16 +23,16 @@ export function getProvider(network: string = 'mainnet'): ResourceProvider | nul
     // Determine configuration based on network
     switch (network) {
         case 'mainnet':
-            nodeUrl = process.env.MAINNET_ORD_NODE_URL;
-            ordiscanKey = process.env.MAINNET_ORDISCAN_API_KEY || process.env.ORDISCAN_API_KEY; // Allow global fallback
+            nodeUrl = env.MAINNET_ORD_NODE_URL;
+            ordiscanKey = env.MAINNET_ORDISCAN_API_KEY || env.ORDISCAN_API_KEY; // Allow global fallback
             break;
         case 'testnet':
-            nodeUrl = process.env.TESTNET_ORD_NODE_URL;
-            ordiscanKey = process.env.TESTNET_ORDISCAN_API_KEY; // No global fallback for testnet key
+            nodeUrl = env.TESTNET_ORD_NODE_URL;
+            ordiscanKey = env.TESTNET_ORDISCAN_API_KEY; // No global fallback for testnet key
             break;
         case 'signet':
             // Default Signet URL if env var is not set
-            nodeUrl = process.env.SIGNET_ORD_NODE_URL || 'http://127.0.0.1:80'; 
+            nodeUrl = env.SIGNET_ORD_NODE_URL || 'http://127.0.0.1:80';
             console.log(`[ProviderService] Signet nodeUrl resolved to: ${nodeUrl}`);
             // Ordiscan doesn't support Signet, use local ord node
             break;

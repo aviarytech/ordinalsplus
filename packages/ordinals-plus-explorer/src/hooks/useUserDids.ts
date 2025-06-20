@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import fetchClient from '../utils/fetchUtils';
+import { env } from '../config/envConfig';
 
 /**
  * Hook for retrieving user DIDs
@@ -17,7 +18,7 @@ export const useUserDids = () => {
       
       try {
         // Get the API base URL from environment
-        const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+        const apiBaseUrl = env.VITE_BACKEND_URL || 'http://localhost:3001/api';
         
         // Get auth token from local storage
         const token = localStorage.getItem('authToken');

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import ApiService from '../services/apiService';
 import { useNetwork } from './NetworkContext'; // Import useNetwork
+import { env } from '../config/envConfig';
 
 // Define the shape of the context data
 interface ApiContextType {
@@ -20,7 +21,7 @@ interface ApiProviderProps {
 export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
   // Get the *initial* API base URL from environment variables
   // This will be used if no network context is found or if the network doesn't provide an apiUrl
-  const initialApiUrl = import.meta.env.VITE_API_BASE_URL || 
+  const initialApiUrl = env.VITE_API_BASE_URL ||
                         (window.Cypress ? Cypress.env('API_BASE_URL') : undefined);
 
   // Use the NetworkContext to get the active network

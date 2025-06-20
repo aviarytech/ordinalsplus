@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import ApiServiceProvider, { ApiProviderType } from '../services/ApiServiceProvider';
+import { env } from '../config/envConfig';
 
 /**
  * Custom hook that provides access to the API service provider
@@ -14,7 +15,7 @@ export const useApiService = () => {
     const provider = ApiServiceProvider.getInstance();
     
     // Get backend URL from environment with fallback
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:3000';
     
     // Configure the API service with the backend URL
     provider.updateConfig({
