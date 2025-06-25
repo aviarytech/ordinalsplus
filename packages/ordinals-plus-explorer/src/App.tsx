@@ -9,6 +9,7 @@ import CollectionDetailPage from './pages/CollectionDetailPage';
 import CollectionsGalleryPage from './pages/CollectionsGalleryPage';
 import CollectionVerificationPage from './pages/CollectionVerificationPage';
 import ExchangeParticipationPage from './pages/ExchangeParticipationPage';
+import WalletUtxosPage from './pages/WalletUtxosPage';
 import WalletConnector from './components/WalletConnector';
 import './index.css';
 import ErrorBoundary from './components/ui/ErrorBoundary';
@@ -27,6 +28,7 @@ function App() {
                   <Link to="/" className="text-white hover:text-orange-200 transition-colors font-medium">BTCO DID Resolver</Link>
                   <Link to="/resources" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
                   <Link to="/create" className="text-white hover:text-orange-200 transition-colors">Create</Link>
+                  <Link to="/wallet" className="text-white hover:text-orange-200 transition-colors">Wallet</Link>
                   <div className="relative dropdown-container">
                     <Link to="/collections" className="text-white hover:text-orange-200 transition-colors flex items-center dropdown-toggle">
                       Collections
@@ -54,6 +56,7 @@ function App() {
               <Route path="/resources" element={<LinkedResourcesPage />} />
               <Route path="/explorer" element={<ExplorerPage />} />
               <Route path="/create" element={<CreatePage />} />
+              <Route path="/wallet" element={<WalletUtxosPage />} />
               <Route path="/collections" element={<CollectionsGalleryPage />} />
               <Route path="/collections/list" element={<CollectionsListPage />} />
               <Route path="/collections/create" element={<CreateCollectionPage />} />
