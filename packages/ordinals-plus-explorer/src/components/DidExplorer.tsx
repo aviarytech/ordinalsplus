@@ -8,7 +8,10 @@ import {
   ExternalLink,
   Shield,
   Eye,
-  EyeOff
+  EyeOff,
+  List,
+  Calendar,
+  ArrowLeft
 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import DidDocumentViewer from './DidDocumentViewer';
@@ -173,6 +176,42 @@ interface ApiResolutionResult {
   };
 }
 
+// Interface for ordinals plus resources from indexer
+interface OrdinalsInscription {
+  inscriptionId: string;
+  inscriptionNumber: number;
+  resourceId: string;
+  ordinalsType: string;
+  contentType: string;
+  network?: string;
+  indexedAt: number;
+  contentUrl: string;
+  inscriptionUrl: string;
+  metadataUrl: string;
+}
+
+interface IndexerStats {
+  totalOrdinalsPlus: number;
+  lastUpdated: string | null;
+  indexerVersion: string;
+}
+
+interface OrdinalsIndexResponse {
+  success: boolean;
+  data: {
+    inscriptions: OrdinalsInscription[];
+    pagination: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      hasNext: boolean;
+      hasPrev: boolean;
+    };
+    stats: IndexerStats;
+  };
+}
+
 const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplorerProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -198,11 +237,78 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
   const [verificationResults, setVerificationResults] = useState<Record<string, VerificationResult>>({});
   const [searchParams] = useSearchParams();
 
+  // Ordinals Plus Resources state
+  const [ordinalsInscriptions, setOrdinalsInscriptions] = useState<OrdinalsInscription[]>([]);
+  const [ordinalsStats, setOrdinalsStats] = useState<IndexerStats | null>(null);
+  const [ordinalsPagination, setOrdinalsPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 0,
+    hasNext: false,
+    hasPrev: false
+  });
+  const [ordinalsLoading, setOrdinalsLoading] = useState(false);
+  const [ordinalsError, setOrdinalsError] = useState<string | null>(null);
+  const [currentOrdinalsPage, setCurrentOrdinalsPage] = useState(1);
+  const [showOrdinalsSection, setShowOrdinalsSection] = useState(true);
+  const limit = 20; // Items per page for ordinals
+
   const handleVerificationComplete = (inscriptionId: string, result: VerificationResult) => {
     setVerificationResults(prev => ({
       ...prev,
       [inscriptionId]: result
     }));
+  };
+
+  // Load ordinals plus resources from indexer
+  const loadOrdinalsInscriptions = async (page = currentOrdinalsPage) => {
+    if (!apiService) return;
+    
+    setOrdinalsLoading(true);
+    setOrdinalsError(null);
+    
+    try {
+      const response = await fetch(`http://localhost:3005/api/indexer/ordinals-plus?page=${page}&limit=${limit}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json() as OrdinalsIndexResponse;
+      
+      console.log('API Response:', result); // Debug logging
+      
+      if (result.success) {
+        console.log('Inscriptions loaded:', result.data.inscriptions); // Debug logging
+        setOrdinalsInscriptions(result.data.inscriptions);
+        setOrdinalsStats(result.data.stats);
+        setOrdinalsPagination(result.data.pagination);
+      } else {
+        throw new Error('Failed to load ordinals inscriptions - API returned unsuccessful response');
+      }
+    } catch (err) {
+      console.error('Error loading ordinals plus resources:', err);
+      setOrdinalsError(err instanceof Error ? err.message : 'Failed to load ordinals plus resources');
+    } finally {
+      setOrdinalsLoading(false);
+    }
+  };
+
+  const handleOrdinalsPageChange = (page: number) => {
+    setCurrentOrdinalsPage(page);
+  };
+
+  // Load ordinals resources on component mount and when page changes
+  React.useEffect(() => {
+    if (showOrdinalsSection) {
+      loadOrdinalsInscriptions();
+    }
+  }, [currentOrdinalsPage, apiService, showOrdinalsSection]);
+
+  const formatTimestamp = (timestamp: string | null) => {
+    if (!timestamp) return 'Unknown';
+    return new Date(timestamp).toLocaleString();
   };
 
   // Function to properly render inscription content based on content type
@@ -384,14 +490,19 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     }
   };
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
+  // Direct resolution function that accepts a DID parameter
+  const resolveDid = async (didToResolve: string) => {
+    if (!didToResolve.trim()) return;
 
     setIsLoading(true);
     setError(null);
     setDidDocument(null);
     setResolutionResult(null);
     setAllInscriptions(null);
+    setShowOrdinalsSection(false);
+
+    // Update search query to show what we're resolving
+    setSearchQuery(didToResolve.trim());
 
     try {
       if (!apiService) {
@@ -400,7 +511,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
 
       // Use the backend API endpoint for DID resolution
       try {
-        const result = await apiService.resolveDid(searchQuery.trim());
+        const result = await apiService.resolveDid(didToResolve.trim());
         
         // Create a result structure that matches our interface
         const apiResult: ApiResolutionResult = {
@@ -425,7 +536,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
 
         if (result.didDocument) {
           setDidDocument(result.didDocument);
-          setDidString(searchQuery.trim());
+          setDidString(didToResolve.trim());
           setTotalPages(1);
           setCurrentPage(0);
         } else {
@@ -501,6 +612,11 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Wrapper function for the search input and button
+  const handleSearch = async () => {
+    await resolveDid(searchQuery);
   };
 
   // Handle URL search parameters - placed after handleSearch is defined
@@ -580,105 +696,6 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleSearch();
-    }
-  };
-
-  // Helper function to handle example clicks
-  const handleExampleClick = async (exampleDid: string) => {
-    setSearchQuery(exampleDid);
-    setIsLoading(true);
-    setError(null);
-    setDidDocument(null);
-    setResolutionResult(null);
-    setAllInscriptions(null);
-
-    try {
-      if (!apiService) {
-        throw new Error('API service not available');
-      }
-
-      const result = await apiService.resolveDid(exampleDid);
-      
-      const apiResult: ApiResolutionResult = {
-        status: 'success',
-        data: {
-          didDocument: result.didDocument,
-          inscriptions: result.inscriptions,
-          resolutionMetadata: {
-            contentType: result.resolutionMetadata?.contentType,
-            inscriptionId: result.resolutionMetadata?.inscriptionId,
-            satNumber: result.resolutionMetadata?.satNumber,
-            network: result.resolutionMetadata?.network,
-            deactivated: result.resolutionMetadata?.deactivated,
-            totalInscriptions: result.resolutionMetadata?.totalInscriptions
-          },
-          didDocumentMetadata: result.didDocumentMetadata
-        }
-      };
-      
-      setResolutionResult(apiResult);
-      setAllInscriptions(result.inscriptions || null);
-
-      if (result.didDocument) {
-        setDidDocument(result.didDocument);
-        setDidString(exampleDid);
-        setTotalPages(1);
-        setCurrentPage(0);
-      } else {
-        if (result.inscriptions && result.inscriptions.length > 0) {
-          const validDidInscriptions = result.inscriptions.filter(i => i.isValidDid);
-          if (validDidInscriptions.length > 0) {
-            setError(`Found ${result.inscriptions.length} inscription(s) on this satoshi, ${validDidInscriptions.length} contain(s) DID references, but no valid DID document could be extracted. Check the metadata or inscription content.`);
-          } else {
-            console.log(`Found ${result.inscriptions.length} inscription(s) on this satoshi, but none contain valid BTCO DID references.`);
-          }
-        } else {
-          setError('No inscriptions found on this satoshi');
-        }
-      }
-    } catch (apiError) {
-      const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
-      
-      if (errorMessage.includes('metadataNotAvailable')) {
-        setError(
-          'BTCO DID found but full resolution is not yet available. ' +
-          'The inscription exists and contains a valid DID reference, but CBOR metadata parsing is needed to extract the DID document.'
-        );
-      } else if (errorMessage.includes('deactivated')) {
-        setError('This DID has been deactivated (🔥)');
-      } else if (errorMessage.includes('404') || errorMessage.includes('Not Found') || errorMessage.includes('notFound')) {
-        if (exampleDid.includes('sig:')) {
-          setError(
-            `DID not found: ${exampleDid}\n\n` +
-            'For signet network:\n' +
-            '• Make sure your local ord node is running on http://127.0.0.1:80\n' +
-            '• Verify the satoshi number has inscriptions\n' +
-            '• Check that the inscription contains a valid BTCO DID document'
-          );
-        } else {
-          setError(`DID not found: ${exampleDid}`);
-        }
-      } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
-        setError(
-          'Server error occurred while resolving DID. This might be due to the BTCO DID resolution implementation being incomplete. ' +
-          'Please try again later or contact support if the issue persists.'
-        );
-      } else if (errorMessage.includes('Failed to connect') || errorMessage.includes('ECONNREFUSED')) {
-        if (exampleDid.includes('sig:')) {
-          setError(
-            'Connection failed to local ord node. For signet DIDs:\n\n' +
-            '• Ensure your local ord signet node is running\n' +
-            '• Check that it\'s accessible at http://127.0.0.1:80\n' +
-            '• Verify the node is fully synced'
-          );
-        } else {
-          setError(`Connection failed: ${errorMessage}`);
-        }
-      } else {
-        setError(`Resolution failed: ${errorMessage}`);
-      }
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -1001,68 +1018,242 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     );
   };
 
+  // Render ordinals plus resources section
+  const renderOrdinalsSection = () => {
+    if (!showOrdinalsSection) return null;
+
+    return (
+      <div className="space-y-6 mb-8">
+        {/* Section Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <List className="w-6 h-6 text-blue-500" />
+            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
+              Recent Ordinals Plus Resources
+            </h3>
+          </div>
+          <button
+            onClick={() => setShowOrdinalsSection(false)}
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Stats */}
+        {ordinalsStats && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="text-center">
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-200 block">Total Ordinals Plus</span>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{ordinalsStats.totalOrdinalsPlus.toLocaleString()}</p>
+              </div>
+              <div className="text-center">
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-200 block">Last Updated</span>
+                <p className="text-sm text-blue-700 dark:text-blue-300">{formatTimestamp(ordinalsStats.lastUpdated)}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {ordinalsLoading && ordinalsInscriptions.length === 0 && (
+          <div className="text-center py-8">
+            <RotateCw className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-3" />
+            <p className="text-gray-600 dark:text-gray-400">Loading ordinals plus resources...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {ordinalsError && (
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-medium">Failed to Load Resources</h4>
+              <p className="mt-1">{ordinalsError}</p>
+              <button
+                onClick={() => loadOrdinalsInscriptions(currentOrdinalsPage)}
+                className="mt-2 text-sm bg-red-100 dark:bg-red-800 hover:bg-red-200 dark:hover:bg-red-700 px-3 py-1 rounded transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!ordinalsLoading && !ordinalsError && ordinalsInscriptions.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-6xl text-gray-300 dark:text-gray-600 mb-4">🔍</div>
+            <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">No Ordinals Plus Resources Found</h3>
+            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+              The indexer hasn't found any inscriptions with Verifiable Credentials or DID Documents yet.
+            </p>
+          </div>
+        )}
+
+        {/* Resources List */}
+        {ordinalsInscriptions.length > 0 && (
+          <div className="space-y-4">
+            {ordinalsInscriptions.map((inscription) => (
+              <div key={inscription.inscriptionId} className="border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 hover:shadow-md transition-shadow">
+                <div className="flex">
+                  {/* Left side - Content */}
+                  <div className="flex-1 p-4 border-r border-gray-200 dark:border-gray-600">
+                    <div className="h-32 overflow-hidden">
+                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Content Preview:</div>
+                      <iframe
+                        src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+                        className="w-full h-24 border border-gray-300 dark:border-gray-500 rounded text-xs"
+                        sandbox="allow-same-origin"
+                        title={`Content of ${inscription.inscriptionId}`}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Right side - Metadata */}
+                  <div className="flex-1 p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          inscription.ordinalsType === 'did-document' 
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+                            : inscription.ordinalsType === 'verifiable-credential'
+                            ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+                            : 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-100'
+                        }`}>
+                          {inscription.ordinalsType === 'did-document' ? 'DID Document' : 
+                           inscription.ordinalsType === 'verifiable-credential' ? 'Verifiable Credential' : 
+                           `Unknown (${inscription.ordinalsType || 'undefined'})`}
+                        </span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                          inscription.network === 'signet' 
+                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100'
+                            : 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100'
+                        }`}>
+                          {inscription.network || 'mainnet'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                      <div>
+                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Resource ID (DID):</span>
+                        <p className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all">
+                          {inscription.resourceId}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Indexed:</span>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                          {formatTimestamp(inscription.indexedAt ? new Date(inscription.indexedAt).toISOString() : null)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <a
+                        href={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-500 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        View Content
+                      </a>
+                      {/* Show appropriate action button based on resource type */}
+                      {inscription.ordinalsType === 'did-document' && (
+                        <button
+                          onClick={async () => {
+                            // Extract the DID from the resourceId (remove the /0 suffix if present)
+                            const resourceId = inscription.resourceId;
+                            const did = resourceId.includes('/') ? resourceId.split('/')[0] : resourceId;
+                            
+                            // Resolve the DID directly
+                            await resolveDid(did);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
+                        >
+                          Explore DID
+                        </button>
+                      )}
+                      {inscription.ordinalsType === 'verifiable-credential' && (
+                        <button
+                          onClick={async () => {
+                            // Extract the DID from the resourceId (remove the /0 suffix)
+                            const resourceId = inscription.resourceId;
+                            const did = resourceId.split('/')[0]; // Get DID part before /0
+                            
+                            // Resolve the issuer DID directly
+                            await resolveDid(did);
+                          }}
+                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 transition-colors"
+                        >
+                          <Shield className="w-4 h-4 mr-1" />
+                          Verify Credential
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            {/* Pagination */}
+            {ordinalsPagination.totalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-6">
+                <button
+                  onClick={() => handleOrdinalsPageChange(ordinalsPagination.page - 1)}
+                  disabled={!ordinalsPagination.hasPrev || ordinalsLoading}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Previous
+                </button>
+                
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Page {ordinalsPagination.page} of {ordinalsPagination.totalPages}
+                </span>
+                
+                <button
+                  onClick={() => handleOrdinalsPageChange(ordinalsPagination.page + 1)}
+                  disabled={!ordinalsPagination.hasNext || ordinalsLoading}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
+      {/* Breadcrumb when viewing resolved DID */}
+      {(didDocument || resolutionResult) && (
+        <div className="bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+            <CheckCircle className="w-5 h-5" />
+            <span className="font-medium">
+              Viewing resolved DID: <code className="bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded text-sm">{didString}</code>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Search Header */}
       <div className="text-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-2">
           Ordinals+ Explorer
         </h2>
         <p className="text-gray-600 dark:text-gray-400">
-          Enter an Ordinals+ identifier to resolve it according to the BTCO DID Method Specification
+          {didDocument ? 
+            "DID Document and Resources" :
+            "Enter an Ordinals+ identifier to resolve it according to the BTCO DID Method Specification"
+          }
         </p>
-      </div>
-
-      {/* Examples Section */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
-        <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
-          Try some examples:
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => handleExampleClick('did:btco:1908770696977240')}
-            className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 text-blue-800 dark:text-blue-200 text-xs font-mono rounded-md transition-colors"
-          >
-            did:btco:1908770696977240
-          </button>
-          <button
-            onClick={() => handleExampleClick('did:btco:1908770696991731')}
-            className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 text-blue-800 dark:text-blue-200 text-xs font-mono rounded-md transition-colors"
-          >
-            did:btco:1908770696991731
-          </button>
-          <button
-            onClick={() => handleExampleClick('did:btco:956424811897629')}
-            className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 text-blue-800 dark:text-blue-200 text-xs font-mono rounded-md transition-colors"
-          >
-            did:btco:956424811897629
-          </button>
-          <button
-            onClick={() => handleExampleClick('did:btco:1939534441773337')}
-            className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 text-blue-800 dark:text-blue-200 text-xs font-mono rounded-md transition-colors"
-          >
-            did:btco:1939534441773337
-          </button>
-          <button
-            onClick={() => handleExampleClick('did:btco:1026461333159039')}
-            className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 text-blue-800 dark:text-blue-200 text-xs font-mono rounded-md transition-colors"
-          >
-            did:btco:1026461333159039
-          </button>
-          <button
-            onClick={() => handleExampleClick('did:btco:1939534441777537')}
-            className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 text-blue-800 dark:text-blue-200 text-xs font-mono rounded-md transition-colors"
-          >
-            did:btco:1939534441777537
-          </button>
-          <button
-            onClick={() => handleExampleClick('did:btco:1333054494719771')}
-            className="inline-flex items-center px-3 py-1 bg-blue-100 hover:bg-blue-200 dark:bg-blue-800 dark:hover:bg-blue-700 text-blue-800 dark:text-blue-200 text-xs font-mono rounded-md transition-colors"
-          >
-            did:btco:1333054494719771
-          </button>
-        </div>
-
       </div>
 
       {/* Search Input */}
@@ -1073,31 +1264,70 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Enter BTCO DID (e.g., did:btco:1908770696977240)"
+            placeholder={didDocument ? `Currently viewing: ${didString}` : "Enter BTCO DID (e.g., did:btco:1908770696977240)"}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:ring-orange-500 focus:border-orange-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white text-lg"
+            disabled={!!didDocument}
           />
           <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-            Supported formats: did:btco:&lt;satoshi&gt;, did:btco:test:&lt;satoshi&gt;, did:btco:sig:&lt;satoshi&gt;
+            {didDocument ? 
+              "Click 'Back to Explorer' to search for another DID" : 
+              "Supported formats: did:btco:<satoshi>, did:btco:test:<satoshi>, did:btco:sig:<satoshi>"
+            }
           </div>
         </div>
-        <button
-          onClick={handleSearch}
-          disabled={isLoading || !searchQuery.trim()}
-          className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {isLoading ? (
-            <>
-              <RotateCw className="w-5 h-5 animate-spin" />
-              Resolving...
-            </>
-          ) : (
-            <>
-              <Search className="w-5 h-5" />
-              Resolve
-            </>
-          )}
-        </button>
+        {/* Show Back button when viewing a resolved DID */}
+        {(didDocument || resolutionResult) ? (
+          <button
+            onClick={() => {
+              // Clear all search results and return to explorer view
+              setSearchQuery('');
+              setDidDocument(null);
+              setResolutionResult(null);
+              setAllInscriptions(null);
+              setError(null);
+              setShowOrdinalsSection(true);
+            }}
+            className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 flex items-center gap-2"
+          >
+            <ArrowLeft className="w-5 h-5" />
+            Back to Explorer
+          </button>
+        ) : (
+          <button
+            onClick={handleSearch}
+            disabled={isLoading || !searchQuery.trim()}
+            className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <RotateCw className="w-5 h-5 animate-spin" />
+                Resolving...
+              </>
+            ) : (
+              <>
+                <Search className="w-5 h-5" />
+                Resolve
+              </>
+            )}
+          </button>
+        )}
       </div>
+
+      {/* Ordinals Plus Resources Section */}
+      {!didDocument && !resolutionResult && renderOrdinalsSection()}
+
+      {/* Show collapsed section toggle when hidden */}
+      {!showOrdinalsSection && !didDocument && !resolutionResult && (
+        <div className="mb-6">
+          <button
+            onClick={() => setShowOrdinalsSection(true)}
+            className="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+          >
+            <List className="w-4 h-4" />
+            Show Recent Ordinals Plus Resources
+          </button>
+        </div>
+      )}
 
       {/* Error Display */}
       {error && (

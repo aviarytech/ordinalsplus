@@ -7,7 +7,7 @@
  * implementation that works well in both Node.js and browser environments.
  */
 
-import * as CBOR from 'cbor-js';
+import CBOR from 'cbor-js';
 
 /**
  * Converts a hex string to Uint8Array

@@ -2,16 +2,17 @@ import { createClient, RedisClientType } from 'redis';
 
 /**
  * ResourceManager service for the API to access indexer data
- * Mirrors the ResourceManager from the indexer package
+ * Updated to work with the actual Redis structure used by the indexer
  */
 class ResourceManagerService {
   private redis: RedisClientType;
   private connected: boolean = false;
 
   // Redis key constants - must match indexer
-  private readonly ORDINALS_PLUS_SET = 'ordinals_plus:inscriptions';
-  private readonly PROGRESS_KEY = 'ordinals_plus:progress';
-  private readonly STATS_KEY = 'ordinals_plus:stats';
+  private readonly ORDINALS_PLUS_LIST = 'ordinals-plus-resources';
+  private readonly NON_ORDINALS_LIST = 'non-ordinals-resources';
+  private readonly PROGRESS_KEY = 'indexer:cursor';
+  private readonly STATS_KEY = 'ordinals-plus:stats';
 
   constructor() {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -50,11 +51,11 @@ class ResourceManagerService {
   async getOrdinalsCount(): Promise<number> {
     if (!this.connected) await this.connect();
     
-    return await this.redis.zCard(this.ORDINALS_PLUS_SET);
+    return await this.redis.lLen(this.ORDINALS_PLUS_LIST);
   }
 
   /**
-   * Get complete resource data for an inscription
+   * Get complete resource data for an inscription from stored hash
    */
   async getResourceData(inscriptionId: string): Promise<any | null> {
     if (!this.connected) await this.connect();
@@ -71,33 +72,86 @@ class ResourceManagerService {
       ordinalsType: data.ordinalsType,
       contentType: data.contentType,
       indexedAt: parseInt(data.indexedAt),
-      indexedBy: data.indexedBy
+      indexedBy: data.indexedBy,
+      network: data.network
     };
   }
 
   /**
-   * Get all Ordinals Plus inscriptions with complete resource data
+   * Get Ordinals Plus inscriptions with complete resource data in reverse order (newest first)
    */
   async getOrdinalsWithData(start: number = 0, end: number = -1): Promise<any[]> {
     if (!this.connected) await this.connect();
     
-    const inscriptionIds = await this.redis.zRange(this.ORDINALS_PLUS_SET, start, end);
+    // Get total count first
+    const totalCount = await this.getOrdinalsCount();
+    if (totalCount === 0) return [];
+    
+    // For reverse order (newest first), we want to read from the beginning of the list
+    // since lPush adds newest items to the front (index 0)
+    const actualStart = start;
+    const actualEnd = end === -1 ? start + 49 : end; // Default limit if end is -1
+    
+    // Get resource IDs in reverse order (newest first is already at front of list)
+    const resourceIds = await this.redis.lRange(
+      this.ORDINALS_PLUS_LIST, 
+      actualStart, 
+      actualEnd
+    );
+    
+    // Get detailed information from stored hashes
     const resources = await Promise.all(
-      inscriptionIds.map(async (inscriptionId) => {
-        const resourceData = await this.getResourceData(inscriptionId);
-        return resourceData || {
-          inscriptionId,
+      resourceIds.map(async (resourceId) => {
+        // Instead of parsing the DID, search for the resource data directly
+        const resourceData = await this.findResourceByResourceId(resourceId);
+        if (resourceData) {
+          return resourceData;
+        }
+        
+        // If no stored data found, this shouldn't happen with new indexer, but fallback
+        console.warn('Resource data not found for:', resourceId);
+        return {
+          inscriptionId: 'unknown',
           inscriptionNumber: 0,
-          resourceId: inscriptionId,
+          resourceId,
           ordinalsType: 'unknown',
           contentType: 'unknown',
           indexedAt: Date.now(),
-          indexedBy: 'unknown'
+          indexedBy: 'fallback',
+          network: resourceId.includes(':sig:') ? 'signet' : 'mainnet'
         };
       })
     );
     
-    return resources;
+    return resources.filter(Boolean); // Remove any null results
+  }
+
+  /**
+   * Find resource data by searching for a matching resourceId
+   */
+  private async findResourceByResourceId(targetResourceId: string): Promise<any | null> {
+    // Search through stored resource hashes
+    // Pattern: ordinals_plus:resource:{inscriptionId}
+    const keys = await this.redis.keys('ordinals_plus:resource:*');
+    
+    for (const key of keys) {
+      const resourceData = await this.redis.hGetAll(key);
+      if (resourceData.resourceId === targetResourceId) {
+        // Convert numeric fields back to proper types
+        return {
+          inscriptionId: resourceData.inscriptionId,
+          inscriptionNumber: parseInt(resourceData.inscriptionNumber) || 0,
+          resourceId: resourceData.resourceId,
+          ordinalsType: resourceData.ordinalsType,
+          contentType: resourceData.contentType,
+          indexedAt: parseInt(resourceData.indexedAt) || Date.now(),
+          indexedBy: resourceData.indexedBy || 'indexer',
+          network: resourceData.network || 'unknown'
+        };
+      }
+    }
+    
+    return null;
   }
 
   /**
@@ -106,15 +160,33 @@ class ResourceManagerService {
   async getStats(): Promise<{ totalProcessed: number; ordinalsFound: number; errors: number; lastUpdated: number } | null> {
     if (!this.connected) await this.connect();
     
-    const stats = await this.redis.hGetAll(this.STATS_KEY);
-    if (!stats.totalProcessed) return null;
-    
-    return {
-      totalProcessed: parseInt(stats.totalProcessed),
-      ordinalsFound: parseInt(stats.ordinalsFound),
-      errors: parseInt(stats.errors),
-      lastUpdated: parseInt(stats.lastUpdated)
-    };
+    try {
+      const [
+        totalOrdinals,
+        totalNonOrdinals,
+        cursor,
+        errorCount
+      ] = await Promise.all([
+        this.redis.get('ordinals-plus:stats:total'),
+        this.redis.get('non-ordinals:stats:total'),
+        this.redis.get('indexer:cursor'),
+        this.redis.get('indexer:stats:errors')
+      ]);
+      
+      const ordinalsCount = parseInt(totalOrdinals || '0');
+      const nonOrdinalsCount = parseInt(totalNonOrdinals || '0');
+      const totalProcessed = ordinalsCount + nonOrdinalsCount;
+      
+      return {
+        totalProcessed,
+        ordinalsFound: ordinalsCount,
+        errors: parseInt(errorCount || '0'),
+        lastUpdated: Date.now() // Use current time as we don't store this separately
+      };
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      return null;
+    }
   }
 }
 

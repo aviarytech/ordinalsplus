@@ -420,14 +420,23 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async getInscriptionByNumber(inscriptionNumber: number): Promise<Inscription> {
-        // Use the /inscription endpoint with inscription number
-        const response = await this.fetchApi<any>(`/inscription/${inscriptionNumber}`);
+        // Use the /inscription endpoint with inscription number and JSON Accept header
+        const response = await fetchWithTimeout<any>(
+            `${this.nodeUrl}/inscription/${inscriptionNumber}`,
+            {
+                timeout: this.timeout,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            }
+        );
         
         return {
-            id: response.id,
-            sat: response.sat,
-            content_type: response.content_type,
-            content_url: `${this.nodeUrl}/content/${response.id}`
+            id: response.data.id,
+            sat: response.data.sat,
+            content_type: response.data.content_type,
+            content_url: `${this.nodeUrl}/content/${response.data.id}`
         };
     }
 } 

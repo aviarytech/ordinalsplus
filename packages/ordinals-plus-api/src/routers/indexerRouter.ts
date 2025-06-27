@@ -6,7 +6,7 @@ const ORD_SERVER_URL = process.env.ORD_SERVER_URL || 'http://localhost:80';
 export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
   /**
    * GET /indexer/ordinals-plus
-   * Get all Ordinals Plus inscriptions from the indexer cache in chronological order
+   * Get all Ordinals Plus inscriptions from the indexer cache in reverse chronological order
    */
   .get('/ordinals-plus', async ({ query }) => {
     try {
@@ -19,16 +19,17 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
       const startIndex = (page - 1) * limit;
       const endIndex = startIndex + limit - 1;
       
-      // Get paginated inscriptions with complete resource data
+      // Get paginated inscriptions with complete resource data in reverse order
       const inscriptionData = await resourceManager.getOrdinalsWithData(startIndex, endIndex);
       
-      // Transform to API response format
+      // Transform to API response format expected by the UI
       const inscriptions = inscriptionData.map((resource: any) => ({
         inscriptionId: resource.inscriptionId,
         inscriptionNumber: resource.inscriptionNumber,
-        resourceId: resource.resourceId, // This is the proper DID path!
+        resourceId: resource.resourceId, // This is the DID path (did:btco:123/0 or did:btco:sig:123/0)
         ordinalsType: resource.ordinalsType,
         contentType: resource.contentType,
+        network: resource.network,
         indexedAt: resource.indexedAt,
         indexedBy: resource.indexedBy,
         contentUrl: `${ORD_SERVER_URL}/content/${resource.inscriptionId}`,
@@ -48,12 +49,12 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
             limit,
             total: totalCount,
             totalPages: totalPages,
-            hasNext: endIndex < totalCount - 1,
+            hasNext: page < totalPages,
             hasPrev: page > 1
           },
           stats: {
             totalOrdinalsPlus: totalCount,
-            lastUpdated: stats?.lastUpdated || null,
+            lastUpdated: stats?.lastUpdated ? new Date(stats.lastUpdated).toISOString() : null,
             indexerVersion: process.env.npm_package_version || 'unknown'
           }
         }
@@ -72,7 +73,7 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
     }),
     detail: {
       summary: 'Get Ordinals Plus Inscriptions',
-      description: 'Retrieve all Ordinals Plus inscriptions from the indexer cache in chronological order',
+      description: 'Retrieve all Ordinals Plus inscriptions from the indexer cache in reverse chronological order (newest first)',
       tags: ['Indexer']
     }
   })
@@ -91,8 +92,9 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
         data: {
           totalOrdinalsPlus: totalCount,
           totalProcessed: stats?.totalProcessed || 0,
+          ordinalsFound: stats?.ordinalsFound || 0,
           errors: stats?.errors || 0,
-          lastUpdated: stats?.lastUpdated || null,
+          lastUpdated: stats?.lastUpdated ? new Date(stats.lastUpdated).toISOString() : null,
           indexerVersion: process.env.npm_package_version || 'unknown'
         }
       };
@@ -130,7 +132,6 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
       }
       
       // Fetch detailed information from ord server
-      
       try {
         // Get inscription details
         const inscriptionResponse = await fetch(`${ORD_SERVER_URL}/inscription/${id}`, {
@@ -165,6 +166,7 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
             resourceId: resourceData.resourceId,
             ordinalsType: resourceData.ordinalsType,
             contentType: resourceData.contentType,
+            network: resourceData.network,
             indexedAt: resourceData.indexedAt,
             indexedBy: resourceData.indexedBy,
             ordServerData: inscriptionData,

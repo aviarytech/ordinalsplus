@@ -290,16 +290,53 @@ class ResourceStorage {
 
   // Resource storage methods
   async storeOrdinalsResource(resource: OrdinalsResource): Promise<void> {
+    // Store in list for chronological ordering (newest items pushed to front)
     await this.client.lPush('ordinals-plus-resources', resource.resourceId);
+    
+    // Store detailed resource data in a hash for easy API retrieval
+    const resourceKey = `ordinals_plus:resource:${resource.inscriptionId}`;
+    await this.client.hSet(resourceKey, {
+      inscriptionId: resource.inscriptionId,
+      inscriptionNumber: resource.inscriptionNumber.toString(),
+      resourceId: resource.resourceId,
+      ordinalsType: resource.ordinalsType,
+      contentType: resource.contentType,
+      indexedAt: resource.indexedAt.toString(),
+      indexedBy: 'indexer',
+      network: this.extractNetworkFromResourceId(resource.resourceId)
+    });
+    
+    // Update stats
     await this.client.incr(`ordinals-plus:stats:${resource.ordinalsType}`);
     await this.client.incr('ordinals-plus:stats:total');
   }
 
   async storeNonOrdinalsResource(resource: NonOrdinalsResource): Promise<void> {
+    // Store in list for chronological ordering (newest items pushed to front)
     await this.client.lPush('non-ordinals-resources', resource.resourceId);
+    
+    // Store detailed resource data in a hash for easy API retrieval
+    // const resourceKey = `non_ordinals:resource:${resource.inscriptionId}`;
+    // await this.client.hSet(resourceKey, {
+    //   inscriptionId: resource.inscriptionId,
+    //   inscriptionNumber: resource.inscriptionNumber.toString(),
+    //   resourceId: resource.resourceId,
+    //   contentType: resource.contentType,
+    //   indexedAt: resource.indexedAt.toString(),
+    //   indexedBy: 'indexer',
+    //   network: this.extractNetworkFromResourceId(resource.resourceId)
+    // });
+    
+    // Update stats
     await this.client.incr('non-ordinals:stats:total');
     const contentTypeKey = resource.contentType.split('/')[0] || 'unknown';
     await this.client.incr(`non-ordinals:stats:${contentTypeKey}`);
+  }
+
+  private extractNetworkFromResourceId(resourceId: string): string {
+    // Extract network from resource ID format: did:btco:sig:123/0 or did:btco:123/0
+    const match = resourceId.match(/did:btco:(?:(sig):)?/);
+    return match && match[1] ? 'signet' : 'mainnet';
   }
 
   async storeInscriptionError(error: InscriptionError): Promise<void> {
