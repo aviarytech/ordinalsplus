@@ -10,6 +10,7 @@ import CollectionsGalleryPage from './pages/CollectionsGalleryPage';
 import CollectionVerificationPage from './pages/CollectionVerificationPage';
 import ExchangeParticipationPage from './pages/ExchangeParticipationPage';
 import WalletUtxosPage from './pages/WalletUtxosPage';
+import { OrdinalsIndexPage } from './pages/OrdinalsIndexPage';
 import WalletConnector from './components/WalletConnector';
 import './index.css';
 import ErrorBoundary from './components/ui/ErrorBoundary';
@@ -27,6 +28,7 @@ function App() {
                 <div className="flex items-center space-x-4">
                   <Link to="/" className="text-white hover:text-orange-200 transition-colors font-medium">BTCO DID Resolver</Link>
                   <Link to="/resources" className="text-white hover:text-orange-200 transition-colors">Resources</Link>
+                  <Link to="/ordinals-index" className="text-white hover:text-orange-200 transition-colors">Ordinals Index</Link>
                   <Link to="/create" className="text-white hover:text-orange-200 transition-colors">Create</Link>
                   <Link to="/wallet" className="text-white hover:text-orange-200 transition-colors">Wallet</Link>
                   <div className="relative dropdown-container">
@@ -64,6 +66,7 @@ function App() {
               <Route path="/collections/:id" element={<CollectionDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/exchange/:providerId/:exchangeId" element={<ExchangeParticipationPage />} />
+              <Route path="/ordinals-index" element={<OrdinalsIndexPage />} />
             </Routes>
           </div>
         </Router>

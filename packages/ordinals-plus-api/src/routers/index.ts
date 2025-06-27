@@ -7,6 +7,7 @@ import { utxoRouter } from './utxoRouter';
 import { transactionRouter } from './transactionRouter';
 import { verificationRouter } from './verificationRouter';
 import { didRouter } from './didRouter';
+import { indexerRouter } from './indexerRouter';
 
 // Set up basic routes
 export const setupBaseRoutes = (app: Elysia) => {
@@ -46,5 +47,6 @@ export const registerRouters = (app: Elysia) => {
         .use(utxoRouter)
         .use(transactionRouter)
         .use(verificationRouter)
-        .use(didRouter);
+        .use(didRouter)
+        .use(indexerRouter);
 }; 

@@ -342,4 +342,26 @@ export class OrdiscanProvider implements ResourceProvider {
             })
             .filter((item): item is InscriptionRefWithLocation => item !== null); // Filter out the nulls
     }
+
+    /**
+     * Get all resources in chronological order (oldest first)
+     * This implementation delegates to getAllResources since Ordiscan doesn't support chronological ordering
+     */
+    async* getAllResourcesChronological(options?: ResourceCrawlOptions): AsyncGenerator<LinkedResource[]> {
+        // Delegate to the regular getAllResources method
+        // Note: Ordiscan provider doesn't support chronological ordering natively
+        yield* this.getAllResources(options);
+    }
+
+    async getInscriptionByNumber(inscriptionNumber: number): Promise<Inscription> {
+        // Use the inscription number endpoint
+        const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/number/${inscriptionNumber}`);
+        
+        return {
+            id: response.data.inscription_id,
+            sat: response.data.sat,
+            content_type: response.data.content_type,
+            content_url: response.data.content_url
+        };
+    }
 } 

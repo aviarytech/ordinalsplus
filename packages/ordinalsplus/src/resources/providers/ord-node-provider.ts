@@ -104,9 +104,21 @@ export class OrdNodeProvider implements ResourceProvider {
     async getMetadata(inscriptionId: string): Promise<any> {
         try {
             const response = await this.fetchApi<string>(`/r/metadata/${inscriptionId}`);
-            return extractCborMetadata(hexToBytes(response as string));
+            
+            // The ord server returns a JSON-quoted hex string, we need to parse it first
+            let hexString = response as string;
+            
+            // If it's JSON-quoted (starts and ends with quotes), parse it
+            if (typeof hexString === 'string' && hexString.startsWith('"') && hexString.endsWith('"')) {
+                hexString = JSON.parse(hexString);
+            }
+            
+            return extractCborMetadata(hexToBytes(hexString));
         } catch (error) {
-            console.warn(`[OrdNodeProvider] Failed to retrieve metadata for inscription ${inscriptionId}:`, error);
+            // Only log non-404 errors since 404s are expected for inscriptions without metadata
+            if (error instanceof Error && !error.message.includes('status 404')) {
+                console.warn(`[OrdNodeProvider] Failed to retrieve metadata for inscription ${inscriptionId}:`, error);
+            }
             return null;
         }
     }
@@ -331,5 +343,91 @@ export class OrdNodeProvider implements ResourceProvider {
 
         const results = await Promise.all(locationPromises);
         return results.filter((item: InscriptionRefWithLocation | null): item is InscriptionRefWithLocation => item !== null);
+    }
+
+    async *getAllResourcesChronological(options: ResourceCrawlOptions = {}): AsyncGenerator<LinkedResource[]> {
+        const {
+            batchSize = this.batchSize,
+            startFrom = 0,
+            maxResources,
+            filter
+        } = options;
+
+        console.log(`[OrdNodeProvider] Starting efficient chronological crawl from inscription number ${startFrom}...`);
+
+        let currentInscriptionNumber = startFrom;
+        let processedCount = 0;
+        let consecutiveFailures = 0;
+        const maxConsecutiveFailures = 10; // Stop if we can't find 10 consecutive inscriptions
+
+        while (true) {
+            if (maxResources && processedCount >= maxResources) {
+                console.log(`[OrdNodeProvider] Reached max resources limit: ${maxResources}`);
+                break;
+            }
+
+            const batchResources: LinkedResource[] = [];
+            let batchStartNumber = currentInscriptionNumber;
+
+            // Process inscriptions in batch
+            for (let i = 0; i < batchSize; i++) {
+                if (maxResources && processedCount >= maxResources) {
+                    break;
+                }
+
+                try {
+                    // Silently fetch inscription (removed noisy logging for cluster operations)
+                    const inscription = await this.getInscriptionByNumber(currentInscriptionNumber);
+                    const resource = createLinkedResourceFromInscription(inscription, inscription.content_type || 'Unknown', this.network);
+                    
+                    if (!filter || filter(resource)) {
+                        batchResources.push(resource);
+                        processedCount++;
+                        consecutiveFailures = 0; // Reset failure counter on success
+                    }
+
+                    currentInscriptionNumber++;
+                } catch (error) {
+                    console.warn(`[OrdNodeProvider] Failed to fetch inscription #${currentInscriptionNumber}:`, error);
+                    consecutiveFailures++;
+                    currentInscriptionNumber++;
+
+                    // If we have too many consecutive failures, assume we've reached the end
+                    if (consecutiveFailures >= maxConsecutiveFailures) {
+                        console.log(`[OrdNodeProvider] ${consecutiveFailures} consecutive failures, assuming end of inscriptions`);
+                        break;
+                    }
+                }
+            }
+
+            // Yield the batch if we have any resources
+            if (batchResources.length > 0) {
+                const batchEndNumber = batchStartNumber + batchSize - 1;
+                console.log(`[OrdNodeProvider] Yielding batch: inscriptions #${batchStartNumber}-${batchEndNumber} (${batchResources.length} resources)`);
+                yield batchResources;
+            }
+
+            // Exit if we've hit too many consecutive failures
+            if (consecutiveFailures >= maxConsecutiveFailures) {
+                break;
+            }
+
+            // Small delay between batches to avoid overwhelming the server
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        console.log(`[OrdNodeProvider] Chronological crawl completed. Processed ${processedCount} resources.`);
+    }
+
+    async getInscriptionByNumber(inscriptionNumber: number): Promise<Inscription> {
+        // Use the /inscription endpoint with inscription number
+        const response = await this.fetchApi<any>(`/inscription/${inscriptionNumber}`);
+        
+        return {
+            id: response.id,
+            sat: response.sat,
+            content_type: response.content_type,
+            content_url: `${this.nodeUrl}/content/${response.id}`
+        };
     }
 } 

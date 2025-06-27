@@ -12,6 +12,6 @@
     "moduleResolution": "bundler",
     "types": ["node", "bun-types"]
   },
-  "include": ["src/**/*", "test/global.d.ts", "test/**/*", "tests/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.bak", "**/*.broken"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.bak", "**/*.broken", "test/**/*", "tests/**/*", "**/*.test.ts"]
 } 

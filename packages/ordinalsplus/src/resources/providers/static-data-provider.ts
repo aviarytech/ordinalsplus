@@ -125,4 +125,18 @@ export class StaticDataProvider implements ResourceProvider {
   async getInscriptionLocationsByAddress(address: string): Promise<InscriptionRefWithLocation[]> {
     throw new Error('StaticDataProvider: getInscriptionLocationsByAddress() not implemented - use for DID resolution only');
   }
+
+  /**
+   * Get all resources in chronological order (oldest first)
+   * For static data provider, this is the same as getAllResources
+   */
+  async* getAllResourcesChronological(options?: ResourceCrawlOptions): AsyncGenerator<LinkedResource[]> {
+    // Delegate to the regular getAllResources method
+    yield* this.getAllResources(options);
+  }
+
+  async getInscriptionByNumber(inscriptionNumber: number): Promise<Inscription> {
+    // Static data provider doesn't have inscription numbers indexed
+    throw new Error('StaticDataProvider: getInscriptionByNumber() not implemented - use for DID resolution only');
+  }
 } 

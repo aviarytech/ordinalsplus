@@ -6,7 +6,7 @@
  */
 
 import { ErrorCode, InscriptionError, ErrorCategory } from './error-handler';
-import { TransactionStatus, TransactionStatusTracker, TransactionType, Transaction } from '../transactions/transaction-status-tracker';
+import { TransactionStatus, TransactionStatusTracker, TransactionType, TrackedTransaction } from '../transactions/transaction-status-tracker';
 
 // Create singleton tracker instance or use existing one from module
 const transactionTracker = new TransactionStatusTracker();
@@ -87,8 +87,7 @@ export async function resumeTransaction(transactionId: string): Promise<boolean>
     throw new Error(`Transaction ${transactionId} not found`);
   }
   
-  if (transaction.status !== TransactionStatus.PENDING && 
-      transaction.status !== TransactionStatus.BROADCASTING) {
+  if (transaction.status !== TransactionStatus.PENDING) {
     throw new Error(`Cannot resume transaction in ${transaction.status} state`);
   }
   
@@ -196,13 +195,13 @@ export function getRecoverySuggestions(error: InscriptionError): string[] {
       
     // Use string literals for comparison since ErrorCategory might not have these values yet
     case 'TRANSACTION' as unknown as ErrorCategory:
-      if (error.code === 'UTXO_ALREADY_SPENT') {
+      if (error.code === ErrorCode.UTXO_ALREADY_SPENT) {
         return [
           'The selected UTXO has already been spent. Please refresh your UTXOs and select another one.',
           'Wait for your wallet to sync completely before trying again'
         ];
       }
-      if (error.code === 'INSUFFICIENT_FUNDS') {
+      if (error.code === ErrorCode.INSUFFICIENT_FUNDS) {
         return [
           'You need additional funds to complete this transaction',
           'Select a UTXO with a higher balance',
@@ -294,13 +293,13 @@ export const transactionRecovery = {
   findInterruptedTransactions: (): string[] => {
     const allTransactions = transactionTracker.getAllTransactions();
     return allTransactions
-      .filter((tx: Transaction) => 
+      .filter((tx: TrackedTransaction) => 
         (tx.status === TransactionStatus.PENDING || 
-         tx.status === TransactionStatus.BROADCASTING) &&
+         tx.status === TransactionStatus.MEMPOOL) &&
         // Only include transactions that were started in the last 24 hours
         (new Date().getTime() - tx.createdAt.getTime() < 24 * 60 * 60 * 1000)
       )
-      .map((tx: Transaction) => tx.id);
+      .map((tx: TrackedTransaction) => tx.id);
   },
   
   /**
