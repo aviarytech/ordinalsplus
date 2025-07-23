@@ -21,7 +21,7 @@ interface ApiProviderProps {
 export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
   // Get the *initial* API base URL from environment variables
   // This will be used if no network context is found or if the network doesn't provide an apiUrl
-  const initialApiUrl = env.VITE_API_BASE_URL ||
+  const initialApiUrl = env.VITE_BACKEND_URL ||
                         (window.Cypress ? Cypress.env('API_BASE_URL') : undefined);
 
   // Use the NetworkContext to get the active network
@@ -33,7 +33,7 @@ export const ApiProvider: React.FC<ApiProviderProps> = ({ children }) => {
     // Use initial URL only
     const urlToUse = initialApiUrl;
     if (!urlToUse) {
-      console.error('[ApiProvider] No initial API URL found (VITE_API_BASE_URL missing?). ApiService not created.');
+      console.error('[ApiProvider] No initial API URL found (VITE_BACKEND_URL missing?). ApiService not created.');
       return null;
     } 
     console.log(`[ApiProvider] Creating ApiService with base URL: ${urlToUse}`);
