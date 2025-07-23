@@ -1,3 +1,5 @@
+[![NPM Package Publish - OrdinalsPlus](https://github.com/aviarytech/ordinalsplus/actions/workflows/npm-publish.yml/badge.svg)](https://github.com/aviarytech/ordinalsplus/actions/workflows/npm-publish.yml)
+
 # Ordinals Plus Project Guidelines
 
 ## Project Overview
