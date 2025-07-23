@@ -1,4 +1,4 @@
-import { OrdNodeProvider, OrdNodeProviderOptions } from '../../ordinalsplus/src/resources/providers/ord-node-provider';
+import { OrdNodeProvider } from 'ordinalsplus';
 import { OrdiscanProvider } from '../../ordinalsplus/src/resources/providers/ordiscan-provider';
 import { createClient } from 'redis';
 import { BitcoinNetwork } from '../../ordinalsplus/src/types';
@@ -26,7 +26,7 @@ async function checkInscriptionDiagnostics(inscriptionNumber: number) {
   // Initialize provider based on type
   let provider: OrdNodeProvider | OrdiscanProvider;
   if (PROVIDER_TYPE === 'ord-node') {
-    const providerOptions: OrdNodeProviderOptions = {
+    const providerOptions = {
       nodeUrl: INDEXER_URL,
       network: NETWORK
     };

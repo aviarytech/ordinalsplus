@@ -1,7 +1,6 @@
-import { OrdNodeProvider } from '../../ordinalsplus/src/resources/providers/ord-node-provider';
-import { OrdiscanProvider } from '../../ordinalsplus/src/resources/providers/ordiscan-provider';
+import { OrdNodeProvider, OrdiscanProvider } from 'ordinalsplus';
+import type { BitcoinNetwork } from 'ordinalsplus';
 import { createClient, RedisClientType } from 'redis';
-import { BitcoinNetwork } from '../../ordinalsplus/src/types';
 
 // Configuration from environment
 const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';

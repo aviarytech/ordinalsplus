@@ -1,7 +1,6 @@
-import { OrdNodeProvider, OrdNodeProviderOptions } from '../../ordinalsplus/src/resources/providers/ord-node-provider';
-import { OrdiscanProvider } from '../../ordinalsplus/src/resources/providers/ordiscan-provider';
+import { OrdNodeProvider, OrdiscanProvider } from 'ordinalsplus';
 import { createClient } from 'redis';
-import { BitcoinNetwork } from '../../ordinalsplus/src/types';
+import type { BitcoinNetwork } from 'ordinalsplus';
 
 const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
@@ -46,7 +45,7 @@ class ManualIndexer {
     console.log(`🔧 Using provider: ${PROVIDER_TYPE} on ${NETWORK}`);
     
     if (PROVIDER_TYPE === 'ord-node') {
-      const providerOptions: OrdNodeProviderOptions = {
+      const providerOptions = {
         nodeUrl: INDEXER_URL,
         network: NETWORK
       };
