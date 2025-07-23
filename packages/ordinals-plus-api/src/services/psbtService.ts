@@ -316,46 +316,40 @@ export async function createInscriptionPsbts(request: CreatePsbtsRequest): Promi
             testMode: request.testMode // Pass the testMode parameter
         });
         
-        // Import the scure implementation directly to ensure the latest version is used
-        // when signing and finalizing transactions
-        const { 
-            createSignedRevealPsbt,
-            finalizeRevealPsbt,
-            NETWORKS
-        } = await import('../../../ordinalsplus/src/inscription/index-scure');
+       
+        console.error(`ISSUE: createSignedRevealPsbt is not a function`);
+        // // Determine the appropriate scure network
+        // const scureNetwork = networkType === 'mainnet' ? 
+        //     NETWORKS.bitcoin : 
+        //     networkType === 'signet' ? 
+        //     NETWORKS.signet : 
+        //     NETWORKS.testnet;
         
-        // Determine the appropriate scure network
-        const scureNetwork = networkType === 'mainnet' ? 
-            NETWORKS.bitcoin : 
-            networkType === 'signet' ? 
-            NETWORKS.signet : 
-            NETWORKS.testnet;
+        // // Use the WIF to sign the reveal PSBT with our scure implementation
+        // console.log('[psbtService] Signing reveal PSBT with scure implementation...');
+        // const signedRevealPsbtBase64 = createSignedRevealPsbt({
+        //     commitTxid: 'dummy', // Will be replaced before broadcast
+        //     commitVout: 0,       // Will be replaced before broadcast
+        //     commitTxHex: '',     // Will be filled in by the client
+        //     unsignedRevealPsbtBase64: result.unsignedRevealPsbtBase64,
+        //     revealSignerWif: result.revealSignerWif,
+        //     network: scureNetwork
+        // });
         
-        // Use the WIF to sign the reveal PSBT with our scure implementation
-        console.log('[psbtService] Signing reveal PSBT with scure implementation...');
-        const signedRevealPsbtBase64 = createSignedRevealPsbt({
-            commitTxid: 'dummy', // Will be replaced before broadcast
-            commitVout: 0,       // Will be replaced before broadcast
-            commitTxHex: '',     // Will be filled in by the client
-            unsignedRevealPsbtBase64: result.unsignedRevealPsbtBase64,
-            revealSignerWif: result.revealSignerWif,
-            network: scureNetwork
-        });
-        
-        // Optionally, for testing purposes, we could also try finalizing the PSBT
-        if (process.env.ENABLE_FINALIZE_TEST === 'true') {
-            try {
-                const finalizedTxHex = finalizeRevealPsbt({
-                    signedRevealPsbtBase64,
-                    network: scureNetwork
-                });
-                console.log('[psbtService] Successfully finalized reveal PSBT with scure implementation');
-                console.log(`[psbtService] Finalized TX hex length: ${finalizedTxHex.length / 2} bytes`);
-            } catch (finalizeError) {
-                console.warn('[psbtService] Finalize test failed:', finalizeError);
-                // This is just a test, so we don't fail the overall process if it fails
-            }
-        }
+        // // Optionally, for testing purposes, we could also try finalizing the PSBT
+        // if (process.env.ENABLE_FINALIZE_TEST === 'true') {
+        //     try {
+        //         const finalizedTxHex = finalizeRevealPsbt({
+        //             signedRevealPsbtBase64,
+        //             network: scureNetwork
+        //         });
+        //         console.log('[psbtService] Successfully finalized reveal PSBT with scure implementation');
+        //         console.log(`[psbtService] Finalized TX hex length: ${finalizedTxHex.length / 2} bytes`);
+        //     } catch (finalizeError) {
+        //         console.warn('[psbtService] Finalize test failed:', finalizeError);
+        //         // This is just a test, so we don't fail the overall process if it fails
+        //     }
+        // }
         
         // Return the result with the same format expected by callers
         return {

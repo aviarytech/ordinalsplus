@@ -1,8 +1,8 @@
-import { BtcoDidResolver, Inscription, LinkedResource } from 'ordinalsplus';
+import { BtcoDidResolver, type Inscription, type LinkedResource } from 'ordinalsplus';
 import { 
   createLinkedResourceFromInscription as ordinalsPlusCreateLinkedResourceFromInscription,
   type BitcoinNetwork
-} from '../../../ordinalsplus/src';
+} from 'ordinalsplus';
 
 // DID Prefixes we want to look for
 export const DID_BTCO_PREFIX = 'did:btco';

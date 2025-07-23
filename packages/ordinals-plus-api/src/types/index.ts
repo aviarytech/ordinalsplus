@@ -1,5 +1,4 @@
-import * as bitcoin from 'bitcoinjs-lib';
-import type { Inscription, LinkedResource } from '../../../ordinalsplus/src';
+import type { Inscription, LinkedResource } from 'ordinalsplus';
 
 // Export collection types
 export * from './collection';
