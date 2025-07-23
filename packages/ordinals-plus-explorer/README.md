@@ -76,7 +76,6 @@ The backend API server proxies all requests to either the Ordiscan API or the lo
 4. Update the `.env` file with your configuration:
    ```
    VITE_BACKEND_URL=http://localhost:3000
-   VITE_DEFAULT_NETWORK=local
    ```
 
 5. Setup the backend API server:
