@@ -38,7 +38,8 @@
     "test:bail": "bun test --bail",
     "test:psbt": "NODE_OPTIONS='--no-warnings' bun test test/psbt-creation.test.ts",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run test && npm run lint",
+    "prepublishOnly": "npm run lint",
+    "release": "semantic-release",
     "example": "bun examples/basic-usage.ts",
     "example:resolve": "bun run examples/resource-resolution.ts"
   },
@@ -52,16 +53,16 @@
     "linked-resources",
     "blockchain"
   ],
-  "author": "Brian <example@example.com>",
+  "author": "Brian <brian@aviarytech.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourname/ordinalsplus.git"
+    "url": "git+https://github.com/aviarytech/ordinalsplus.git"
   },
   "bugs": {
-    "url": "https://github.com/yourname/ordinalsplus/issues"
+    "url": "https://github.com/aviarytech/ordinalsplus/issues"
   },
-  "homepage": "https://github.com/yourname/ordinalsplus#readme",
+  "homepage": "https://github.com/aviarytech/ordinalsplus#readme",
   "dependencies": {
     "@digitalcredentials/ed25519-signature-2020": "^7.0.0",
     "@digitalcredentials/ed25519-verification-key-2020": "^4.0.0",
@@ -84,6 +85,12 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^11.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^9.2.6",
+    "@semantic-release/npm": "^11.0.2",
+    "@semantic-release/release-notes-generator": "^12.1.0",
     "@types/bitcoinjs-lib": "^5.0.4",
     "@types/bun": "^1.2.8",
     "@types/jsonld": "^1.5.15",
@@ -91,6 +98,7 @@
     "@typescript-eslint/parser": "^6.0.0",
     "bun-types": "^1.2.11",
     "eslint": "^8.57.0",
+    "semantic-release": "^22.0.12",
     "typescript": "^5.2.2"
   },
   "engines": {

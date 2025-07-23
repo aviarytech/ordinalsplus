@@ -3,7 +3,7 @@ import {
     getFeeEstimates, 
     getTransactionStatus 
 } from '../controllers/inscriptionsController';
-import { extractCborMetadata } from '../../../ordinalsplus/src/utils/cbor-utils';
+import { extractCborMetadata } from 'ordinalsplus';
 import { getProvider } from '../services/providerService';
 import { prepareInscriptionForFunding } from '../controllers/inscriptionsController';
 

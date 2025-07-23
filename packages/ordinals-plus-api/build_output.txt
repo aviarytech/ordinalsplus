@@ -1,0 +1,323 @@
+$ tsc
+src/config/vcApiConfig.ts(89,5): error TS2532: Object is possibly 'undefined'.
+src/config/vcApiConfig.ts(111,5): error TS2322: Type 'VCApiProviderConfig | undefined' is not assignable to type 'VCApiProviderConfig'.
+  Type 'undefined' is not assignable to type 'VCApiProviderConfig'.
+src/controllers/__tests__/collectionInscriptionController.test.ts(1,44): error TS2305: Module '"bun:test"' has no exported member 'vi'.
+src/controllers/__tests__/inscriptionsController.test.ts(15,31): error TS2307: Cannot find module '../../../../ordinalsplus/src/transactions/psbt-creation' or its corresponding type declarations.
+src/controllers/__tests__/inscriptionsController.test.ts(20,3): error TS2305: Module '"../inscriptionsController"' has no exported member 'createInscriptionPsbts'.
+src/controllers/__tests__/inscriptionsController.test.ts(44,9): error TS2739: Type '{ commitPsbtBase64: string; unsignedRevealPsbtBase64: string; revealSignerWif: string; }' is missing the following properties from type 'CombinedPsbtResponse': commitTxOutputValue, revealFee
+src/controllers/__tests__/linkedResourcesController.test.ts(9,15): error TS2459: Module '"../../types"' declares 'LinkedResource' locally, but it is not exported.
+src/controllers/__tests__/resourcesController.test.ts(9,10): error TS2305: Module '"../resourcesController"' has no exported member 'createResourcePsbt'.
+src/controllers/__tests__/resourcesController.test.ts(32,60): error TS2345: Argument of type '"createResourceTransaction"' is not assignable to parameter of type '"prepareResourceInscription" | "validateResourceCreationParams"'.
+src/controllers/__tests__/verificationController.test.ts(1,44): error TS2305: Module '"bun:test"' has no exported member 'vi'.
+src/controllers/__tests__/verificationController.test.ts(33,16): error TS2339: Property 'details' does not exist on type '{ status: any; message: any; details: { inscriptionId: any; issuer: any; verifiedAt: any; checks: VerificationCheck[]; }; credential: any; } | { status: string; message: string; }'.
+  Property 'details' does not exist on type '{ status: string; message: string; }'.
+src/controllers/__tests__/verificationController.test.ts(34,16): error TS2339: Property 'details' does not exist on type '{ status: any; message: any; details: { inscriptionId: any; issuer: any; verifiedAt: any; checks: VerificationCheck[]; }; credential: any; } | { status: string; message: string; }'.
+  Property 'details' does not exist on type '{ status: string; message: string; }'.
+src/controllers/exploreController.ts(2,28): error TS2614: Module '"ordinalsplus"' has no exported member 'BitcoinNetwork'. Did you mean to use 'import BitcoinNetwork from "ordinalsplus"' instead?
+src/controllers/exploreController.ts(2,44): error TS2614: Module '"ordinalsplus"' has no exported member 'LinkedResource'. Did you mean to use 'import LinkedResource from "ordinalsplus"' instead?
+src/controllers/exploreController.ts(2,60): error TS2614: Module '"ordinalsplus"' has no exported member 'ResourceInfo'. Did you mean to use 'import ResourceInfo from "ordinalsplus"' instead?
+src/controllers/exploreController.ts(3,10): error TS2724: '"../services/ordinalsService"' has no exported member named 'fetchInscriptions'. Did you mean 'getInscription'?
+src/controllers/exploreController.ts(5,10): error TS2305: Module '"../types"' has no exported member 'DID'.
+src/controllers/exploreController.ts(5,15): error TS2305: Module '"../types"' has no exported member 'ExplorerApiResponse'.
+src/controllers/exploreController.ts(77,45): error TS18047: 'did' is possibly 'null'.
+src/controllers/exploreController.ts(85,29): error TS2304: Cannot find name 'processInscriptionsForLinkedResources'.
+src/controllers/inscriptionsController.ts(9,15): error TS2614: Module '"ordinalsplus"' has no exported member 'BitcoinNetwork'. Did you mean to use 'import BitcoinNetwork from "ordinalsplus"' instead?
+src/controllers/inscriptionsController.ts(9,31): error TS2614: Module '"ordinalsplus"' has no exported member 'Inscription'. Did you mean to use 'import Inscription from "ordinalsplus"' instead?
+src/controllers/inscriptionsController.ts(17,15): error TS2614: Module '"ordinalsplus"' has no exported member 'ResourceCreationParams'. Did you mean to use 'import ResourceCreationParams from "ordinalsplus"' instead?
+src/controllers/inscriptionsController.ts(17,39): error TS2614: Module '"ordinalsplus"' has no exported member 'PreparedResourceInfo'. Did you mean to use 'import PreparedResourceInfo from "ordinalsplus"' instead?
+src/controllers/linkedResourcesController.ts(2,15): error TS2614: Module '"ordinalsplus"' has no exported member 'LinkedResource'. Did you mean to use 'import LinkedResource from "ordinalsplus"' instead?
+src/controllers/resourceInscriptionController.ts(9,10): error TS2724: '"../services/resourceManager"' has no exported member named 'ResourceManager'. Did you mean 'resourceManager'?
+src/controllers/resourceInscriptionController.ts(10,10): error TS2305: Module '"../services/psbtService"' has no exported member 'PsbtService'.
+src/controllers/resourceInscriptionController.ts(12,41): error TS2307: Cannot find module '../services/resourceCreationService' or its corresponding type declarations.
+src/controllers/resourceInscriptionController.ts(13,10): error TS2305: Module '"../config/apiConfig"' has no exported member 'NETWORKS'.
+src/controllers/resourceInscriptionController.ts(14,10): error TS2305: Module '"../utils/logger"' has no exported member 'auditLogger'.
+src/controllers/resourceInscriptionController.ts(15,10): error TS2305: Module '"../utils/apiUtils"' has no exported member 'createErrorResponse'.
+src/controllers/resourceInscriptionController.ts(15,31): error TS2305: Module '"../utils/apiUtils"' has no exported member 'createSuccessResponse'.
+src/controllers/resourceInscriptionController.ts(17,3): error TS2614: Module '"ordinalsplus"' has no exported member 'ResourceCreationParams'. Did you mean to use 'import ResourceCreationParams from "ordinalsplus"' instead?
+src/controllers/resourceInscriptionController.ts(18,3): error TS2614: Module '"ordinalsplus"' has no exported member 'ResourceCreationResult'. Did you mean to use 'import ResourceCreationResult from "ordinalsplus"' instead?
+src/controllers/resourceInscriptionController.ts(19,3): error TS2724: '"ordinalsplus"' has no exported member named 'PreparedInscription'. Did you mean 'createInscription'?
+src/controllers/resourceInscriptionController.ts(20,3): error TS2614: Module '"ordinalsplus"' has no exported member 'BitcoinNetwork'. Did you mean to use 'import BitcoinNetwork from "ordinalsplus"' instead?
+src/controllers/resourceInscriptionController.ts(32,40): error TS2304: Cannot find name 'ResourceInscriptionService'.
+src/controllers/resourceInscriptionController.ts(34,7): error TS2304: Cannot find name 'ApiService'.
+src/controllers/resourceInscriptionController.ts(45,57): error TS2304: Cannot find name 'ResourceInscriptionRequest'.
+src/controllers/resourceInscriptionController.ts(47,5): error TS2304: Cannot find name 'logger'.
+src/controllers/resourceInscriptionController.ts(55,5): error TS2304: Cannot find name 'logger'.
+src/controllers/resourceInscriptionController.ts(68,5): error TS2304: Cannot find name 'logger'.
+src/controllers/resourceInscriptionController.ts(76,5): error TS2304: Cannot find name 'logger'.
+src/controllers/resourceInscriptionController.ts(89,5): error TS2304: Cannot find name 'logger'.
+src/controllers/resourceInscriptionController.ts(97,5): error TS2304: Cannot find name 'logger'.
+src/controllers/resourcesController.ts(3,15): error TS2614: Module '"ordinalsplus"' has no exported member 'ResourceInfo'. Did you mean to use 'import ResourceInfo from "ordinalsplus"' instead?
+src/controllers/resourcesController.ts(6,3): error TS2459: Module '"../types"' declares 'LinkedResource' locally, but it is not exported.
+src/controllers/verificationController.ts(9,3): error TS2614: Module '"ordinalsplus"' has no exported member 'VerifiableCredential'. Did you mean to use 'import VerifiableCredential from "ordinalsplus"' instead?
+src/controllers/verificationController.ts(10,3): error TS2614: Module '"ordinalsplus"' has no exported member 'IssueCredentialParams'. Did you mean to use 'import IssueCredentialParams from "ordinalsplus"' instead?
+src/controllers/verificationController.ts(11,3): error TS2614: Module '"ordinalsplus"' has no exported member 'VerifyCredentialParams'. Did you mean to use 'import VerifyCredentialParams from "ordinalsplus"' instead?
+src/integration-tests/linked-resources-endpoints.integration.test.ts(11,15): error TS2459: Module '"../types"' declares 'LinkedResource' locally, but it is not exported.
+src/integration-tests/resource-endpoints.integration.test.ts(9,10): error TS2305: Module '"../controllers/resourcesController"' has no exported member 'createResourcePsbt'.
+src/repositories/collectionRepository.ts(589,5): error TS2322: Type '{ [x: string]: any; did?: string | undefined; inscriptionId?: string; order?: number; notes?: string; addedAt?: string | undefined; }' is not assignable to type 'CollectionItem'.
+  Types of property 'did' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/repositories/collectionRepository.ts(831,28): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(arrayBuffer: WithImplicitCoercion<ArrayBufferLike>, byteOffset?: number | undefined, length?: number | undefined): Buffer<ArrayBufferLike>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<ArrayBufferLike>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<ArrayBufferLike>'.
+  Overload 2 of 3, '(string: WithImplicitCoercion<string>, encoding?: BufferEncoding | undefined): Buffer<ArrayBuffer>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<string>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<string>'.
+src/repositories/collectionRepository.ts(832,33): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(arrayBuffer: WithImplicitCoercion<ArrayBufferLike>, byteOffset?: number | undefined, length?: number | undefined): Buffer<ArrayBufferLike>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<ArrayBufferLike>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<ArrayBufferLike>'.
+  Overload 2 of 3, '(string: WithImplicitCoercion<string>, encoding?: BufferEncoding | undefined): Buffer<ArrayBuffer>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<string>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<string>'.
+src/repositories/collectionRepository.ts(838,37): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(data: ArrayBufferView<ArrayBufferLike>, inputEncoding: undefined, outputEncoding: Encoding): string', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'ArrayBufferView<ArrayBufferLike>'.
+      Type 'undefined' is not assignable to type 'ArrayBufferView<ArrayBufferLike>'.
+  Overload 2 of 4, '(data: string, inputEncoding: Encoding | undefined, outputEncoding: Encoding): string', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/repositories/collectionRepository.ts(839,5): error TS2322: Type 'string' is not assignable to type 'Buffer<ArrayBufferLike> & string'.
+  Type 'string' is not assignable to type 'Buffer<ArrayBufferLike>'.
+src/repositories/credentialRepository.ts(672,28): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(arrayBuffer: WithImplicitCoercion<ArrayBufferLike>, byteOffset?: number | undefined, length?: number | undefined): Buffer<ArrayBufferLike>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<ArrayBufferLike>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<ArrayBufferLike>'.
+  Overload 2 of 3, '(string: WithImplicitCoercion<string>, encoding?: BufferEncoding | undefined): Buffer<ArrayBuffer>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<string>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<string>'.
+src/repositories/credentialRepository.ts(673,33): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(arrayBuffer: WithImplicitCoercion<ArrayBufferLike>, byteOffset?: number | undefined, length?: number | undefined): Buffer<ArrayBufferLike>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<ArrayBufferLike>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<ArrayBufferLike>'.
+  Overload 2 of 3, '(string: WithImplicitCoercion<string>, encoding?: BufferEncoding | undefined): Buffer<ArrayBuffer>', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'WithImplicitCoercion<string>'.
+      Type 'undefined' is not assignable to type 'WithImplicitCoercion<string>'.
+src/repositories/credentialRepository.ts(680,37): error TS2769: No overload matches this call.
+  Overload 1 of 4, '(data: ArrayBufferView<ArrayBufferLike>, inputEncoding: undefined, outputEncoding: Encoding): string', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'ArrayBufferView<ArrayBufferLike>'.
+      Type 'undefined' is not assignable to type 'ArrayBufferView<ArrayBufferLike>'.
+  Overload 2 of 4, '(data: string, inputEncoding: Encoding | undefined, outputEncoding: Encoding): string', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/repositories/credentialRepository.ts(681,5): error TS2322: Type 'string' is not assignable to type 'Buffer<ArrayBufferLike> & string'.
+  Type 'string' is not assignable to type 'Buffer<ArrayBufferLike>'.
+src/routers/resourceRouter.ts(6,5): error TS2305: Module '"../controllers/resourcesController"' has no exported member 'createResourcePsbt'.
+src/routers/resourceRouter.ts(11,3): error TS2614: Module '"ordinalsplus"' has no exported member 'ResourceCreationParams'. Did you mean to use 'import ResourceCreationParams from "ordinalsplus"' instead?
+src/routers/resourceRouter.ts(12,3): error TS2614: Module '"ordinalsplus"' has no exported member 'ResourceCreationResult'. Did you mean to use 'import ResourceCreationResult from "ordinalsplus"' instead?
+src/routers/resourceRouter.ts(13,3): error TS2614: Module '"ordinalsplus"' has no exported member 'Utxo'. Did you mean to use 'import Utxo from "ordinalsplus"' instead?
+src/routers/utxoRouter.ts(2,15): error TS2614: Module '"ordinalsplus"' has no exported member 'Utxo'. Did you mean to use 'import Utxo from "ordinalsplus"' instead?
+src/routers/utxoRouter.ts(3,27): error TS2724: '"ordinalsplus"' has no exported member named 'ResourceProvider'. Did you mean 'ResourceResolver'?
+src/routers/vcApiRoutes.ts(3,10): error TS2305: Module '"../services/vcApiService"' has no exported member 'getWorkflowConfiguration'.
+src/routers/vcApiRoutes.ts(3,36): error TS2305: Module '"../services/vcApiService"' has no exported member 'formatWorkflowConfiguration'.
+src/routers/vcApiRoutes.ts(3,65): error TS2305: Module '"../services/vcApiService"' has no exported member 'participateInExchange'.
+src/routers/vcApiRoutes.ts(3,88): error TS2305: Module '"../services/vcApiService"' has no exported member 'createExchange'.
+src/services/didService.ts(1,27): error TS2614: Module '"ordinalsplus"' has no exported member 'Inscription'. Did you mean to use 'import Inscription from "ordinalsplus"' instead?
+src/services/didService.ts(1,40): error TS2614: Module '"ordinalsplus"' has no exported member 'LinkedResource'. Did you mean to use 'import LinkedResource from "ordinalsplus"' instead?
+src/services/didService.ts(40,42): error TS2339: Property 'resolveAnyContent' does not exist on type 'BtcoDidResolver'.
+src/services/didService.ts(99,37): error TS2339: Property 'error' does not exist on type '{ error: any; message: any; } | { inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+  Property 'error' does not exist on type '{ inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+src/services/didService.ts(103,54): error TS2339: Property 'resolveAnyContent' does not exist on type 'BtcoDidResolver'.
+src/services/didService.ts(148,42): error TS2339: Property 'resolveAnyContent' does not exist on type 'BtcoDidResolver'.
+src/services/didService.ts(197,42): error TS2339: Property 'resolveCredential' does not exist on type 'BtcoDidResolver'.
+src/services/linkedResourcesService.ts(1,15): error TS2459: Module '"../types"' declares 'LinkedResource' locally, but it is not exported.
+src/services/linkedResourcesService.ts(1,31): error TS2459: Module '"../types"' declares 'Inscription' locally, but it is not exported.
+src/services/ordinalsService.ts(2,15): error TS2614: Module '"ordinalsplus"' has no exported member 'Inscription'. Did you mean to use 'import Inscription from "ordinalsplus"' instead?
+src/services/providerService.ts(1,50): error TS2614: Module '"ordinalsplus"' has no exported member 'BitcoinNetwork'. Did you mean to use 'import BitcoinNetwork from "ordinalsplus"' instead?
+src/services/providerService.ts(1,71): error TS2724: '"ordinalsplus"' has no exported member named 'ResourceProvider'. Did you mean 'ResourceResolver'?
+src/services/psbtService.ts(21,8): error TS2307: Cannot find module '../../../ordinalsplus/src/transactions/psbt-creation' or its corresponding type declarations.
+src/services/psbtService.ts(324,26): error TS2307: Cannot find module '../../../ordinalsplus/src/inscription/index-scure' or its corresponding type declarations.
+src/services/resourceInscriptionService.ts(9,3): error TS2300: Duplicate identifier 'ResourceType'.
+src/services/resourceInscriptionService.ts(10,3): error TS2300: Duplicate identifier 'DEFAULT_VALIDATION_RULES'.
+src/services/resourceInscriptionService.ts(15,3): error TS2300: Duplicate identifier 'ResourceType'.
+src/services/resourceInscriptionService.ts(16,8): error TS2307: Cannot find module '../types/resource' or its corresponding type declarations.
+src/services/resourceInscriptionService.ts(24,10): error TS2300: Duplicate identifier 'DEFAULT_VALIDATION_RULES'.
+src/services/resourceInscriptionService.ts(174,25): error TS2304: Cannot find name 'ApiService'.
+src/services/resourceInscriptionService.ts(360,5): error TS2304: Cannot find name 'inscriptionOrchestrator'.
+src/services/resourceInscriptionService.ts(363,11): error TS2304: Cannot find name 'inscriptionOrchestrator'.
+src/services/resourceInscriptionService.ts(371,5): error TS2304: Cannot find name 'inscriptionOrchestrator'.
+src/services/resourceInscriptionService.ts(374,24): error TS2304: Cannot find name 'inscriptionOrchestrator'.
+src/services/resourceInscriptionService.ts(377,30): error TS2304: Cannot find name 'inscriptionOrchestrator'.
+src/services/resourceInscriptionService.ts(380,30): error TS2304: Cannot find name 'inscriptionOrchestrator'.
+src/services/resourceInscriptionService.ts(410,34): error TS2339: Property 'platformDid' does not exist on type 'ResourceInscriptionServiceConfig'.
+src/services/resourceInscriptionService.ts(419,25): error TS2339: Property 'validateCredential' does not exist on type 'VCService'.
+src/services/resourceInscriptionService.ts(422,14): error TS2339: Property 'logError' does not exist on type 'ResourceInscriptionService'.
+src/services/resourceInscriptionService.ts(516,7): error TS2353: Object literal may only specify known properties, and 'updatedAt' does not exist in type 'ResourceInscriptionUpdate'.
+src/services/resourceManager.ts(70,35): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/resourceManager.ts(74,27): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/resourceManager.ts(143,39): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/resourceManager.ts(147,31): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/services/test-psbt-imports.ts(6,8): error TS2307: Cannot find module '../../../ordinalsplus/src/transactions/psbt-creation' or its corresponding type declarations.
+src/services/test-psbt-imports.ts(12,8): error TS2307: Cannot find module '../../../ordinalsplus/src/transactions/psbt-creation' or its corresponding type declarations.
+src/services/vcApiService.ts(124,41): error TS2532: Object is possibly 'undefined'.
+src/services/vcApiService.ts(125,42): error TS2532: Object is possibly 'undefined'.
+src/services/verificationService.ts(248,46): error TS2339: Property 'error' does not exist on type '{ error: any; message: any; } | { inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+  Property 'error' does not exist on type '{ inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+src/services/verificationService.ts(249,84): error TS2339: Property 'error' does not exist on type '{ error: any; message: any; } | { inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+  Property 'error' does not exist on type '{ inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+src/services/verificationService.ts(369,44): error TS2339: Property 'error' does not exist on type '{ error: any; message: any; } | { inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+  Property 'error' does not exist on type '{ inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+src/services/verificationService.ts(370,84): error TS2339: Property 'error' does not exist on type '{ error: any; message: any; } | { inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+  Property 'error' does not exist on type '{ inscriptionId: any; satNumber: any; network: any; totalInscriptions: number; }'.
+src/test-utils/psbt.utils.ts(13,8): error TS2307: Cannot find module '../../../ordinalsplus/src/transactions/psbt-creation' or its corresponding type declarations.
+src/test-utils/psbt.utils.ts(19,8): error TS2307: Cannot find module '../../../ordinalsplus/src/transactions/psbt-creation' or its corresponding type declarations.
+src/types/collectionInscription.ts(8,34): error TS2307: Cannot find module '../services/transactionService' or its corresponding type declarations.
+src/utils/fetchUtils.ts(149,7): error TS2739: Type 'Headers' is missing the following properties from type 'Headers': toJSON, count, getAll
+test/vcService.test.ts(99,7): error TS2353: Object literal may only specify known properties, and 'acesApiUrl' does not exist in type 'Partial<VCServiceConfig>'.
+../ordinalsplus/src/components/TransactionStatusDisplay.ts(53,22): error TS2304: Cannot find name 'HTMLElement'.
+../ordinalsplus/src/components/TransactionStatusDisplay.ts(67,18): error TS2304: Cannot find name 'HTMLElement'.
+../ordinalsplus/src/components/TransactionStatusDisplay.ts(72,33): error TS2304: Cannot find name 'window'.
+../ordinalsplus/src/components/TransactionStatusDisplay.ts(82,7): error TS2304: Cannot find name 'window'.
+../ordinalsplus/src/components/TransactionStatusDisplay.ts(157,71): error TS18048: 'childTx' is possibly 'undefined'.
+../ordinalsplus/src/components/TransactionStatusDisplay.ts(158,57): error TS2345: Argument of type 'TrackedTransaction | undefined' is not assignable to parameter of type 'TrackedTransaction'.
+  Type 'undefined' is not assignable to type 'TrackedTransaction'.
+../ordinalsplus/src/did/btco-did-resolver.ts(106,7): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/did/btco-did-resolver.ts(306,13): error TS18048: 'inscriptionData' is possibly 'undefined'.
+../ordinalsplus/src/did/btco-did-resolver.ts(306,45): error TS18048: 'inscriptionData' is possibly 'undefined'.
+../ordinalsplus/src/did/btco-did-resolver.ts(307,36): error TS18048: 'inscriptionData' is possibly 'undefined'.
+../ordinalsplus/src/did/btco-did-resolver.ts(308,33): error TS18048: 'inscriptionData' is possibly 'undefined'.
+../ordinalsplus/src/did/did-document.ts(284,39): error TS18048: 'oldVerificationMethod' is possibly 'undefined'.
+../ordinalsplus/src/did/did-document.ts(290,5): error TS2322: Type '{ revoked: string; id?: string | undefined; type?: string | undefined; controller?: string | undefined; publicKeyMultibase?: string; }' is not assignable to type 'VerificationMethod'.
+  Types of property 'id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/did/did-document.ts(374,3): error TS2322: Type '{ revoked: string; id?: string | undefined; type?: string | undefined; controller?: string | undefined; publicKeyMultibase?: string; }' is not assignable to type 'VerificationMethod'.
+  Types of property 'id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/indexer/cache-manager.ts(278,5): error TS2741: Property '[Symbol.dispose]' is missing in type 'Timer' but required in type 'Timeout'.
+../ordinalsplus/src/indexer/logger.ts(329,7): error TS2322: Type 'LogLevel | undefined' is not assignable to type 'LogLevel'.
+  Type 'undefined' is not assignable to type 'LogLevel'.
+../ordinalsplus/src/indexer/logger.ts(360,5): error TS2322: Type 'LogLevel | undefined' is not assignable to type 'LogLevel'.
+  Type 'undefined' is not assignable to type 'LogLevel'.
+../ordinalsplus/src/resources/providers/ord-node-provider.ts(137,59): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/resources/providers/ordiscan-provider.ts(98,61): error TS2532: Object is possibly 'undefined'.
+../ordinalsplus/src/resources/providers/ordiscan-provider.ts(103,9): error TS2322: Type 'number | undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+../ordinalsplus/src/resources/providers/ordiscan-provider.ts(103,16): error TS2532: Object is possibly 'undefined'.
+../ordinalsplus/src/resources/providers/ordiscan-provider.ts(116,59): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/resources/providers/ordiscan-provider.ts(308,38): error TS2532: Object is possibly 'undefined'.
+../ordinalsplus/src/resources/resource-resolver.ts(105,67): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/resources/resource-resolver.ts(151,63): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/transactions/transaction-confirmation.ts(284,20): error TS18046: 'data' is of type 'unknown'.
+../ordinalsplus/src/transactions/transaction-confirmation.ts(285,22): error TS18046: 'data' is of type 'unknown'.
+../ordinalsplus/src/transactions/transaction-confirmation.ts(286,24): error TS18046: 'data' is of type 'unknown'.
+../ordinalsplus/src/transactions/transaction-confirmation.ts(286,86): error TS18046: 'data' is of type 'unknown'.
+../ordinalsplus/src/utils/audit-logger.ts(316,28): error TS18048: 'event' is possibly 'undefined'.
+../ordinalsplus/src/utils/cbor-utils.ts(10,18): error TS7016: Could not find a declaration file for module 'cbor-js'. '/Users/brian/Projects/ordinalsplus/packages/ordinalsplus/node_modules/cbor-js/cbor.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/cbor-js` if it exists or add a new declaration (.d.ts) file containing `declare module 'cbor-js';`
+../ordinalsplus/src/utils/error-recovery.ts(9,10): error TS2724: '"./audit-logger"' has no exported member named 'auditLogger'. Did you mean 'AuditLogger'?
+../ordinalsplus/src/utils/error-recovery.ts(59,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(60,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(61,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(75,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(84,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(98,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(112,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(113,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(122,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(123,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(137,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(151,10): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(242,20): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(243,20): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(268,20): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(269,20): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(270,20): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(331,7): error TS2304: Cannot find name 'errorHandler'.
+../ordinalsplus/src/utils/error-recovery.ts(332,9): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(342,7): error TS2304: Cannot find name 'errorHandler'.
+../ordinalsplus/src/utils/error-recovery.ts(343,9): error TS2304: Cannot find name 'ErrorCode'.
+../ordinalsplus/src/utils/error-recovery.ts(372,28): error TS2769: No overload matches this call.
+  Overload 1 of 3, '(request: Request, init?: BunFetchRequestInit | undefined): Promise<Response>', gave the following error.
+    Argument of type 'string' is not assignable to parameter of type 'Request'.
+  Overload 2 of 3, '(url: string | Request | URL, init?: BunFetchRequestInit | undefined): Promise<Response>', gave the following error.
+    Object literal may only specify known properties, and 'cache' does not exist in type 'BunFetchRequestInit'.
+  Overload 3 of 3, '(input: string | Request | URL, init?: BunFetchRequestInit | undefined): Promise<Response>', gave the following error.
+    Object literal may only specify known properties, and 'cache' does not exist in type 'BunFetchRequestInit'.
+../ordinalsplus/src/utils/fetchUtils.ts(149,7): error TS2739: Type 'Headers' is missing the following properties from type 'Headers': toJSON, count, getAll
+../ordinalsplus/src/utils/resource-utils.ts(62,5): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/utils/resource-utils.ts(108,50): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(110,21): error TS2552: Cannot find name 'ResourceType'. Did you mean 'resourceType'?
+../ordinalsplus/src/utils/resource-utils.ts(110,60): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(111,12): error TS2552: Cannot find name 'DEFAULT_VALIDATION_RULES'. Did you mean 'getValidationRules'?
+../ordinalsplus/src/utils/resource-utils.ts(111,53): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(115,10): error TS2552: Cannot find name 'DEFAULT_VALIDATION_RULES'. Did you mean 'getValidationRules'?
+../ordinalsplus/src/utils/resource-utils.ts(115,35): error TS2552: Cannot find name 'ResourceType'. Did you mean 'resourceType'?
+../ordinalsplus/src/utils/resource-utils.ts(131,17): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(175,13): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(176,15): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(177,20): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(178,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(179,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(180,13): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(181,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(182,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(183,13): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(184,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(185,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(186,13): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(187,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(188,11): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(189,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(190,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(191,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(192,13): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(193,12): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(194,13): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(197,26): error TS2304: Cannot find name 'ResourceContentType'.
+../ordinalsplus/src/utils/resource-utils.ts(206,64): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(210,12): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(212,12): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(214,12): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(216,12): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(218,12): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(220,12): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/resource-utils.ts(223,10): error TS2304: Cannot find name 'ResourceType'.
+../ordinalsplus/src/utils/validators.ts(24,30): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | bigint | boolean'.
+  Type 'undefined' is not assignable to type 'string | number | bigint | boolean'.
+../ordinalsplus/src/utils/validators.ts(37,30): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | bigint | boolean'.
+  Type 'undefined' is not assignable to type 'string | number | bigint | boolean'.
+../ordinalsplus/src/utils/validators.ts(40,28): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/utils/validators.ts(57,16): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | bigint | boolean'.
+  Type 'undefined' is not assignable to type 'string | number | bigint | boolean'.
+../ordinalsplus/src/utils/validators.ts(61,9): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/utils/validators.ts(77,28): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/utils/validators.ts(80,16): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number | bigint | boolean'.
+  Type 'undefined' is not assignable to type 'string | number | bigint | boolean'.
+../ordinalsplus/src/utils/validators.ts(87,9): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/utils/validators.ts(143,32): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/vc/api-client.ts(13,3): error TS2305: Module '"./types"' has no exported member 'IssueCredentialParams'.
+../ordinalsplus/src/vc/api-client.ts(14,3): error TS2305: Module '"./types"' has no exported member 'VerifyCredentialParams'.
+../ordinalsplus/src/vc/api-client.ts(15,3): error TS2305: Module '"./types"' has no exported member 'RevokeCredentialParams'.
+../ordinalsplus/src/vc/api-client.ts(16,3): error TS2305: Module '"./types"' has no exported member 'CheckStatusParams'.
+../ordinalsplus/src/vc/service.ts(12,10): error TS2724: '"./api-client"' has no exported member named 'VcApiClient'. Did you mean 'AcesApiClient'?
+../ordinalsplus/src/vc/service.ts(13,10): error TS2305: Module '"./formatters"' has no exported member 'formatCredentialForIssuance'.
+../ordinalsplus/src/vc/service.ts(75,25): error TS1361: 'ProofType' cannot be used as a value because it was imported using 'import type'.
+../ordinalsplus/src/vc/service.ts(149,35): error TS2304: Cannot find name 'createDocumentLoader'.
+../ordinalsplus/src/vc/service.ts(161,64): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+../ordinalsplus/src/vc/service.ts(264,24): error TS2304: Cannot find name 'IssueCredentialParams'.
+../ordinalsplus/src/vc/service.ts(346,28): error TS2304: Cannot find name 'Verifier'.
+../ordinalsplus/src/vc/service.ts(361,25): error TS2304: Cannot find name 'VerifyCredentialParams'.
+../ordinalsplus/src/vc/service.ts(395,5): error TS2322: Type 'string | undefined' is not assignable to type 'string | null'.
+  Type 'undefined' is not assignable to type 'string | null'.
+../ordinalsplus/src/vc/service.ts(411,19): error TS2304: Cannot find name 'RevokeCredentialParams'.
+../ordinalsplus/src/vc/service.ts(440,19): error TS2304: Cannot find name 'CheckStatusParams'.
