@@ -1,4 +1,5 @@
 {
+
   "scripts": {
     "btc:signet": "bitcoind -conf=./bitcoin.conf",
     "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --index-sats --data-dir=./data/signet index run",
@@ -57,8 +58,6 @@
     "multiformats": "^13.3.3",
     "process": "^0.11.10",
     "tiny-secp256k1": "^2.2.3"
-  },
-  "overrides": {
-    "ordinalsplus": "file:packages/ordinalsplus"
   }
+
 }
