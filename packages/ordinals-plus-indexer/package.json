@@ -16,7 +16,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "ordinalsplus": "workspace:*",
+    "ordinalsplus": "^1.2.1",
     "redis": "^4.6.13"
   },
   "devDependencies": {
