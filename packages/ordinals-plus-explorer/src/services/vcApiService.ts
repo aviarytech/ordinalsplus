@@ -1,7 +1,6 @@
+import { env } from 'src/config/envConfig';
 import { VCApiProvider } from '../components/settings/VCApiProviderSettings';
 
-// API server base URL
-export const API_BASE_URL = 'http://localhost:3005';
 
 /**
  * Fetches VC API providers configured in the server environment
@@ -10,7 +9,7 @@ export const API_BASE_URL = 'http://localhost:3005';
  */
 export async function fetchSystemVCApiProviders(): Promise<VCApiProvider[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/vc-api/providers`);
+    const response = await fetch(`${env.VITE_BACKEND_URL}/api/vc-api/providers`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch system VC API providers: ${response.statusText}`);
