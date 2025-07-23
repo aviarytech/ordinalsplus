@@ -4,6 +4,8 @@
  * This module provides logging functionality for the Ordinals Plus API.
  */
 
+import { env } from '../config/envConfig';
+
 /**
  * Logger interface
  */
@@ -19,7 +21,7 @@ export interface Logger {
  */
 class ConsoleLogger implements Logger {
   debug(message: string, ...args: any[]): void {
-    if (process.env.LOG_LEVEL === 'debug') {
+    if (env.LOG_LEVEL === 'debug') {
       console.debug(`[DEBUG] ${message}`, ...args);
     }
   }

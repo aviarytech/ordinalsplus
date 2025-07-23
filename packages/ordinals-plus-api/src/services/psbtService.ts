@@ -12,6 +12,7 @@ import type {
     CreatePsbtsRequest
 } from '../types';
 import type { Payment } from 'bitcoinjs-lib'; // Only import Payment
+import { env } from '../config/envConfig';
 
 // Import directly from the module paths - using relative paths
 import { 
@@ -342,7 +343,7 @@ export async function createInscriptionPsbts(request: CreatePsbtsRequest): Promi
         });
         
         // Optionally, for testing purposes, we could also try finalizing the PSBT
-        if (process.env.ENABLE_FINALIZE_TEST === 'true') {
+        if (env.ENABLE_FINALIZE_TEST === 'true') {
             try {
                 const finalizedTxHex = finalizeRevealPsbt({
                     signedRevealPsbtBase64,

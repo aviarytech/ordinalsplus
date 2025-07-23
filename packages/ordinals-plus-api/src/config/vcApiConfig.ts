@@ -50,13 +50,13 @@ export function getVCApiProviders(): VCApiProviderConfig[] {
   
   // Find all provider configurations in environment variables
   for (let i = 1; i <= 10; i++) { // Support up to 10 providers
-    const nameEnvVar = `VC_API_PROVIDER_${i}_NAME`;
-    const urlEnvVar = `VC_API_PROVIDER_${i}_URL`;
-    const authTokenEnvVar = `VC_API_PROVIDER_${i}_AUTH_TOKEN`;
+    const nameKey = `VC_API_PROVIDER_${i}_NAME` as keyof typeof env;
+    const urlKey = `VC_API_PROVIDER_${i}_URL` as keyof typeof env;
+    const authTokenKey = `VC_API_PROVIDER_${i}_AUTH_TOKEN` as keyof typeof env;
     
-    const name = process.env[nameEnvVar];
-    const url = process.env[urlEnvVar];
-    const authToken = process.env[authTokenEnvVar];
+    const name = env[nameKey];
+    const url = env[urlKey];
+    const authToken = env[authTokenKey];
     
     // If any of the required values are missing, skip this provider
     if (!name || !url || !authToken) {

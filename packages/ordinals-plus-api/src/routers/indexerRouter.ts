@@ -1,7 +1,8 @@
 import { Elysia, t } from 'elysia';
 import { resourceManager } from '../services/resourceManager';
+import { env } from '../config/envConfig';
 
-const ORD_SERVER_URL = process.env.ORD_SERVER_URL || 'http://localhost:80';
+const ORD_SERVER_URL = env.ORD_SERVER_URL || 'http://localhost:80';
 
 export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
   /**
@@ -55,7 +56,7 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
           stats: {
             totalOrdinalsPlus: totalCount,
             lastUpdated: stats?.lastUpdated ? new Date(stats.lastUpdated).toISOString() : null,
-            indexerVersion: process.env.npm_package_version || 'unknown'
+            indexerVersion: env.npm_package_version || 'unknown'
           }
         }
       };
@@ -95,7 +96,7 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
           ordinalsFound: stats?.ordinalsFound || 0,
           errors: stats?.errors || 0,
           lastUpdated: stats?.lastUpdated ? new Date(stats.lastUpdated).toISOString() : null,
-          indexerVersion: process.env.npm_package_version || 'unknown'
+          indexerVersion: env.npm_package_version || 'unknown'
         }
       };
     } catch (error) {

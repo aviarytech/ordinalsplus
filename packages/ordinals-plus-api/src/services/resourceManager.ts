@@ -1,4 +1,5 @@
 import { createClient, RedisClientType } from 'redis';
+import { env } from '../config/envConfig';
 
 /**
  * ResourceManager service for the API to access indexer data
@@ -15,7 +16,7 @@ class ResourceManagerService {
   private readonly STATS_KEY = 'ordinals-plus:stats';
 
   constructor() {
-    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    const redisUrl = env.REDIS_URL || 'redis://localhost:6379';
     this.redis = createClient({ url: redisUrl });
     this.setupRedisHandlers();
   }
