@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/aviarytech/ordinalsplus/compare/v1.0.0...v1.0.1) (2025-07-23)
+
+
+### Bug Fixes
+
+* **resourceInscriptionService:** streamline imports and enhance type definitions ([f6dc03c](https://github.com/aviarytech/ordinalsplus/commit/f6dc03c66b78c99c296f3c4c563ade288ea1b86b))
+
 # 1.0.0 (2025-07-23)
 
 
