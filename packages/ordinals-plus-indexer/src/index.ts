@@ -234,36 +234,55 @@ class ResourceStorage {
     // Use Lua script for atomic operation to prevent race conditions
     const luaScript = `
       local cursor = redis.call('GET', 'indexer:cursor')
-      local start = tonumber(cursor or ARGV[1]) + 1
-      local endInscription = start + tonumber(ARGV[2]) - 1
+      local batchSize = tonumber(ARGV[2])
       local workerId = ARGV[3]
       
-      -- Check if this batch is already claimed by checking for existing claims
-      local existingClaims = redis.call('KEYS', 'indexer:claim:*')
-      for _, claimKey in ipairs(existingClaims) do
-        local claimData = redis.call('GET', claimKey)
-        if claimData then
-          local claim = cjson.decode(claimData)
-          -- Check for overlap with existing claims (only use endInscription field)
-          if claim.endInscription and (start <= claim.endInscription and endInscription >= claim.start) then
-            return nil -- Batch already claimed
+      -- Find the next available batch starting from cursor + 1
+      local start = tonumber(cursor or ARGV[1]) + 1
+      local maxAttempts = 10 -- Prevent infinite loops
+      local attempts = 0
+      
+      while attempts < maxAttempts do
+        local endInscription = start + batchSize - 1
+        local hasOverlap = false
+        
+        -- Check if this batch is already claimed by checking for existing claims
+        local existingClaims = redis.call('KEYS', 'indexer:claim:*')
+        for _, claimKey in ipairs(existingClaims) do
+          local claimData = redis.call('GET', claimKey)
+          if claimData then
+            local claim = cjson.decode(claimData)
+            -- Check for overlap with existing claims (only use endInscription field)
+            if claim.endInscription and (start <= claim.endInscription and endInscription >= claim.start) then
+              hasOverlap = true
+              break
+            end
           end
         end
+        
+        if not hasOverlap then
+          -- Found an available batch, create the claim
+          local claim = {
+            start = start,
+            endInscription = endInscription,
+            workerId = workerId,
+            claimedAt = redis.call('TIME')[1]
+          }
+          
+          -- Store the claim
+          redis.call('SET', 'indexer:claim:' .. workerId, cjson.encode(claim), 'EX', 3600)
+          
+          -- Return the claim data
+          return cjson.encode(claim)
+        end
+        
+        -- Try the next batch
+        start = endInscription + 1
+        attempts = attempts + 1
       end
       
-      -- Create the claim
-      local claim = {
-        start = start,
-        endInscription = endInscription,
-        workerId = workerId,
-        claimedAt = redis.call('TIME')[1]
-      }
-      
-      -- Store the claim
-      redis.call('SET', 'indexer:claim:' .. workerId, cjson.encode(claim), 'EX', 3600)
-      
-      -- Return the claim data
-      return cjson.encode(claim)
+      -- No available batch found
+      return nil
     `;
 
     try {
