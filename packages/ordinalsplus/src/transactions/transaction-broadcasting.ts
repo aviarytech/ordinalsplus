@@ -479,12 +479,18 @@ export class TransactionBroadcaster extends EventEmitter {
     // Start broadcast process
     this.emit('broadcastStarted', { transactionId, txType });
     
+    // Update status to BROADCASTING
+    this.statusTracker.setTransactionStatus(transactionId, TransactionStatus.BROADCASTING);
+    
     try {
       const result = await this.broadcastWithRetry(txHex, transactionId, mergedOptions);
       
       if (result.success && result.txid) {
         // Update transaction with txid
         this.statusTracker.updateTransactionTxid(transactionId, result.txid);
+        
+        // Update status to MEMPOOL since transaction is now in the network
+        this.statusTracker.setTransactionStatus(transactionId, TransactionStatus.MEMPOOL);
         
         this.emit('broadcastSuccess', {
           transactionId,

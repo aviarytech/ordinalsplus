@@ -14,6 +14,7 @@ import { InscriptionError } from '../utils/error-handler';
  */
 export enum TransactionStatus {
   PENDING = 'PENDING',
+  BROADCASTING = 'BROADCASTING',
   CONFIRMING = 'CONFIRMING',
   CONFIRMED = 'CONFIRMED',
   FAILED = 'FAILED',
@@ -174,11 +175,14 @@ export class TransactionStatusTracker extends EventEmitter {
       transaction.lastUpdatedAt = new Date();
       
       // Update status based on confirmation count
-      if (confirmations >= 1 && transaction.status === TransactionStatus.PENDING) {
+      if (confirmations >= 1 && (transaction.status === TransactionStatus.PENDING || 
+                                  transaction.status === TransactionStatus.BROADCASTING || 
+                                  transaction.status === TransactionStatus.MEMPOOL)) {
+        const previousStatus = transaction.status;
         transaction.status = TransactionStatus.CONFIRMING;
         this.emit('statusChanged', {
           id,
-          previousStatus: TransactionStatus.PENDING,
+          previousStatus,
           newStatus: TransactionStatus.CONFIRMING
         });
       }

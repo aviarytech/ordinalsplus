@@ -87,7 +87,7 @@ export async function resumeTransaction(transactionId: string): Promise<boolean>
     throw new Error(`Transaction ${transactionId} not found`);
   }
   
-  if (transaction.status !== TransactionStatus.PENDING) {
+  if (transaction.status !== TransactionStatus.PENDING && transaction.status !== TransactionStatus.BROADCASTING) {
     throw new Error(`Cannot resume transaction in ${transaction.status} state`);
   }
   
@@ -295,7 +295,7 @@ export const transactionRecovery = {
     return allTransactions
       .filter((tx: TrackedTransaction) => 
         (tx.status === TransactionStatus.PENDING || 
-         tx.status === TransactionStatus.MEMPOOL) &&
+         tx.status === TransactionStatus.BROADCASTING) &&
         // Only include transactions that were started in the last 24 hours
         (new Date().getTime() - tx.createdAt.getTime() < 24 * 60 * 60 * 1000)
       )

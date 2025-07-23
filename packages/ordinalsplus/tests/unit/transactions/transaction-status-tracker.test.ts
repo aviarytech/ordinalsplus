@@ -1,11 +1,11 @@
 import { describe, test, expect } from 'bun:test';
 import { 
   TransactionStatus, 
-  createTransactionStatusTracker, 
   TransactionStatusTracker,
-  Transaction,
+  TrackedTransaction,
   TransactionType
-} from '../src/transactions/transaction-status-tracker';
+} from '../../../src/transactions/transaction-status-tracker';
+import { InscriptionError, ErrorCode } from '../../../src/utils/error-handler';
 
 /**
  * Test suite for transaction status tracking functionality.
@@ -13,7 +13,7 @@ import {
  */
 describe('Transaction Status Tracking', () => {
   // Test data
-  const mockCommitTx: Transaction = {
+  const mockCommitTx: TrackedTransaction = {
     id: 'commitTx123',
     txid: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
     type: TransactionType.COMMIT,
@@ -22,7 +22,7 @@ describe('Transaction Status Tracking', () => {
     lastUpdatedAt: new Date()
   };
   
-  const mockRevealTx: Transaction = {
+  const mockRevealTx: TrackedTransaction = {
     id: 'revealTx456',
     txid: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
     type: TransactionType.REVEAL,
@@ -32,54 +32,54 @@ describe('Transaction Status Tracking', () => {
   };
 
   test('should create a transaction status tracker with initial state', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     expect(tracker).toBeDefined();
-    expect(tracker.getTransactions()).toBeDefined();
-    expect(tracker.getTransactions().length).toBe(0);
+    expect(tracker.getAllTransactions()).toBeDefined();
+    expect(tracker.getAllTransactions().length).toBe(0);
   });
 
   test('should add transactions to the tracker', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     tracker.addTransaction(mockCommitTx);
-    expect(tracker.getTransactions().length).toBe(1);
-    expect(tracker.getTransactions()[0].txid).toBe(mockCommitTx.txid);
+    expect(tracker.getAllTransactions().length).toBe(1);
+    expect(tracker.getAllTransactions()[0].txid).toBe(mockCommitTx.txid);
     
     tracker.addTransaction(mockRevealTx);
-    expect(tracker.getTransactions().length).toBe(2);
+    expect(tracker.getAllTransactions().length).toBe(2);
   });
 
   test('should update transaction status', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     tracker.addTransaction(mockCommitTx);
     const updatedStatus = TransactionStatus.CONFIRMED;
     
-    tracker.updateTransactionStatus(mockCommitTx.id, updatedStatus);
+    tracker.setTransactionStatus(mockCommitTx.id, updatedStatus);
     
-    const updatedTx = tracker.getTransactionById(mockCommitTx.id);
+    const updatedTx = tracker.getTransaction(mockCommitTx.id);
     expect(updatedTx).toBeDefined();
     expect(updatedTx?.status).toBe(updatedStatus);
     expect(updatedTx?.lastUpdatedAt.getTime()).toBeGreaterThanOrEqual(mockCommitTx.lastUpdatedAt.getTime());
   });
 
   test('should get transaction by ID', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     tracker.addTransaction(mockCommitTx);
     tracker.addTransaction(mockRevealTx);
     
-    const tx = tracker.getTransactionById(mockCommitTx.id);
+    const tx = tracker.getTransaction(mockCommitTx.id);
     expect(tx).toBeDefined();
     expect(tx?.id).toBe(mockCommitTx.id);
     
-    const nonExistentTx = tracker.getTransactionById('nonexistent');
+    const nonExistentTx = tracker.getTransaction('nonexistent');
     expect(nonExistentTx).toBeUndefined();
   });
 
   test('should filter transactions by type', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     tracker.addTransaction(mockCommitTx);
     tracker.addTransaction(mockRevealTx);
@@ -94,10 +94,19 @@ describe('Transaction Status Tracking', () => {
   });
 
   test('should filter transactions by status', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
-    tracker.addTransaction(mockCommitTx);
-    tracker.addTransaction({...mockRevealTx, status: TransactionStatus.CONFIRMED});
+    const pendingTx: TrackedTransaction = {
+      ...mockCommitTx,
+      status: TransactionStatus.PENDING
+    };
+    tracker.addTransaction(pendingTx);
+    
+    const revealTxConfirmed: TrackedTransaction = {
+      ...mockRevealTx,
+      status: TransactionStatus.CONFIRMED
+    };
+    tracker.addTransaction(revealTxConfirmed);
     
     const pendingTxs = tracker.getTransactionsByStatus(TransactionStatus.PENDING);
     expect(pendingTxs.length).toBe(1);
@@ -109,21 +118,21 @@ describe('Transaction Status Tracking', () => {
   });
 
   test('should get transaction explorer URL based on network', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     // Test mainnet URL
     const mainnetUrl = tracker.getTransactionExplorerUrl(mockCommitTx.txid, 'mainnet');
-    expect(mainnetUrl).toContain('blockchain.com/explorer/transactions/btc');
+    expect(mainnetUrl).toContain('mempool.space/tx');
     expect(mainnetUrl).toContain(mockCommitTx.txid);
     
     // Test testnet URL
     const testnetUrl = tracker.getTransactionExplorerUrl(mockCommitTx.txid, 'testnet');
-    expect(testnetUrl).toContain('blockchain.com/explorer/transactions/btc-testnet');
+    expect(testnetUrl).toContain('mempool.space/testnet/tx');
     expect(testnetUrl).toContain(mockCommitTx.txid);
   });
 
   test('should add transaction progress event', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     tracker.addTransaction(mockCommitTx);
     
@@ -141,31 +150,32 @@ describe('Transaction Status Tracking', () => {
   });
 
   test('should clear transactions', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     tracker.addTransaction(mockCommitTx);
     tracker.addTransaction(mockRevealTx);
     
-    expect(tracker.getTransactions().length).toBe(2);
+    expect(tracker.getAllTransactions().length).toBe(2);
     
     tracker.clearTransactions();
     
-    expect(tracker.getTransactions().length).toBe(0);
+    expect(tracker.getAllTransactions().length).toBe(0);
   });
 
   test('should handle transaction errors', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     tracker.addTransaction(mockCommitTx);
     
-    const errorDetails = {
+    const errorDetails = new InscriptionError({
       message: 'Network error while broadcasting transaction',
-      code: 'NETWORK_ERROR'
-    };
+      code: ErrorCode.NETWORK_ERROR
+    });
     
     tracker.setTransactionError(mockCommitTx.id, errorDetails);
+    tracker.setTransactionStatus(mockCommitTx.id, TransactionStatus.FAILED);
     
-    const tx = tracker.getTransactionById(mockCommitTx.id);
+    const tx = tracker.getTransaction(mockCommitTx.id);
     expect(tx).toBeDefined();
     expect(tx?.status).toBe(TransactionStatus.FAILED);
     expect(tx?.error).toBeDefined();
@@ -173,7 +183,7 @@ describe('Transaction Status Tracking', () => {
   });
 
   test('should create linked transactions (commit -> reveal)', () => {
-    const tracker = createTransactionStatusTracker();
+    const tracker = new TransactionStatusTracker();
     
     // Add commit transaction
     tracker.addTransaction(mockCommitTx);
@@ -183,7 +193,7 @@ describe('Transaction Status Tracking', () => {
     tracker.addTransaction(linkedRevealTx);
     
     // Get the reveal transaction
-    const revealTx = tracker.getTransactionById(linkedRevealTx.id);
+    const revealTx = tracker.getTransaction(linkedRevealTx.id);
     expect(revealTx).toBeDefined();
     expect(revealTx?.parentId).toBe(mockCommitTx.id);
     
