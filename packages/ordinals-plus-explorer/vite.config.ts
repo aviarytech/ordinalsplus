@@ -21,6 +21,7 @@ export default defineConfig({
       // protocolImports: true, // Default: true. For node: imports
     }),
   ],
+
   // optimizeDeps can often be removed or simplified when using the plugin
   // optimizeDeps: {
   //   esbuildOptions: {
