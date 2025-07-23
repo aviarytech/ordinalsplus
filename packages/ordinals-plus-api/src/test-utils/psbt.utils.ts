@@ -10,14 +10,15 @@ import {
   createInscriptionPsbts as createInscriptionPsbtsFn,
   calculateTxFee as calculateTxFeeFn,
   getBitcoinJsNetwork
-} from '../../../ordinalsplus/src/transactions/psbt-creation';
+} from 'ordinalsplus';
 
 // Type-only imports
 import type { 
   InscriptionData, 
   InscriptionScripts 
-} from '../../../ordinalsplus/src/transactions/psbt-creation';
-import type { BitcoinNetwork } from '../../../ordinalsplus/src/types';
+} from 'ordinalsplus';
+
+type BitcoinNetwork = 'mainnet' | 'signet' | 'testnet';
 
 /**
  * Verify that required PSBT functions are available from ordinalsplus

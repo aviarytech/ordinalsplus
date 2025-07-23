@@ -5,12 +5,6 @@ import {
   getBitcoinJsNetwork
 } from '../../../ordinalsplus/src/transactions/psbt-creation';
 
-// Type-only imports
-import type { 
-  InscriptionData, 
-  InscriptionScripts 
-} from '../../../ordinalsplus/src/transactions/psbt-creation';
-import type { BitcoinNetwork } from '../../../ordinalsplus/src/types';
 
 // Log the imported functions
 console.log('Imports working:', {

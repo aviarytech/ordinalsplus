@@ -2,12 +2,9 @@ import { Elysia, t } from 'elysia';
 import { 
     getAllResources, 
     getResourceById, 
-    getResourcesByDid,
-    createResourcePsbt
+    getResourcesByDid
 } from '../controllers/resourcesController';
 
-import type { ApiResponse } from '../types';
-import type { ResourceCreationParams } from '../../../ordinalsplus/src/types';
 
 export const resourceRouter = new Elysia({ prefix: '/api' })
     // --- Get All Resources (Paginated) ---

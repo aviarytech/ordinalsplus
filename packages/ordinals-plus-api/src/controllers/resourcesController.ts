@@ -6,10 +6,6 @@ import type {
 } from '../types';
 import { getProvider } from '../services/providerService';
 // Import the resource creation types and functions from ordinalsplus
-import type { 
-  ResourceCreationParams, 
-  ResourceCreationResult 
-} from '../../../ordinalsplus/src/types';
 
 // Cache expiration time in milliseconds (5 minutes)
 const CACHE_EXPIRATION = 5 * 60 * 1000;

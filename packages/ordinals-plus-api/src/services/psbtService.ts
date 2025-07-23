@@ -18,10 +18,11 @@ import {
   createInscriptionPsbts as createInscriptionPsbtsFn,
   calculateTxFee as calculateTxFeeFn,
   getBitcoinJsNetwork
-} from '../../../ordinalsplus/src/transactions/psbt-creation';
+} from 'ordinalsplus';
+
+type BitcoinNetwork = 'mainnet' | 'signet' | 'testnet';
 
 // Import types - using type-only imports
-import type { BitcoinNetwork } from '../../../ordinalsplus/src/types';
 
 // Initialize factories
 bitcoin.initEccLib(ecc);

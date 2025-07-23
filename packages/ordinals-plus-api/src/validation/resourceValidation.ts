@@ -5,7 +5,7 @@
  * the requirements for inscription and linking to DIDs.
  */
 
-import { ResourceType } from '../../../ordinalsplus/src/types/resource';
+import { ResourceType } from 'ordinalsplus';
 
 /**
  * Interface for resource validation rules

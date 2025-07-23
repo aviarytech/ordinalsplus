@@ -4,16 +4,6 @@
  * This service handles the inscription of resources linked to DIDs,
  * ensuring they are inscribed on the same satoshi as their parent DID.
  */
-import { 
-  ResourceType, 
-  DEFAULT_VALIDATION_RULES 
-} from '../../../ordinalsplus/src/types/resource';
-import type { 
-  CreateResourceParams,
-  ResourceCreationOutput,
-  WalletConfig,
-  FeeConfig
-} from '../../../ordinalsplus/src/types/resource';
 import { DIDService, DID_REGEX } from './didService';
 import { VCService } from './vcService';
 import { logger } from '../utils/logger';
