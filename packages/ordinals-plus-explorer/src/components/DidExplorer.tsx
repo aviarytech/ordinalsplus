@@ -10,7 +10,6 @@ import {
   Eye,
   EyeOff,
   List,
-  Calendar,
   ArrowLeft
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -22,6 +21,7 @@ import { DidDocument, LinkedResource } from 'ordinalsplus';
 import { useNetwork } from '../context/NetworkContext';
 import { useApi } from '../context/ApiContext';
 import { VerificationResult, VerificationStatus } from '../types/verification';
+import { env } from '../config/envConfig';
 
 // Simple Label component with proper types (unused for now but kept for reference)
 /* interface LabelProps {
@@ -270,7 +270,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     setOrdinalsError(null);
     
     try {
-      const response = await fetch(`http://localhost:3005/api/indexer/ordinals-plus?page=${page}&limit=${limit}`);
+      const response = await fetch(`${env.VITE_BACKEND_URL}/api/indexer/ordinals-plus?page=${page}&limit=${limit}`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
