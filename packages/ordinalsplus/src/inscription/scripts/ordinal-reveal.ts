@@ -162,31 +162,26 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
     const privateKey = new Uint8Array(32);
     crypto.getRandomValues(privateKey);
     
-    console.log(`[prepareInscription] Generated private key: ${Buffer.from(privateKey).toString('hex')}`);
-    
     const { schnorr } = require('@noble/curves/secp256k1');
     const fullPubKey = schnorr.getPublicKey(privateKey);
-    console.log(`[prepareInscription] Generated full public key: ${Buffer.from(fullPubKey).toString('hex')}`);
     
     // Convert to x-only key
     pubKey = fullPubKey.length === 33 ? fullPubKey.slice(1) : fullPubKey;
-    console.log(`[prepareInscription] X-only public key: ${Buffer.from(pubKey).toString('hex')}`);
     
     // Verify the key is not all zeros
     const isAllZeros = pubKey.every(byte => byte === 0);
     if (isAllZeros) {
-      console.error('[prepareInscription] ERROR: Generated public key is all zeros!');
+      throw new Error('Generated public key is invalid (all zeros). This indicates a critical error in key generation.');
     }
     
     privKey = privateKey;
   } else {
     pubKey = revealPublicKey;
-    console.log(`[prepareInscription] Using provided public key: ${Buffer.from(pubKey).toString('hex')}`);
     
     // Verify the key is not all zeros
     const isAllZeros = pubKey.every(byte => byte === 0);
     if (isAllZeros) {
-      console.error('[prepareInscription] ERROR: Provided public key is all zeros!');
+      throw new Error('Provided public key is invalid (all zeros).');
     }
   }
   
@@ -194,28 +189,22 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
   const scriptTree = generateInscriptionScript(pubKey, ordinalInscription);
 
   // Use the recovery key if provided, otherwise use the reveal key
-  // Also add validation to ensure we never use a zero key
   let internalKey: Uint8Array;
   
-  if (recoveryPublicKey && !recoveryPublicKey.every(byte => byte === 0)) {
+  if (recoveryPublicKey) {
+    // Validate recovery key is not all zeros
+    if (recoveryPublicKey.every(byte => byte === 0)) {
+      throw new Error('Provided recovery public key is invalid (all zeros).');
+    }
     internalKey = recoveryPublicKey;
-    console.log(`[prepareInscription] Using recovery public key as internal key: ${Buffer.from(internalKey).toString('hex')}`);
   } else {
     internalKey = pubKey;
-    console.log(`[prepareInscription] Using reveal public key as internal key: ${Buffer.from(internalKey).toString('hex')}`);
   }
   
-  // Add an additional verification step
+  // Final validation to ensure we never use a zero key
   const isInternalKeyAllZeros = internalKey.every(byte => byte === 0);
   if (isInternalKeyAllZeros) {
-    console.error('[prepareInscription] ERROR: Internal key is all zeros! This should never happen with the validation logic.');
-    // If we still somehow have a zero key, generate a new random one as a last resort
-    const emergencyKey = new Uint8Array(32);
-    crypto.getRandomValues(emergencyKey);
-    const { schnorr } = require('@noble/curves/secp256k1');
-    const emergencyPubKey = schnorr.getPublicKey(emergencyKey);
-    internalKey = emergencyPubKey.length === 33 ? emergencyPubKey.slice(1) : emergencyPubKey;
-    console.log(`[prepareInscription] EMERGENCY: Generated new internal key: ${Buffer.from(internalKey).toString('hex')}`);
+    throw new Error('Internal key is invalid (all zeros). This indicates a critical error in key validation logic.');
   }
 
   // Get network object
@@ -242,12 +231,6 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
     type: 'tr',
     pubkey: internalKey
   });
-  
-  // Final verification before returning
-  console.log(`[prepareInscription] Commit address: ${p2tr.address}`);
-  console.log(`[prepareInscription] Commit script hex: ${Buffer.from(script).toString('hex')}`);
-  console.log(`[prepareInscription] Inscription script hex: ${Buffer.from(scriptInfo.script).toString('hex')}`);
-  console.log(`[prepareInscription] Control block hex: ${Buffer.from(scriptInfo.controlBlock).toString('hex')}`);
   
   return {
     commitAddress: {
