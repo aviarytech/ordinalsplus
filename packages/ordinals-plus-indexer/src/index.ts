@@ -217,6 +217,9 @@ class ResourceStorage {
         await this.client.set('indexer:cursor', START_INSCRIPTION.toString());
         console.log(`📍 Initialized cursor at inscription ${START_INSCRIPTION}`);
       }
+      
+      // Migrate any old claims to the new format
+      await this.migrateOldClaims();
     }
   }
 
@@ -241,8 +244,8 @@ class ResourceStorage {
         local claimData = redis.call('GET', claimKey)
         if claimData then
           local claim = cjson.decode(claimData)
-          -- Check for overlap with existing claims
-          if (start <= claim.endInscription and endInscription >= claim.start) then
+          -- Check for overlap with existing claims (only use endInscription field)
+          if claim.endInscription and (start <= claim.endInscription and endInscription >= claim.start) then
             return nil -- Batch already claimed
           end
         end
@@ -313,6 +316,32 @@ class ResourceStorage {
       }
     } catch (error) {
       console.warn('Error cleaning up expired claims:', error);
+    }
+  }
+
+  private async migrateOldClaims(): Promise<void> {
+    try {
+      const claimKeys = await this.client.keys('indexer:claim:*');
+      
+      for (const key of claimKeys) {
+        const claimData = await this.client.get(key);
+        if (claimData) {
+          const claim = JSON.parse(claimData);
+          // If the claim has the old 'end' field but not 'endInscription', migrate it
+          if (claim.end && !claim.endInscription) {
+            const migratedClaim = {
+              start: claim.start,
+              endInscription: claim.end,
+              workerId: claim.workerId,
+              claimedAt: claim.claimedAt
+            };
+            await this.client.set(key, JSON.stringify(migratedClaim), { EX: 3600 });
+            console.log(`Migrated old claim format for worker: ${claim.workerId}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Error migrating old claims:', error);
     }
   }
 
