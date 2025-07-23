@@ -62,16 +62,16 @@ const DidPreview: React.FC<DidPreviewProps> = ({ className }) => {
 
   // Open DID in explorer (if available)
   const openInExplorer = (did: string) => {
-    // You can modify this URL to point to your DID resolver/explorer
-    const explorerUrl = `/did-explorer?did=${encodeURIComponent(did)}`;
-    window.open(explorerUrl, '_blank');
+    // Navigate to the DID page in a new tab
+    const didUrl = `/did/${encodeURIComponent(did)}`;
+    window.open(didUrl, '_blank');
   };
 
   // Handle clicking on the example DID template
   const handleExampleDidClick = () => {
     const exampleDid = getDidPrefix(walletNetwork) + ':1234567890';
-    // Navigate to the explorer page and set the search query
-    navigate(`/?search=${encodeURIComponent(exampleDid)}`);
+    // Navigate to the DID page
+    navigate(`/did/${encodeURIComponent(exampleDid)}`);
   };
 
   if (!previewDid) {

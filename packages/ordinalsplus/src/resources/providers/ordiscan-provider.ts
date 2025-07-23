@@ -121,6 +121,7 @@ export class OrdiscanProvider implements ResourceProvider {
         const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
             id: response.data.inscription_id,
+            number: response.data.inscription_number,
             sat: response.data.sat,
             content_type: response.data.content_type,
             content_url: response.data.content_url
@@ -140,33 +141,42 @@ export class OrdiscanProvider implements ResourceProvider {
     }
 
     async getMetadata(inscriptionId: string): Promise<any> {
-        const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
-        // Check if the response contains metadata field
-        if ('metadata' in response.data && response.data.metadata !== null) {
-            // If metadata is already decoded JSON from Ordiscan API, return it directly
-            if (typeof response.data.metadata === 'object') {
-                return response.data.metadata;
-            }
+        try {
+            const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
             
-            // If metadata is a string (hex-encoded CBOR), decode it
-            if (typeof response.data.metadata === 'string') {
-                try {
-                    const { extractCborMetadata } = await import('../../utils/cbor-utils');
-                    const metadataBytes = hexToBytes(response.data.metadata);
-                    const decodedMetadata = extractCborMetadata(metadataBytes);
-                    
-                    if (decodedMetadata !== null) {
-                        return decodedMetadata;
+            // Check if the response contains metadata field
+            if ('metadata' in response.data && response.data.metadata !== null) {
+                // If metadata is already decoded JSON from Ordiscan API, return it directly
+                if (typeof response.data.metadata === 'object') {
+                    return response.data.metadata;
+                }
+                
+                // If metadata is a string (hex-encoded CBOR), decode it
+                if (typeof response.data.metadata === 'string') {
+                    try {
+                        const { extractCborMetadata } = await import('../../utils/cbor-utils');
+                        const metadataBytes = hexToBytes(response.data.metadata);
+                        const decodedMetadata = extractCborMetadata(metadataBytes);
+                        
+                        if (decodedMetadata !== null) {
+                            return decodedMetadata;
+                        }
+                    } catch (error) {
+                        console.warn(`[OrdiscanProvider] Failed to decode CBOR metadata for inscription ${inscriptionId}:`, error);
+                        // Fall through to return null
                     }
-                } catch (error) {
-                    console.warn(`[OrdiscanProvider] Failed to decode CBOR metadata for inscription ${inscriptionId}:`, error);
-                    // Fall through to return null
                 }
             }
+            
+            // If no metadata is available or decoding failed, return null
+            return null;
+        } catch (error) {
+            // Only log non-404 errors since 404s are expected for inscriptions without metadata
+            if (error instanceof Error && !error.message.includes('status 404')) {
+                console.warn(`[OrdiscanProvider] Failed to retrieve metadata for inscription ${inscriptionId}:`, error);
+            }
+            return null;
         }
-        
-        // If no metadata is available or decoding failed, return null
-        return null;
     }
 
     async resolveCollection(did: string, options: {
@@ -285,6 +295,7 @@ export class OrdiscanProvider implements ResourceProvider {
         const resources = response.data.map(inscription => {
             const inscriptionObj: Inscription = {
                 id: inscription.inscription_id,
+                number: inscription.inscription_number,
                 sat: inscription.sat,
                 content_type: inscription.content_type,
                 content_url: inscription.content_url || `${this.apiEndpoint}/content/${inscription.inscription_id}`
@@ -307,6 +318,7 @@ export class OrdiscanProvider implements ResourceProvider {
         const response = await this.fetchApi<OrdiscanInscriptionResponse>(`/inscription/${inscriptionId}`);
         return {
             id: response.data.inscription_id,
+            number: response.data.inscription_number,
             sat: response.data.sat,
             content_type: response.data.content_type,
             content_url: response.data.content_url
@@ -319,9 +331,6 @@ export class OrdiscanProvider implements ResourceProvider {
         // The actual endpoint `/address/.../inscriptions` seems to return { inscriptions: [...] } within the data object.
         const response = await this.fetchApi<{ inscriptions: OrdiscanInscriptionResponse[] }>(`/address/${address}/inscriptions`);
         
-        // Remove the log
-        // console.log(`[OrdiscanProvider] Raw /address/.../inscriptions response for ${address}:`, JSON.stringify(response.data, null, 2));
-
         if (!response?.data?.inscriptions) {
             console.warn(`[OrdiscanProvider] No 'inscriptions' array found in response for address ${address}.`);
             return [];
@@ -345,12 +354,80 @@ export class OrdiscanProvider implements ResourceProvider {
 
     /**
      * Get all resources in chronological order (oldest first)
-     * This implementation delegates to getAllResources since Ordiscan doesn't support chronological ordering
+     * Enhanced implementation similar to ord-node-provider for better indexing performance
      */
-    async* getAllResourcesChronological(options?: ResourceCrawlOptions): AsyncGenerator<LinkedResource[]> {
-        // Delegate to the regular getAllResources method
-        // Note: Ordiscan provider doesn't support chronological ordering natively
-        yield* this.getAllResources(options);
+    async* getAllResourcesChronological(options: ResourceCrawlOptions = {}): AsyncGenerator<LinkedResource[]> {
+        const {
+            batchSize = this.batchSize,
+            startFrom = 0,
+            maxResources,
+            filter
+        } = options;
+
+        console.log(`[OrdiscanProvider] Starting efficient chronological crawl from inscription number ${startFrom}...`);
+
+        let currentInscriptionNumber = startFrom;
+        let processedCount = 0;
+        let consecutiveFailures = 0;
+        const maxConsecutiveFailures = 10; // Stop if we can't find 10 consecutive inscriptions
+
+        while (true) {
+            if (maxResources && processedCount >= maxResources) {
+                console.log(`[OrdiscanProvider] Reached max resources limit: ${maxResources}`);
+                break;
+            }
+
+            const batchResources: LinkedResource[] = [];
+            let batchStartNumber = currentInscriptionNumber;
+
+            // Process inscriptions in batch
+            for (let i = 0; i < batchSize; i++) {
+                if (maxResources && processedCount >= maxResources) {
+                    break;
+                }
+
+                try {
+                    // Fetch inscription by number
+                    const inscription = await this.getInscriptionByNumber(currentInscriptionNumber);
+                    const resource = createLinkedResourceFromInscription(inscription, inscription.content_type || 'Unknown', this.network);
+                    
+                    if (!filter || filter(resource)) {
+                        batchResources.push(resource);
+                        processedCount++;
+                        consecutiveFailures = 0; // Reset failure counter on success
+                    }
+
+                    currentInscriptionNumber++;
+                } catch (error) {
+                    console.warn(`[OrdiscanProvider] Failed to fetch inscription #${currentInscriptionNumber}:`, error);
+                    consecutiveFailures++;
+                    currentInscriptionNumber++;
+
+                    // If we have too many consecutive failures, assume we've reached the end
+                    if (consecutiveFailures >= maxConsecutiveFailures) {
+                        console.log(`[OrdiscanProvider] ${consecutiveFailures} consecutive failures, assuming end of inscriptions`);
+                        break;
+                    }
+                }
+            }
+
+            // Yield the batch if we have any resources
+            if (batchResources.length > 0) {
+                const batchEndNumber = batchStartNumber + batchSize - 1;
+                console.log(`[OrdiscanProvider] Yielding batch: inscriptions #${batchStartNumber}-${batchEndNumber} (${batchResources.length} resources)`);
+                yield batchResources;
+            }
+
+            // Exit if we've hit too many consecutive failures
+            if (consecutiveFailures >= maxConsecutiveFailures) {
+                break;
+            }
+
+            // Small delay between batches to avoid overwhelming the API
+            await new Promise(resolve => setTimeout(resolve, 200)); // Slightly longer delay for API vs local ord node
+        }
+
+        console.log(`[OrdiscanProvider] Chronological crawl completed. Processed ${processedCount} resources.`);
     }
 
     async getInscriptionByNumber(inscriptionNumber: number): Promise<Inscription> {
@@ -359,6 +436,7 @@ export class OrdiscanProvider implements ResourceProvider {
         
         return {
             id: response.data.inscription_id,
+            number: response.data.inscription_number,
             sat: response.data.sat,
             content_type: response.data.content_type,
             content_url: response.data.content_url

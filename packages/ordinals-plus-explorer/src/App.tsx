@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import DidExplorer from './components/DidExplorer';
+import DIDPage from './pages/DIDPage';
 import LinkedResourcesPage from './pages/LinkedResourcesPage';
 import SettingsPage from './pages/SettingsPage';
 import CreatePage from './pages/CreatePage';
@@ -49,18 +50,8 @@ function App() {
                             >
                               Create
                             </Link>
-                            <Link
-                              to="/collections"
-                              className="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
-                            >
-                              Collections
-                            </Link>
-                            <Link
-                              to="/linked-resources"
-                              className="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
-                            >
-                              Resources
-                            </Link>
+
+
                             <Link
                               to="/settings"
                               className="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
@@ -79,6 +70,7 @@ function App() {
                       <Route path="/" element={<DidExplorer />} />
                       <Route path="/did-explorer" element={<DidExplorer />} />
                       <Route path="/explorer" element={<DidExplorer />} />
+                      <Route path="/did/:didId" element={<DIDPage />} />
                       <Route path="/linked-resources" element={<LinkedResourcesPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/create" element={<CreatePage />} />

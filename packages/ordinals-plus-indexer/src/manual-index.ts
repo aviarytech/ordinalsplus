@@ -1,4 +1,5 @@
 import { OrdNodeProvider, OrdNodeProviderOptions } from '../../ordinalsplus/src/resources/providers/ord-node-provider';
+import { OrdiscanProvider } from '../../ordinalsplus/src/resources/providers/ordiscan-provider';
 import { createClient } from 'redis';
 import { BitcoinNetwork } from '../../ordinalsplus/src/types';
 
@@ -6,6 +7,10 @@ const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const NETWORK = (process.env.NETWORK || 'mainnet') as BitcoinNetwork;
 const WORKER_ID = `manual-worker-${Date.now()}`;
+
+// Provider configuration (same as main indexer)
+const PROVIDER_TYPE = process.env.PROVIDER_TYPE || 'ordiscan'; // 'ordiscan' or 'ord-node'
+const ORDISCAN_API_KEY = process.env.ORDISCAN_API_KEY || '';
 
 interface OrdinalsResource {
   resourceId: string;
@@ -34,15 +39,30 @@ interface InscriptionError {
 }
 
 class ManualIndexer {
-  private provider: OrdNodeProvider;
+  private provider: OrdNodeProvider | OrdiscanProvider;
   private redis: any;
 
   constructor() {
-    const providerOptions: OrdNodeProviderOptions = {
-      nodeUrl: INDEXER_URL,
-      network: NETWORK
-    };
-    this.provider = new OrdNodeProvider(providerOptions);
+    console.log(`🔧 Using provider: ${PROVIDER_TYPE} on ${NETWORK}`);
+    
+    if (PROVIDER_TYPE === 'ord-node') {
+      const providerOptions: OrdNodeProviderOptions = {
+        nodeUrl: INDEXER_URL,
+        network: NETWORK
+      };
+      this.provider = new OrdNodeProvider(providerOptions);
+    } else if (PROVIDER_TYPE === 'ordiscan') {
+      if (!ORDISCAN_API_KEY) {
+        throw new Error('ORDISCAN_API_KEY environment variable is required when using ordiscan provider');
+      }
+      this.provider = new OrdiscanProvider({ 
+        apiKey: ORDISCAN_API_KEY,
+        network: NETWORK,
+        timeout: 10000
+      });
+    } else {
+      throw new Error(`Unknown provider type: ${PROVIDER_TYPE}`);
+    }
     this.redis = createClient({ url: REDIS_URL });
   }
 
@@ -143,7 +163,7 @@ class ManualIndexer {
       
       // Generate resource ID
       const resourceId = await this.generateResourceId(inscription.id, inscriptionNumber);
-      console.log(`🆔 Generated resource ID: ${resourceId}`);
+      console.log(`�� Generated resource ID: ${resourceId}`);
       
       // Check if this is an Ordinals Plus resource
       if (metadata && this.isOrdinalsPlus(metadata)) {

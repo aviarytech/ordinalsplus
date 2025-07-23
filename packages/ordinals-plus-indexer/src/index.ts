@@ -1,20 +1,23 @@
 import { OrdNodeProvider } from '../../ordinalsplus/src/resources/providers/ord-node-provider';
+import { OrdiscanProvider } from '../../ordinalsplus/src/resources/providers/ordiscan-provider';
 import { createClient, RedisClientType } from 'redis';
 import { BitcoinNetwork } from '../../ordinalsplus/src/types';
 
 // Configuration from environment
 const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
-const POLL_INTERVAL = Number(process.env.POLL_INTERVAL ?? '30000');
+const POLL_INTERVAL = Number(process.env.POLL_INTERVAL ?? '5000'); // Check every 5 seconds
 const BATCH_SIZE = Number(process.env.BATCH_SIZE ?? '100');
 const WORKER_ID = process.env.WORKER_ID ?? `worker-${Date.now()}`;
 const START_INSCRIPTION = Number(process.env.START_INSCRIPTION ?? '0');
 const NETWORK = (process.env.NETWORK || 'mainnet') as BitcoinNetwork; // 'mainnet', 'signet', 'testnet'
 
-// When we hit consecutive failures, back off
-const MAX_CONSECUTIVE_FAILURES = 50;
-const BACKOFF_MULTIPLIER = 2;
-const MAX_BACKOFF = 300000; // 5 minutes
+// Provider configuration
+const PROVIDER_TYPE = process.env.PROVIDER_TYPE || 'ord-node'; // 'ordiscan' or 'ord-node'
+const ORDISCAN_API_KEY = process.env.ORDISCAN_API_KEY || '';
+
+// Simple failure tracking - if we get mostly 404s, we've likely reached the end
+const HIGH_FAILURE_THRESHOLD = 0.8; // 80% failure rate indicates we've reached the end
 
 interface OrdinalsResource {
   resourceId: string; // did:btco:sig:123123123/0 or did:btco:123123123/0
@@ -53,10 +56,10 @@ interface InscriptionError {
  * Analyzer for classifying resources into Ordinals Plus vs Non-Ordinals Plus
  */
 class ResourceAnalyzer {
-  private provider: OrdNodeProvider;
+  private provider: OrdNodeProvider | OrdiscanProvider;
   private network: BitcoinNetwork;
 
-  constructor(provider: OrdNodeProvider, network: BitcoinNetwork) {
+  constructor(provider: OrdNodeProvider | OrdiscanProvider, network: BitcoinNetwork) {
     this.provider = provider;
     this.network = network;
   }
@@ -217,13 +220,6 @@ class ResourceStorage {
 
   // Simple cursor-based batch claiming
   async claimNextBatch(batchSize: number, workerId: string): Promise<BatchClaim | null> {
-    // Check if we should be backing off
-    const backoffUntil = await this.client.get('indexer:backoff_until');
-    if (backoffUntil && Date.now() < parseInt(backoffUntil)) {
-      const remainingSeconds = Math.ceil((parseInt(backoffUntil) - Date.now()) / 1000);
-      return null; // Will handle backoff in caller
-    }
-
     // Atomically get current cursor and reserve next batch
     const currentCursor = await this.client.get('indexer:cursor');
     const start = parseInt(currentCursor || START_INSCRIPTION.toString()) + 1;
@@ -245,47 +241,6 @@ class ResourceStorage {
   async completeBatch(endNumber: number): Promise<void> {
     // Update cursor to the highest completed inscription
     await this.client.set('indexer:cursor', endNumber.toString());
-    
-    // Reset failure tracking on successful completion
-    await this.client.del('indexer:consecutive_failures');
-    await this.client.del('indexer:backoff_until');
-  }
-
-  async handleBatchFailure(): Promise<{ shouldBackoff: boolean; backoffDelay?: number }> {
-    // Increment consecutive failures
-    const failures = await this.client.incr('indexer:consecutive_failures');
-    await this.client.set('indexer:last_failure_time', Date.now().toString());
-
-    if (failures >= MAX_CONSECUTIVE_FAILURES) {
-      // Calculate backoff delay
-      const backoffDelay = Math.min(
-        POLL_INTERVAL * Math.pow(BACKOFF_MULTIPLIER, Math.floor(failures / MAX_CONSECUTIVE_FAILURES)),
-        MAX_BACKOFF
-      );
-      
-      // Set backoff end time
-      const backoffUntil = Date.now() + backoffDelay;
-      await this.client.set('indexer:backoff_until', backoffUntil.toString());
-      
-      return { shouldBackoff: true, backoffDelay };
-    }
-
-    return { shouldBackoff: false };
-  }
-
-  async getBackoffInfo(): Promise<{ isBackingOff: boolean; remainingTime?: number }> {
-    const backoffUntil = await this.client.get('indexer:backoff_until');
-    if (!backoffUntil) {
-      return { isBackingOff: false };
-    }
-
-    const remaining = parseInt(backoffUntil) - Date.now();
-    if (remaining <= 0) {
-      await this.client.del('indexer:backoff_until');
-      return { isBackingOff: false };
-    }
-
-    return { isBackingOff: true, remainingTime: remaining };
   }
 
   // Resource storage methods
@@ -314,18 +269,6 @@ class ResourceStorage {
   async storeNonOrdinalsResource(resource: NonOrdinalsResource): Promise<void> {
     // Store in list for chronological ordering (newest items pushed to front)
     await this.client.lPush('non-ordinals-resources', resource.resourceId);
-    
-    // Store detailed resource data in a hash for easy API retrieval
-    // const resourceKey = `non_ordinals:resource:${resource.inscriptionId}`;
-    // await this.client.hSet(resourceKey, {
-    //   inscriptionId: resource.inscriptionId,
-    //   inscriptionNumber: resource.inscriptionNumber.toString(),
-    //   resourceId: resource.resourceId,
-    //   contentType: resource.contentType,
-    //   indexedAt: resource.indexedAt.toString(),
-    //   indexedBy: 'indexer',
-    //   network: this.extractNetworkFromResourceId(resource.resourceId)
-    // });
     
     // Update stats
     await this.client.incr('non-ordinals:stats:total');
@@ -395,15 +338,13 @@ class ResourceStorage {
     nonOrdinals: { total: number; [key: string]: number };
     errors: { total: number };
     cursor: number;
-    consecutiveFailures: number;
   }> {
-    const [ordinalsTotal, dids, vcs, nonOrdinalsTotal, cursor, failures, errorTotal] = await Promise.all([
+    const [ordinalsTotal, dids, vcs, nonOrdinalsTotal, cursor, errorTotal] = await Promise.all([
       this.client.get('ordinals-plus:stats:total'),
       this.client.get('ordinals-plus:stats:did-document'),
       this.client.get('ordinals-plus:stats:verifiable-credential'),
       this.client.get('non-ordinals:stats:total'),
       this.client.get('indexer:cursor'),
-      this.client.get('indexer:consecutive_failures'),
       this.client.get('indexer:stats:errors')
     ]);
 
@@ -431,9 +372,13 @@ class ResourceStorage {
       errors: {
         total: parseInt(errorTotal || '0')
       },
-      cursor: parseInt(cursor || START_INSCRIPTION.toString()),
-      consecutiveFailures: parseInt(failures || '0')
+      cursor: parseInt(cursor || START_INSCRIPTION.toString())
     };
+  }
+
+  async getCurrentCursor(): Promise<number> {
+    const cursor = await this.client.get('indexer:cursor');
+    return parseInt(cursor || START_INSCRIPTION.toString());
   }
 }
 
@@ -441,14 +386,30 @@ class ResourceStorage {
  * Simplified indexer worker
  */
 class ScalableIndexerWorker {
-  private provider: OrdNodeProvider;
+  private provider: OrdNodeProvider | OrdiscanProvider;
   private storage: ResourceStorage;
   private analyzer: ResourceAnalyzer;
   private workerId: string;
   private running = false;
 
   constructor() {
-    this.provider = new OrdNodeProvider({ nodeUrl: INDEXER_URL, network: NETWORK }, BATCH_SIZE);
+    // Initialize provider based on configuration
+    if (PROVIDER_TYPE === 'ordiscan') {
+      if (!ORDISCAN_API_KEY) {
+        throw new Error('ORDISCAN_API_KEY environment variable is required when using ordiscan provider');
+      }
+      this.provider = new OrdiscanProvider({ 
+        apiKey: ORDISCAN_API_KEY,
+        network: NETWORK,
+        timeout: 10000 // 10 second timeout for API calls
+      }, undefined, BATCH_SIZE);
+    } else {
+      this.provider = new OrdNodeProvider({ 
+        nodeUrl: INDEXER_URL, 
+        network: NETWORK 
+      }, BATCH_SIZE);
+    }
+    
     this.storage = new ResourceStorage(REDIS_URL);
     this.analyzer = new ResourceAnalyzer(this.provider, NETWORK);
     this.workerId = WORKER_ID;
@@ -456,6 +417,8 @@ class ScalableIndexerWorker {
 
   async start(): Promise<void> {
     console.log(`🚀 Starting Resource Indexer Worker: ${this.workerId} on ${NETWORK}`);
+    console.log(`📡 Using provider: ${PROVIDER_TYPE}`);
+    console.log(`🏠 Provider endpoint: ${PROVIDER_TYPE === 'ordiscan' ? 'Ordiscan API' : INDEXER_URL}`);
     
     await this.storage.connect();
     this.running = true;
@@ -477,15 +440,6 @@ class ScalableIndexerWorker {
   private async workerLoop(): Promise<void> {
     while (this.running) {
       try {
-        // Check if we're in backoff mode
-        const backoffInfo = await this.storage.getBackoffInfo();
-        if (backoffInfo.isBackingOff) {
-          const remainingSeconds = Math.ceil((backoffInfo.remainingTime || 0) / 1000);
-          console.log(`🔄 Backing off for ${remainingSeconds} more seconds...`);
-          await this.sleep(Math.min(backoffInfo.remainingTime || 0, 30000)); // Check every 30s max
-          continue;
-        }
-
         // Claim next batch
         const batch = await this.storage.claimNextBatch(BATCH_SIZE, this.workerId);
         if (!batch) {
@@ -499,6 +453,7 @@ class ScalableIndexerWorker {
         let ordinalsFound = 0;
         let nonOrdinalsFound = 0;
         let failures = 0;
+        let firstMissingInscription: number | null = null;
 
         // Process each inscription in the batch
         for (let inscriptionNumber = batch.start; inscriptionNumber <= batch.end && this.running; inscriptionNumber++) {
@@ -532,36 +487,55 @@ class ScalableIndexerWorker {
                 console.log(`❌ Error stored: ${error.inscriptionId} - ${error.error}`);
               }
             } else {
+              // This inscription doesn't exist yet - record the first missing one
+              if (firstMissingInscription === null) {
+                firstMissingInscription = inscriptionNumber;
+              }
               failures++;
             }
 
           } catch (error) {
+            // This inscription doesn't exist yet - record the first missing one
+            if (firstMissingInscription === null) {
+              firstMissingInscription = inscriptionNumber;
+            }
             failures++;
-            // Skip errors for missing inscriptions - this is expected
+            // Only log non-404 errors since 404s are expected for missing inscriptions
             if (error instanceof Error && !error.message?.includes('404')) {
               console.warn(`⚠️ Error processing #${inscriptionNumber}:`, error.message);
             }
           }
         }
 
-        // Handle batch completion or failure
+        // Handle batch completion - ONLY advance cursor to where we've actually processed inscriptions
         const failureRate = failures / BATCH_SIZE;
-        if (failureRate > 0.8) {
-          console.log(`📉 High failure rate (${Math.round(failureRate * 100)}%) in batch ${batch.start}-${batch.end}, likely reached end`);
-          const backoffResult = await this.storage.handleBatchFailure();
-          if (backoffResult.shouldBackoff) {
-            const backoffSeconds = Math.round((backoffResult.backoffDelay || 0) / 1000);
-            console.log(`⏸️ Entering backoff mode for ${backoffSeconds}s due to consecutive failures`);
+        if (failureRate > HIGH_FAILURE_THRESHOLD) {
+          if (firstMissingInscription !== null) {
+            // We hit missing inscriptions - only advance cursor to just before the first missing one
+            const maxProcessedInscription = firstMissingInscription - 1;
+            if (maxProcessedInscription >= batch.start) {
+              await this.storage.completeBatch(maxProcessedInscription);
+              console.log(`📍 Advanced cursor to ${maxProcessedInscription}, waiting for inscription #${firstMissingInscription} to be created`);
+            } else {
+              console.log(`📍 No inscriptions processed in batch ${batch.start}-${batch.end}, cursor unchanged`);
+            }
+          } else {
+            // High failure rate but no specific missing inscription identified
+            await this.storage.completeBatch(batch.end);
+            console.log(`📍 High failure rate, advanced cursor to ${batch.end}`);
           }
+          
+          console.log(`⏰ Waiting ${POLL_INTERVAL/1000}s for new inscriptions...`);
+          await this.sleep(POLL_INTERVAL);
         } else {
-          // Successfully completed batch
+          // Successfully completed batch - safe to advance cursor to the end
           await this.storage.completeBatch(batch.end);
           console.log(`📊 Batch ${batch.start}-${batch.end} completed: ${ordinalsFound} Ordinals Plus, ${nonOrdinalsFound} Non-Ordinals, ${failures} failures`);
         }
         
         // Show overall stats
         const stats = await this.storage.getStats();
-        console.log(`📈 Global stats: cursor=${stats.cursor}, ${stats.ordinalsPlus.total} Ordinals Plus, ${stats.nonOrdinals.total} Non-Ordinals, ${stats.errors.total} errors, failures=${stats.consecutiveFailures}`);
+        console.log(`📈 Global stats: cursor=${stats.cursor}, ${stats.ordinalsPlus.total} Ordinals Plus, ${stats.nonOrdinals.total} Non-Ordinals, ${stats.errors.total} errors`);
 
       } catch (error) {
         console.error('❌ Worker error:', error);

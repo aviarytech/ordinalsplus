@@ -1,4 +1,5 @@
 import { OrdNodeProvider, OrdNodeProviderOptions } from '../../ordinalsplus/src/resources/providers/ord-node-provider';
+import { OrdiscanProvider } from '../../ordinalsplus/src/resources/providers/ordiscan-provider';
 import { createClient } from 'redis';
 import { BitcoinNetwork } from '../../ordinalsplus/src/types';
 
@@ -6,18 +7,43 @@ const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const NETWORK = (process.env.NETWORK || 'mainnet') as BitcoinNetwork;
 
+// Provider configuration (same as main indexer)
+const PROVIDER_TYPE = process.env.PROVIDER_TYPE || 'ordiscan'; // 'ordiscan' or 'ord-node'
+const ORDISCAN_API_KEY = process.env.ORDISCAN_API_KEY || '';
+
 async function checkInscriptionDiagnostics(inscriptionNumber: number) {
   console.log(`🔍 Diagnostic check for inscription #${inscriptionNumber}`);
-  console.log(`Using indexer URL: ${INDEXER_URL}`);
+  console.log(`Using provider: ${PROVIDER_TYPE}`);
+  if (PROVIDER_TYPE === 'ord-node') {
+    console.log(`Using indexer URL: ${INDEXER_URL}`);
+  } else {
+    console.log(`Using Ordiscan API`);
+  }
   console.log(`Using Redis URL: ${REDIS_URL}`);
   console.log(`Network: ${NETWORK}`);
   console.log('');
 
-  const providerOptions: OrdNodeProviderOptions = {
-    nodeUrl: INDEXER_URL,
-    network: NETWORK
-  };
-  const provider = new OrdNodeProvider(providerOptions);
+  // Initialize provider based on type
+  let provider: OrdNodeProvider | OrdiscanProvider;
+  if (PROVIDER_TYPE === 'ord-node') {
+    const providerOptions: OrdNodeProviderOptions = {
+      nodeUrl: INDEXER_URL,
+      network: NETWORK
+    };
+    provider = new OrdNodeProvider(providerOptions);
+  } else if (PROVIDER_TYPE === 'ordiscan') {
+    if (!ORDISCAN_API_KEY) {
+      throw new Error('ORDISCAN_API_KEY environment variable is required when using ordiscan provider');
+    }
+    provider = new OrdiscanProvider({ 
+      apiKey: ORDISCAN_API_KEY,
+      network: NETWORK,
+      timeout: 10000
+    });
+  } else {
+    throw new Error(`Unknown provider type: ${PROVIDER_TYPE}`);
+  }
+
   const redis = createClient({ url: REDIS_URL });
 
   try {

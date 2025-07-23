@@ -13,7 +13,7 @@ import {
   Calendar,
   ArrowLeft
 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import DidDocumentViewer from './DidDocumentViewer';
 import LinkedResourceList from './LinkedResourceList';
 import VerifiableMetadataViewer from './VerifiableMetadataViewer';
@@ -213,6 +213,7 @@ interface OrdinalsIndexResponse {
 }
 
 const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplorerProps) => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -309,6 +310,72 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
   const formatTimestamp = (timestamp: string | null) => {
     if (!timestamp) return 'Unknown';
     return new Date(timestamp).toLocaleString();
+  };
+
+  // Simplified content preview for the main explorer
+  const renderContentPreview = (inscription: OrdinalsInscription) => {
+    // Debug logging to understand content types
+    console.log(`[ContentPreview] Inscription ${inscription.inscriptionId}:`, {
+      contentType: inscription.contentType,
+      inscriptionNumber: inscription.inscriptionNumber,
+      ordinalsType: inscription.ordinalsType
+    });
+
+    // Check if it's an image - be more permissive with detection
+    const isImage = inscription.contentType && 
+      (inscription.contentType.startsWith('image/') || 
+       inscription.contentType.includes('png') || 
+       inscription.contentType.includes('jpg') || 
+       inscription.contentType.includes('jpeg') || 
+       inscription.contentType.includes('gif') || 
+       inscription.contentType.includes('svg'));
+
+    if (isImage) {
+      console.log(`[ContentPreview] Rendering as image: ${inscription.inscriptionId}`);
+      return (
+        <div className="relative">
+                      <img
+              src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+              alt={`Inscription ${inscription.inscriptionId}`}
+              className="w-full h-24 object-contain border border-gray-300 dark:border-gray-500 rounded bg-gray-50 dark:bg-gray-800"
+            onLoad={() => {
+              console.log(`✅ Image loaded successfully: ${inscription.inscriptionId}`);
+            }}
+            onError={(e) => {
+              console.error(`❌ Image failed to load: ${inscription.inscriptionId}`);
+              // Fallback to iframe if image fails
+              const target = e.target as HTMLImageElement;
+              const container = target.parentElement;
+              if (container) {
+                container.innerHTML = `
+                  <iframe
+                    src="http://127.0.0.1:80/content/${inscription.inscriptionId}"
+                    class="w-full h-24 border border-gray-300 dark:border-gray-500 rounded text-xs"
+                    sandbox="allow-same-origin"
+                    title="Content of ${inscription.inscriptionId}"
+                  ></iframe>
+                `;
+              }
+            }}
+          />
+          {/* Show content type for debugging */}
+          <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 rounded">
+            {inscription.contentType || 'unknown'}
+          </div>
+        </div>
+      );
+    }
+    
+    // For non-images, use iframe
+    console.log(`[ContentPreview] Rendering as iframe: ${inscription.inscriptionId}`);
+    return (
+      <iframe
+        src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+        className="w-full h-24 border border-gray-300 dark:border-gray-500 rounded text-xs"
+        sandbox="allow-same-origin"
+        title={`Content of ${inscription.inscriptionId}`}
+      />
+    );
   };
 
   // Function to properly render inscription content based on content type
@@ -615,83 +682,19 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
   };
 
   // Wrapper function for the search input and button
-  const handleSearch = async () => {
-    await resolveDid(searchQuery);
+  const handleSearch = () => {
+    if (!searchQuery.trim()) return;
+    navigate(`/did/${encodeURIComponent(searchQuery.trim())}`);
   };
 
-  // Handle URL search parameters - placed after handleSearch is defined
+  // Handle URL search parameters - navigate to DID page if search param is provided
   React.useEffect(() => {
     const searchParam = searchParams.get('search');
-    if (searchParam && searchParam.trim() !== '' && searchParam.trim() !== searchQuery) {
-      setSearchQuery(searchParam.trim());
-      // Automatically trigger search after state update
-      setTimeout(() => {
-        // Create a temporary copy of the search function with the URL parameter
-        const performSearch = async () => {
-          if (!searchParam.trim()) return;
-
-          setIsLoading(true);
-          setError(null);
-          setDidDocument(null);
-          setResolutionResult(null);
-          setAllInscriptions(null);
-
-          try {
-            if (!apiService) {
-              throw new Error('API service not available');
-            }
-
-            const result = await apiService.resolveDid(searchParam.trim());
-            
-            const apiResult: ApiResolutionResult = {
-              status: 'success',
-              data: {
-                didDocument: result.didDocument,
-                inscriptions: result.inscriptions,
-                resolutionMetadata: {
-                  contentType: result.resolutionMetadata?.contentType,
-                  inscriptionId: result.resolutionMetadata?.inscriptionId,
-                  satNumber: result.resolutionMetadata?.satNumber,
-                  network: result.resolutionMetadata?.network,
-                  deactivated: result.resolutionMetadata?.deactivated,
-                  totalInscriptions: result.resolutionMetadata?.totalInscriptions
-                },
-                didDocumentMetadata: result.didDocumentMetadata
-              }
-            };
-            
-            setResolutionResult(apiResult);
-            setAllInscriptions(result.inscriptions || null);
-
-            if (result.didDocument) {
-              setDidDocument(result.didDocument);
-              setDidString(searchParam.trim());
-              setTotalPages(1);
-              setCurrentPage(0);
-            } else {
-              if (result.inscriptions && result.inscriptions.length > 0) {
-                const validDidInscriptions = result.inscriptions.filter(i => i.isValidDid);
-                if (validDidInscriptions.length > 0) {
-                  setError(`Found ${result.inscriptions.length} inscription(s) on this satoshi, ${validDidInscriptions.length} contain(s) DID references, but no valid DID document could be extracted. Check the metadata or inscription content.`);
-                } else {
-                  console.log(`Found ${result.inscriptions.length} inscription(s) on this satoshi, but none contain valid BTCO DID references.`);
-                }
-              } else {
-                setError('No inscriptions found on this satoshi');
-              }
-            }
-          } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to resolve DID';
-            setError(`Resolution failed: ${errorMessage}`);
-          } finally {
-            setIsLoading(false);
-          }
-        };
-
-        performSearch();
-      }, 100);
+    if (searchParam && searchParam.trim() !== '') {
+      // Navigate to the DID page instead of resolving here
+      navigate(`/did/${encodeURIComponent(searchParam.trim())}`);
     }
-  }, [searchParams, apiService]);
+  }, [searchParams, navigate]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -1095,109 +1098,142 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
         {/* Resources List */}
         {ordinalsInscriptions.length > 0 && (
           <div className="space-y-4">
-            {ordinalsInscriptions.map((inscription) => (
-              <div key={inscription.inscriptionId} className="border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 hover:shadow-md transition-shadow">
-                <div className="flex">
-                  {/* Left side - Content */}
-                  <div className="flex-1 p-4 border-r border-gray-200 dark:border-gray-600">
-                    <div className="h-32 overflow-hidden">
-                      <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Content Preview:</div>
-                      <iframe
-                        src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
-                        className="w-full h-24 border border-gray-300 dark:border-gray-500 rounded text-xs"
-                        sandbox="allow-same-origin"
-                        title={`Content of ${inscription.inscriptionId}`}
-                      />
-                    </div>
-                  </div>
-                  
-                  {/* Right side - Metadata */}
-                  <div className="flex-1 p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex items-center gap-3">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          inscription.ordinalsType === 'did-document' 
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
-                            : inscription.ordinalsType === 'verifiable-credential'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-100'
-                        }`}>
-                          {inscription.ordinalsType === 'did-document' ? 'DID Document' : 
-                           inscription.ordinalsType === 'verifiable-credential' ? 'Verifiable Credential' : 
-                           `Unknown (${inscription.ordinalsType || 'undefined'})`}
-                        </span>
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                          inscription.network === 'signet' 
-                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100'
-                            : 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100'
-                        }`}>
-                          {inscription.network || 'mainnet'}
-                        </span>
-                      </div>
-                    </div>
+            {ordinalsInscriptions.map((inscription) => {
+              // Function to handle navigation (shared logic)
+              const navigateToDid = () => {
+                // Extract the DID from the resourceId (remove the /0 suffix if present)
+                const resourceId = inscription.resourceId;
+                const did = resourceId.includes('/') ? resourceId.split('/')[0] : resourceId;
+                
+                // Navigate to the DID page
+                navigate(`/did/${encodeURIComponent(did)}`);
+              };
 
-                    <div className="space-y-2 mb-4">
-                      <div>
-                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Resource ID (DID):</span>
-                        <p className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all">
-                          {inscription.resourceId}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Indexed:</span>
-                        <p className="text-sm text-gray-600 dark:text-gray-300">
-                          {formatTimestamp(inscription.indexedAt ? new Date(inscription.indexedAt).toISOString() : null)}
-                        </p>
+              // Function to handle card click navigation
+              const handleCardClick = (e: React.MouseEvent) => {
+                // Don't navigate if clicking on links or buttons
+                if ((e.target as HTMLElement).closest('a, button')) {
+                  return;
+                }
+                
+                navigateToDid();
+              };
+
+              // Keyboard handler
+              const handleKeyDown = (e: React.KeyboardEvent) => {
+                if (e.key === 'Enter') {
+                  navigateToDid();
+                }
+              };
+
+              return (
+                <div 
+                  key={inscription.inscriptionId} 
+                  className="border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-500 transition-all cursor-pointer"
+                  onClick={handleCardClick}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={handleKeyDown}
+                >
+                  <div className="flex">
+                    {/* Left side - Content */}
+                    <div className="flex-1 p-4 border-r border-gray-200 dark:border-gray-600">
+                      <div className="h-32 overflow-hidden">
+                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-2">Content Preview:</div>
+                        {renderContentPreview(inscription)}
                       </div>
                     </div>
+                    
+                    {/* Right side - Metadata */}
+                    <div className="flex-1 p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            inscription.ordinalsType === 'did-document' 
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100'
+                              : inscription.ordinalsType === 'verifiable-credential'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100'
+                              : 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-100'
+                          }`}>
+                            {inscription.ordinalsType === 'did-document' ? 'DID Document' : 
+                             inscription.ordinalsType === 'verifiable-credential' ? 'Verifiable Credential' : 
+                             `Unknown (${inscription.ordinalsType || 'undefined'})`}
+                          </span>
+                          <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                            inscription.network === 'signet' 
+                              ? 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100'
+                              : 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100'
+                          }`}>
+                            {inscription.network || 'mainnet'}
+                          </span>
+                        </div>
+                      </div>
 
-                    <div className="flex gap-2">
-                      <a
-                        href={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-500 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        View Content
-                      </a>
-                      {/* Show appropriate action button based on resource type */}
-                      {inscription.ordinalsType === 'did-document' && (
-                        <button
-                          onClick={async () => {
-                            // Extract the DID from the resourceId (remove the /0 suffix if present)
-                            const resourceId = inscription.resourceId;
-                            const did = resourceId.includes('/') ? resourceId.split('/')[0] : resourceId;
-                            
-                            // Resolve the DID directly
-                            await resolveDid(did);
-                          }}
-                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
+                      <div className="space-y-2 mb-4">
+                        <div>
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Resource ID (DID):</span>
+                          <p className="text-sm text-gray-900 dark:text-gray-100 font-mono break-all">
+                            {inscription.resourceId}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Indexed:</span>
+                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                            {formatTimestamp(inscription.indexedAt ? new Date(inscription.indexedAt).toISOString() : null)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <a
+                          href={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-500 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
                         >
-                          Explore DID
-                        </button>
-                      )}
-                      {inscription.ordinalsType === 'verifiable-credential' && (
-                        <button
-                          onClick={async () => {
-                            // Extract the DID from the resourceId (remove the /0 suffix)
-                            const resourceId = inscription.resourceId;
-                            const did = resourceId.split('/')[0]; // Get DID part before /0
-                            
-                            // Resolve the issuer DID directly
-                            await resolveDid(did);
-                          }}
-                          className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 transition-colors"
-                        >
-                          <Shield className="w-4 h-4 mr-1" />
-                          Verify Credential
-                        </button>
-                      )}
+                          <Eye className="w-4 h-4 mr-1" />
+                          View Content
+                        </a>
+                        {/* Show appropriate action button based on resource type */}
+                        {inscription.ordinalsType === 'did-document' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent card click
+                              // Extract the DID from the resourceId (remove the /0 suffix if present)
+                              const resourceId = inscription.resourceId;
+                              const did = resourceId.includes('/') ? resourceId.split('/')[0] : resourceId;
+                              
+                              // Navigate to the DID page
+                              navigate(`/did/${encodeURIComponent(did)}`);
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 transition-colors"
+                          >
+                            Explore DID
+                          </button>
+                        )}
+                        {inscription.ordinalsType === 'verifiable-credential' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent card click
+                              // Extract the DID from the resourceId (remove the /0 suffix)
+                              const resourceId = inscription.resourceId;
+                              const did = resourceId.split('/')[0]; // Get DID part before /0
+                              
+                              // Navigate to the DID page
+                              navigate(`/did/${encodeURIComponent(did)}`);
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 transition-colors"
+                          >
+                            <Shield className="w-4 h-4 mr-1" />
+                            Verify Credential
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             
             {/* Pagination */}
             {ordinalsPagination.totalPages > 1 && (
