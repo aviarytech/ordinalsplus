@@ -1,4 +1,4 @@
-import { env } from 'src/config/envConfig';
+import { env } from '../config/envConfig';
 import { VCApiProvider } from '../components/settings/VCApiProviderSettings';
 
 
