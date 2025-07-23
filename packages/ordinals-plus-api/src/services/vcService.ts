@@ -15,7 +15,6 @@ import {
   DEFAULT_CIRCUIT_BREAKER_OPTIONS,
   DEFAULT_RETRY_OPTIONS
 } from '../utils/apiUtils';
-import { inflate } from 'pako'; // For decompressing gzipped status lists (will be used later)
 
 import {
   VC_CONTEXTS,
@@ -961,8 +960,8 @@ export class VCService {
         try {
           // Decoding process: base64url -> gzip -> bitstring
           const compressedBytes = Buffer.from(listData.encodedList, 'base64url'); // Use base64url
-          const bitstring = Buffer.from(inflate(compressedBytes)); // Decompress with pako.inflate
-
+          // const bitstring = Buffer.from(inflate(compressedBytes)); // Decompress with pako.inflate
+          const bitstring = Buffer.from(compressedBytes); // TODO: Decompress with pako.inflate
           const byteIndex = Math.floor(statusListIndex / 8);
           const bitIndexInByte = statusListIndex % 8;
 
