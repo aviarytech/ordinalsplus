@@ -2,7 +2,7 @@ import * as v from 'valibot';
 
 // Schema for API environment variables
 const EnvSchema = v.object({
-  ORDISCAN_API_KEY: v.string(),
+  ORDISCAN_API_KEY: v.optional(v.string()),
   ORD_NODE_URL: v.string(),
   PORT: v.number(),
   HOST: v.optional(v.string()),
