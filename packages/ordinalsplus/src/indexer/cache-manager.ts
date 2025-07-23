@@ -73,7 +73,7 @@ export class CacheManager {
   private logger: Logger;
   private caches: Map<string, Cache> = new Map();
   private metrics: Map<string, CacheMetrics> = new Map();
-  private cleanupInterval?: NodeJS.Timeout;
+  private cleanupInterval?: NodeJS.Timer;
   private warmers: Map<string, CacheWarmer> = new Map();
   
   /**
