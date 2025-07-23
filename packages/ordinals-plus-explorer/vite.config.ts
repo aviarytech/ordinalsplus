@@ -50,4 +50,9 @@ export default defineConfig({
     // Optional: Define port if needed, default is 5173 for Vite
     // port: 3000, 
   },
+  preview: {
+    allowedHosts: process.env.VITE_ALLOWED_HOSTS 
+      ? process.env.VITE_ALLOWED_HOSTS.split(',').map(host => host.trim())
+      : ['localhost', '127.0.0.1']
+  },
 })
