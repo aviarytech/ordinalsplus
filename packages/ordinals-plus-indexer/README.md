@@ -1,176 +1,109 @@
 # Ordinals Plus Indexer
 
-A scalable indexer for Ordinals Plus resources (DIDs and Verifiable Credentials) that works with both local ord nodes and the Ordiscan API.
+A scalable indexer for Ordinals Plus resources that supports multiple replicas working in parallel.
 
 ## Features
 
-- **Multi-Provider Support**: Works with local ord nodes or Ordiscan API
-- **Network Support**: Mainnet, Signet, and Testnet
-- **Scalable Architecture**: Redis-based storage with cursor-based batching
-- **Resource Classification**: Automatically identifies and categorizes Ordinals Plus vs regular inscriptions
-- **Error Handling**: Robust error tracking and recovery
+- **Multi-replica support**: Multiple indexer instances can run simultaneously without conflicts
+- **Atomic batch claiming**: Uses Redis Lua scripts to ensure only one worker claims each batch
+- **Automatic cursor management**: Tracks progress and handles missing inscriptions gracefully
+- **Resource classification**: Distinguishes between Ordinals Plus and non-Ordinals Plus resources
+- **Error handling**: Robust error handling with detailed logging
+- **Monitoring**: Built-in statistics and monitoring capabilities
 
-## Configuration
+## Multi-Replica Architecture
 
-The indexer is configured via environment variables:
+The indexer uses a Redis-based coordination system to ensure multiple replicas can work together:
 
-### Required Configuration
+### Batch Claiming
+- Each worker claims a unique batch of inscriptions to process
+- Uses atomic Redis operations to prevent race conditions
+- Claims expire automatically after 1 hour to handle worker failures
 
-```bash
-# Network (required)
-export NETWORK=mainnet              # 'mainnet', 'signet', or 'testnet'
+### Cursor Management
+- Global cursor tracks the highest processed inscription number
+- Workers only advance the cursor after successfully processing their batch
+- Handles missing inscriptions by stopping at the first gap
 
-# Provider Type (required)
-export PROVIDER_TYPE=ordiscan       # 'ordiscan' or 'ord-node'
+### Worker Coordination
+- Workers can see each other's active claims
+- Automatic cleanup of expired claims
+- Graceful shutdown releases worker claims
 
-# Redis (required)
-export REDIS_URL=redis://localhost:6379
-```
-
-### Provider-Specific Configuration
-
-#### For Ordiscan Provider (Recommended for Mainnet)
-```bash
-export PROVIDER_TYPE=ordiscan
-export ORDISCAN_API_KEY=your_api_key_here  # Get from ordiscan.com
-```
-
-#### For Local Ord Node Provider
-```bash
-export PROVIDER_TYPE=ord-node
-export INDEXER_URL=http://localhost:80     # Your local ord server URL
-```
-
-### Optional Performance Settings
+## Environment Variables
 
 ```bash
-export POLL_INTERVAL=30000          # Poll interval in ms (30s for mainnet, 5s for signet)
-export BATCH_SIZE=50               # Inscriptions per batch (50 for mainnet, 100 for signet)
-export START_INSCRIPTION=0        # Starting inscription number
-export WORKER_ID=mainnet-worker-1  # Worker identifier
+# Required
+REDIS_URL=redis://localhost:6379
+INDEXER_URL=http://localhost:80  # or Ordiscan API
+WORKER_ID=worker-1               # Unique ID for each replica
+
+# Optional
+POLL_INTERVAL=5000               # Milliseconds between polls
+BATCH_SIZE=100                   # Inscriptions per batch
+START_INSCRIPTION=0              # Starting inscription number
+NETWORK=mainnet                  # mainnet, signet, testnet
+PROVIDER_TYPE=ord-node           # ord-node or ordiscan
+ORDISCAN_API_KEY=your_key        # Required for ordiscan provider
 ```
 
-## Quick Start Examples
+## Running Multiple Replicas
 
-### Mainnet with Ordiscan (Recommended)
+1. **Set unique worker IDs**:
+   ```bash
+   # Replica 1
+   WORKER_ID=worker-1 npm start
+   
+   # Replica 2  
+   WORKER_ID=worker-2 npm start
+   
+   # Replica 3
+   WORKER_ID=worker-3 npm start
+   ```
 
-```bash
-# Set environment variables
-export NETWORK=mainnet
-export PROVIDER_TYPE=ordiscan
-export ORDISCAN_API_KEY=your_ordiscan_api_key
-export REDIS_URL=redis://localhost:6379
-export POLL_INTERVAL=30000
-export BATCH_SIZE=50
+2. **Monitor active workers**:
+   ```bash
+   # Check Redis for active claims
+   redis-cli keys "indexer:claim:*"
+   
+   # Get detailed stats
+   redis-cli get "indexer:cursor"
+   ```
 
-# Start the indexer
-cd packages/ordinals-plus-indexer
-bun run start
-```
+3. **Test multi-replica support**:
+   ```bash
+   node test-multi-replica.js
+   ```
 
-### Signet with Local Ord Node
+## Monitoring
 
-```bash
-# Set environment variables
-export NETWORK=signet
-export PROVIDER_TYPE=ord-node
-export INDEXER_URL=http://localhost:80
-export REDIS_URL=redis://localhost:6379
-export POLL_INTERVAL=5000
-export BATCH_SIZE=100
+The indexer provides comprehensive monitoring:
 
-# Start the indexer
-cd packages/ordinals-plus-indexer
-bun run start
-```
+- **Global stats**: Total resources, errors, cursor position
+- **Active workers**: Number of currently running replicas
+- **Batch progress**: Real-time batch processing status
+- **Error tracking**: Detailed error logs with worker attribution
 
-## Available Commands
+## Scaling Considerations
 
-### Start the Indexer
-```bash
-bun run start
-```
-
-### Check Statistics
-```bash
-bun run cli stats
-```
-
-### Manual Processing (Single Inscription)
-```bash
-bun run src/manual-index.ts
-```
-
-### Run Diagnostics
-```bash
-bun run src/diagnostic.ts
-```
-
-## Getting an Ordiscan API Key
-
-1. Visit [ordiscan.com](https://ordiscan.com)
-2. Sign up for an account
-3. Navigate to API settings
-4. Generate an API key
-5. Set it as `ORDISCAN_API_KEY` environment variable
-
-## Performance Recommendations
-
-### Mainnet
-- Use Ordiscan provider for better reliability
-- Set `POLL_INTERVAL=30000` (30 seconds)
-- Set `BATCH_SIZE=50` for conservative API usage
-- Consider starting from a recent inscription number for faster catch-up
-
-### Signet/Testnet
-- Can use either provider
-- Set `POLL_INTERVAL=5000` (5 seconds)
-- Set `BATCH_SIZE=100` for faster processing
-
-## Storage
-
-The indexer stores data in Redis with the following structure:
-
-- **Ordinals Plus Resources**: `ordinals-plus-resources` list
-- **Non-Ordinals Resources**: `non-ordinals-resources` list
-- **Resource Details**: `ordinals_plus:resource:{inscriptionId}` and `non_ordinals:resource:{inscriptionId}` hashes
-- **Statistics**: Various `*:stats:*` keys
-- **Cursor**: `indexer:cursor` tracks progress
-- **Errors**: `indexer:error:{inscriptionNumber}` for failed inscriptions
+- **Redis performance**: Ensure Redis can handle the connection load
+- **Network bandwidth**: Multiple replicas increase API calls to the provider
+- **Batch size**: Adjust based on processing speed and memory usage
+- **Worker count**: Monitor Redis memory usage with many active workers
 
 ## Troubleshooting
 
-### Common Issues
+### Workers claiming the same batches
+- Check Redis connectivity
+- Verify unique WORKER_ID values
+- Check for expired claims that weren't cleaned up
 
-1. **Missing API Key**: Set `ORDISCAN_API_KEY` when using ordiscan provider
-2. **Redis Connection**: Ensure Redis is running and accessible
-3. **Rate Limiting**: Increase `POLL_INTERVAL` if hitting API limits
-4. **Memory Usage**: Monitor Redis memory usage for large datasets
+### High failure rates
+- Adjust POLL_INTERVAL to wait longer for new inscriptions
+- Check provider API limits and rate limiting
+- Verify network configuration
 
-### Monitoring
-
-Check indexer statistics:
-```bash
-bun run cli stats
-```
-
-Run diagnostics on specific inscription:
-```bash
-INSCRIPTION_NUMBER=123456 bun run src/diagnostic.ts
-```
-
-## Architecture
-
-The indexer consists of:
-
-- **ResourceAnalyzer**: Classifies inscriptions as Ordinals Plus or regular
-- **ResourceStorage**: Manages Redis storage and cursors
-- **ScalableIndexerWorker**: Main worker loop with batch processing
-- **Provider**: Abstracts ord node or Ordiscan API access
-
-## Contributing
-
-1. Ensure tests pass: `bun test`
-2. Follow the existing code style
-3. Add tests for new functionality
-4. Update documentation as needed
+### Memory issues
+- Reduce BATCH_SIZE
+- Monitor Redis memory usage
+- Check for memory leaks in long-running workers

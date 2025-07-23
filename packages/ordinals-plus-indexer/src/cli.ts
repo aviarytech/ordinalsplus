@@ -25,7 +25,7 @@ async function main() {
       
       console.log('\n📊 Indexer Statistics:');
       console.log(`   Cursor position: ${stats.cursor}`);
-      console.log(`   Consecutive failures: ${stats.consecutiveFailures}`);
+      console.log(`   Active workers: ${stats.activeWorkers}`);
       console.log('\n📋 Ordinals Plus Resources:');
       console.log(`   Total: ${stats.ordinalsPlus.total}`);
       console.log(`   DID Documents: ${stats.ordinalsPlus.didDocuments}`);
@@ -92,6 +92,8 @@ Environment Variables:
   START_INSCRIPTION Starting inscription number (default: 0)
 
 Features:
+  ✅ Multi-replica support - Run multiple workers simultaneously
+  ✅ Atomic batch claiming - No race conditions between workers
   ✅ Two Resource Lists - Ordinals Plus and Non-Ordinals Plus
   ✅ Network-aware DIDs - mainnet: did:btco:123/0, signet: did:btco:sig:123/0
   ✅ Smart backoff - detects end of inscriptions and backs off gracefully
@@ -105,7 +107,7 @@ Redis Keys Created:
   📋 non-ordinals-resources      - Single list of Non-Ordinals Plus resource IDs
   ❌ indexer:errors              - List of inscription IDs that failed processing
   📍 indexer:cursor              - Current highest processed inscription number
-  ⏸️ indexer:backoff_until       - Timestamp when to resume after failures
+  🔒 indexer:claim:*             - Active worker batch claims
   
 Examples:
   # Start a worker on mainnet

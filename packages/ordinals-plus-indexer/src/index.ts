@@ -219,27 +219,85 @@ class ResourceStorage {
 
   // Simple cursor-based batch claiming
   async claimNextBatch(batchSize: number, workerId: string): Promise<BatchClaim | null> {
-    // Atomically get current cursor and reserve next batch
-    const currentCursor = await this.client.get('indexer:cursor');
-    const start = parseInt(currentCursor || START_INSCRIPTION.toString()) + 1;
-    const end = start + batchSize - 1;
+    // Use Lua script for atomic operation to prevent race conditions
+    const luaScript = `
+      local cursor = redis.call('GET', 'indexer:cursor')
+      local start = tonumber(cursor or ARGV[1]) + 1
+      local end = start + tonumber(ARGV[2]) - 1
+      local workerId = ARGV[3]
+      
+      -- Check if this batch is already claimed by checking for existing claims
+      local existingClaims = redis.call('KEYS', 'indexer:claim:*')
+      for _, claimKey in ipairs(existingClaims) do
+        local claimData = redis.call('GET', claimKey)
+        if claimData then
+          local claim = cjson.decode(claimData)
+          -- Check for overlap with existing claims
+          if (start <= claim.end and end >= claim.start) then
+            return nil -- Batch already claimed
+          end
+        end
+      end
+      
+      -- Create the claim
+      local claim = {
+        start = start,
+        end = end,
+        workerId = workerId,
+        claimedAt = redis.call('TIME')[1]
+      }
+      
+      -- Store the claim
+      redis.call('SET', 'indexer:claim:' .. workerId, cjson.encode(claim), 'EX', 3600)
+      
+      -- Return the claim data
+      return cjson.encode(claim)
+    `;
 
-    // Store claim info (for monitoring, not for coordination)
-    const claim: BatchClaim = {
-      start,
-      end,
-      workerId,
-      claimedAt: Date.now()
-    };
+    try {
+      const result = await this.client.eval(luaScript, {
+        keys: [],
+        arguments: [START_INSCRIPTION.toString(), batchSize.toString(), workerId]
+      });
 
-    await this.client.set(`indexer:claim:${workerId}`, JSON.stringify(claim), { EX: 3600 }); // Expire in 1 hour
+      if (result === null) {
+        return null; // No batch available
+      }
 
-    return claim;
+      const claim: BatchClaim = JSON.parse(result as string);
+      return claim;
+    } catch (error) {
+      console.error('Error claiming batch:', error);
+      return null;
+    }
   }
 
   async completeBatch(endNumber: number): Promise<void> {
     // Update cursor to the highest completed inscription
     await this.client.set('indexer:cursor', endNumber.toString());
+    
+    // Clean up expired claims to prevent memory leaks
+    await this.cleanupExpiredClaims();
+  }
+
+  private async cleanupExpiredClaims(): Promise<void> {
+    try {
+      const claimKeys = await this.client.keys('indexer:claim:*');
+      const now = Date.now();
+      
+      for (const key of claimKeys) {
+        const claimData = await this.client.get(key);
+        if (claimData) {
+          const claim: BatchClaim = JSON.parse(claimData);
+          // Remove claims older than 1 hour (3600000 ms)
+          if (now - claim.claimedAt > 3600000) {
+            await this.client.del(key);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Error cleaning up expired claims:', error);
+    }
   }
 
   // Resource storage methods
@@ -337,14 +395,16 @@ class ResourceStorage {
     nonOrdinals: { total: number; [key: string]: number };
     errors: { total: number };
     cursor: number;
+    activeWorkers: number;
   }> {
-    const [ordinalsTotal, dids, vcs, nonOrdinalsTotal, cursor, errorTotal] = await Promise.all([
+    const [ordinalsTotal, dids, vcs, nonOrdinalsTotal, cursor, errorTotal, activeClaims] = await Promise.all([
       this.client.get('ordinals-plus:stats:total'),
       this.client.get('ordinals-plus:stats:did-document'),
       this.client.get('ordinals-plus:stats:verifiable-credential'),
       this.client.get('non-ordinals:stats:total'),
       this.client.get('indexer:cursor'),
-      this.client.get('indexer:stats:errors')
+      this.client.get('indexer:stats:errors'),
+      this.getActiveWorkerClaims()
     ]);
 
     // Get content type breakdown for non-ordinals
@@ -371,13 +431,40 @@ class ResourceStorage {
       errors: {
         total: parseInt(errorTotal || '0')
       },
-      cursor: parseInt(cursor || START_INSCRIPTION.toString())
+      cursor: parseInt(cursor || START_INSCRIPTION.toString()),
+      activeWorkers: activeClaims.length
     };
   }
 
   async getCurrentCursor(): Promise<number> {
     const cursor = await this.client.get('indexer:cursor');
     return parseInt(cursor || START_INSCRIPTION.toString());
+  }
+
+  async releaseWorkerClaim(workerId: string): Promise<void> {
+    const claimKey = `indexer:claim:${workerId}`;
+    await this.client.del(claimKey);
+    console.log(`🔓 Released claim for worker: ${workerId}`);
+  }
+
+  async getActiveWorkerClaims(): Promise<BatchClaim[]> {
+    try {
+      const claimKeys = await this.client.keys('indexer:claim:*');
+      const claims: BatchClaim[] = [];
+      
+      for (const key of claimKeys) {
+        const claimData = await this.client.get(key);
+        if (claimData) {
+          const claim: BatchClaim = JSON.parse(claimData);
+          claims.push(claim);
+        }
+      }
+      
+      return claims;
+    } catch (error) {
+      console.warn('Error getting active worker claims:', error);
+      return [];
+    }
   }
 }
 
@@ -414,6 +501,10 @@ class ScalableIndexerWorker {
     this.workerId = WORKER_ID;
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   async start(): Promise<void> {
     console.log(`🚀 Starting Resource Indexer Worker: ${this.workerId} on ${NETWORK}`);
     console.log(`📡 Using provider: ${PROVIDER_TYPE}`);
@@ -432,6 +523,10 @@ class ScalableIndexerWorker {
   async stop(): Promise<void> {
     console.log(`🛑 Stopping Worker: ${this.workerId}`);
     this.running = false;
+    
+    // Release any active claim for this worker
+    await this.storage.releaseWorkerClaim(this.workerId);
+    
     await this.storage.disconnect();
     process.exit(0);
   }
@@ -534,17 +629,13 @@ class ScalableIndexerWorker {
         
         // Show overall stats
         const stats = await this.storage.getStats();
-        console.log(`📈 Global stats: cursor=${stats.cursor}, ${stats.ordinalsPlus.total} Ordinals Plus, ${stats.nonOrdinals.total} Non-Ordinals, ${stats.errors.total} errors`);
+        console.log(`📈 Global stats: cursor=${stats.cursor}, ${stats.ordinalsPlus.total} Ordinals Plus, ${stats.nonOrdinals.total} Non-Ordinals, ${stats.errors.total} errors, ${stats.activeWorkers} active workers`);
 
       } catch (error) {
         console.error('❌ Worker error:', error);
         await this.sleep(5000); // Brief pause on error
       }
     }
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
 
