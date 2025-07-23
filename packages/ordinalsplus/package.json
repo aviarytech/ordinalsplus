@@ -3,36 +3,37 @@
   "version": "1.1.0",
   "description": "A JavaScript/TypeScript library for working with BTCO DIDs and DID Linked Resources on the Bitcoin blockchain",
   "type": "module",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
   "typesVersions": {
     "*": {
       "*": [
-        "./dist/index.d.ts"
+        "./src/index.ts"
       ],
       "types": [
-        "./dist/types/index.d.ts"
+        "./src/types/index.ts"
       ]
     }
   },
   "files": [
-    "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "require": "./src/index.ts"
     }
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist && npx tsc --emitDeclarationOnly",
-    "build:types": "npx tsc --emitDeclarationOnly",
-    "build:js": "bun build ./src/index.ts --outdir ./dist",
-    "dev": "tsc --watch",
+    "build": "npx tsc --noEmit",
+    "build:check": "npx tsc --noEmit",
+    "build:types": "npx tsc --emitDeclarationOnly --outDir ./dist",
+    "build:bundled": "bun build ./src/index.ts --outdir ./dist",
+    "dev": "tsc --watch --noEmit",
     "clean": "rm -rf dist",
     "lint": "eslint src",
     "test": "bun test",
@@ -40,9 +41,7 @@
     "test:bail": "bun test --bail",
     "test:psbt": "NODE_OPTIONS='--no-warnings' bun test test/psbt-creation.test.ts",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run lint",
-    "example": "bun examples/basic-usage.ts",
-    "example:resolve": "bun run examples/resource-resolution.ts"
+    "prepublishOnly": "npm run lint"
   },
   "keywords": [
     "bitcoin",
