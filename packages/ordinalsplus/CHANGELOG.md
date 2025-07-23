@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/aviarytech/ordinalsplus/compare/v1.0.1...v1.0.2) (2025-07-23)
+
+
+### Bug Fixes
+
+* add ESLint configuration for ordinalsplus package to fix workflow ([d06d728](https://github.com/aviarytech/ordinalsplus/commit/d06d728695c6ae238b5bbe53c0e27b0e41233e00))
+
 ## [1.0.1](https://github.com/aviarytech/ordinalsplus/compare/v1.0.0...v1.0.1) (2025-07-23)
 
 
