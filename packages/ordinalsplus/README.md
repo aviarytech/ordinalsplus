@@ -1,4 +1,4 @@
-# OrdinalsPlus
+# Ordinals+
 
 A JavaScript/TypeScript library for working with BTCO DIDs and DID Linked Resources on the Bitcoin blockchain.
 
