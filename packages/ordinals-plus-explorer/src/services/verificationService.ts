@@ -13,7 +13,7 @@ import {
   VerifiableCredential 
 } from '../types/verification';
 import { VCService } from 'ordinalsplus'
-import { StaticDataProvider, StaticSatData } from '../../../ordinalsplus/src/resources/providers/static-data-provider'
+import { StaticDataProvider } from 'ordinalsplus'
 
 /**
  * Cache entry for verification results
@@ -546,7 +546,7 @@ export class VerificationService implements IVerificationService {
         
         if (result.didDocument && result.inscriptions && result.inscriptions.length > 0) {
           // Convert the API response inscriptions to StaticSatData format
-          const staticSat: StaticSatData = {
+          const staticSat = {
             satNumber,
             inscriptions: result.inscriptions.map(inscription => ({
               inscriptionId: inscription.inscriptionId,
