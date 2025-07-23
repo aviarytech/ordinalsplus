@@ -86,17 +86,6 @@ The backend API server proxies all requests to either the Ordiscan API or the lo
    # Edit .env to include your Ordiscan API key
    ```
 
-6. Start the backend server:
-   ```bash
-   cd ../ordinals-plus-api
-   npm start
-   ```
-
-7. Start the frontend development server:
-   ```bash
-   cd ../ordinals-plus-explorer
-   npm run dev
-   ```
 
 ## Network Configuration
 
@@ -110,10 +99,6 @@ The application supports two network modes, both accessed through the backend:
 To run a local Ord node, follow these steps:
 
 1. Install Ord (see [Ord installation guide](https://github.com/ordinals/ord))
-2. Run the Ord server:
-   ```bash
-   ord --regtest server --http-port 9001
-   ```
 3. Update the backend `.env` file with the correct Ord node URL:
    ```
    ORD_NODE_URL=http://localhost:9001

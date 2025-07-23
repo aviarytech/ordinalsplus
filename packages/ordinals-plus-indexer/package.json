@@ -1,0 +1,38 @@
+{
+  "name": "ordinals-plus-indexer",
+  "version": "1.0.0",
+  "description": "Clean, focused indexer for Ordinals Plus resources (DIDs and VCs)",
+  "main": "src/index.ts",
+  "type": "module",
+  "bin": {
+    "ordinals-indexer": "src/cli.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "bun run src/index.ts",
+    "cli": "bun run src/cli.ts",
+    "dev": "bun run src/index.ts",
+    "test": "bun test",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "ordinalsplus": "workspace:*",
+    "redis": "^4.6.13"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "ordinals",
+    "bitcoin",
+    "indexer",
+    "did",
+    "verifiable-credentials"
+  ],
+  "author": "Ordinals Plus Team",
+  "license": "MIT"
+}

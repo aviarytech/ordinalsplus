@@ -3,11 +3,12 @@ import { cors } from '@elysiajs/cors';
 import { swagger } from '@elysiajs/swagger';
 import { InscriptionNotFoundError } from '../services/inscriptionService';
 import type { ErrorResponse } from '../types';
+import { env } from './envConfig';
 
 // Define API configuration
-export const PORT = process.env.PORT || 3001;
-export const HOST = process.env.HOST || '0.0.0.0';
-export const API_BASE_URL = process.env.API_BASE_URL || `http://localhost:${PORT}`;
+export const PORT = env.PORT;
+export const HOST = env.HOST ?? '0.0.0.0';
+export const API_BASE_URL = env.API_BASE_URL || `http://localhost:${PORT}`;
 
 // Constants for the API
 export const MIN_DUST = 546; // Sats

@@ -7,7 +7,6 @@
  * @see https://www.w3.org/TR/vc-data-model-2.0/
  */
 
-import { createHash } from 'crypto';
 import { 
   VerifiableCredential, 
   CredentialSubject, 
@@ -70,14 +69,16 @@ export function extractDimensions(contentType: string, content?: Uint8Array): { 
 }
 
 /**
- * Calculate hash of content
+ * Calculate hash of content using Web Crypto API
  * 
  * @param content - The binary content to hash
- * @param algorithm - Hash algorithm to use (default: sha256)
+ * @param algorithm - Hash algorithm to use (default: SHA-256)
  * @returns Hex-encoded hash string
  */
-export function calculateContentHash(content: Uint8Array, algorithm = 'sha256'): string {
-  return createHash(algorithm).update(content).digest('hex');
+export async function calculateContentHash(content: Uint8Array, algorithm = 'SHA-256'): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest(algorithm, content);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -87,10 +88,10 @@ export function calculateContentHash(content: Uint8Array, algorithm = 'sha256'):
  * @param contentType - MIME type of the content
  * @returns ContentInfo object
  */
-export function extractContentInfo(content: Uint8Array, contentType: string): ContentInfo {
+export async function extractContentInfo(content: Uint8Array, contentType: string): Promise<ContentInfo> {
   const contentInfo: ContentInfo = {
     mimeType: contentType,
-    hash: calculateContentHash(content),
+    hash: await calculateContentHash(content),
     size: content.length,
   };
   
@@ -189,8 +190,18 @@ export function prepareCredentialSubject(
  * @param params - Parameters for credential issuance
  * @returns Formatted verifiable credential ready for signing
  */
-export function prepareCredential(params: CredentialIssuanceParams): VerifiableCredential {
-  const { subjectDid, issuerDid, metadata, contentInfo } = params;
+export async function prepareCredential(params: CredentialIssuanceParams): Promise<VerifiableCredential> {
+  const { subjectDid, issuerDid, metadata, content, contentType } = params;
+  
+  // Extract content info if content is provided
+  let contentInfo: ContentInfo;
+  if (content && contentType) {
+    contentInfo = await extractContentInfo(content, contentType);
+  } else if (params.contentInfo) {
+    contentInfo = params.contentInfo;
+  } else {
+    throw new Error('Either content+contentType or contentInfo must be provided');
+  }
   
   // Prepare the credential subject
   const credentialSubject = prepareCredentialSubject(

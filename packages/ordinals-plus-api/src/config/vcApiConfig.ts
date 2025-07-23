@@ -42,9 +42,11 @@ export interface VCApiProviderConfig {
  * 
  * @returns Array of configured VC API providers
  */
+import { env } from './envConfig';
+
 export function getVCApiProviders(): VCApiProviderConfig[] {
   const providers: VCApiProviderConfig[] = [];
-  const defaultProviderId = process.env.VC_API_DEFAULT_PROVIDER || '1';
+  const defaultProviderId = env.VC_API_DEFAULT_PROVIDER || '1';
   
   // Find all provider configurations in environment variables
   for (let i = 1; i <= 10; i++) { // Support up to 10 providers
@@ -76,8 +78,8 @@ export function getVCApiProviders(): VCApiProviderConfig[] {
     providers.push({
       id: '1',
       name: 'Default VC API',
-      url: process.env.VC_API_URL || 'https://api.example.com/vc',
-      authToken: process.env.VC_API_AUTH_TOKEN || 'placeholder-token',
+      url: env.VC_API_URL || 'https://api.example.com/vc',
+      authToken: env.VC_API_AUTH_TOKEN || 'placeholder-token',
       isDefault: true
     });
   }
@@ -115,8 +117,8 @@ export function getDefaultVCApiProvider(): VCApiProviderConfig {
   return {
     id: 'fallback',
     name: 'Emergency Fallback Provider',
-    url: process.env.VC_API_URL || 'https://api.example.com/vc',
-    authToken: process.env.VC_API_AUTH_TOKEN || 'placeholder-token',
+    url: env.VC_API_URL || 'https://api.example.com/vc',
+    authToken: env.VC_API_AUTH_TOKEN || 'placeholder-token',
     isDefault: true
   };
 }

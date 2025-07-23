@@ -30,11 +30,11 @@ export async function calculateFees(
   
   // Base sizes for transactions (approximation)
   const COMMIT_TX_BASE_SIZE = 110; // Base size for a simple commit transaction in vbytes
-  const REVEAL_TX_BASE_SIZE = 150; // Base size for the reveal transaction without the inscription
+  const REVEAL_TX_BASE_SIZE = 130; // Base size for the reveal transaction without the inscription
   
   // Calculate inscription size overhead (protocol overhead + content)
   // Protocol overhead includes mime type encoding, metadata, etc.
-  const PROTOCOL_OVERHEAD = 50; // Approximation for ordinal protocol overhead
+  const PROTOCOL_OVERHEAD = 30; // Approximation for ordinal protocol overhead
   const inscriptionSize = contentSizeBytes + PROTOCOL_OVERHEAD;
   
   // Calculate transaction sizes in vbytes

@@ -3,6 +3,7 @@ export * from './constants';
 export * from './networks';
 export * from './keyUtils';
 export * from './fetch-utils';
+export * as encoding from './encoding';
 
 // Placeholder for RPC client - replace with actual implementation
 export function getRpcClientPlaceholder(network: string, endpoints?: string[]): any {

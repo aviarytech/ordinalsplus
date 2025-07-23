@@ -65,7 +65,7 @@ describe('linkedResourcesController', () => {
         type: 'TestResource',
         name: 'Test Resource'
       };
-      const didReference = 'did:btco:abc123';
+      const didReference = 'did:btco:1939534441773337';
 
       // Act
       const result = await createLinkedResource(resourceData, didReference);
@@ -112,7 +112,7 @@ describe('linkedResourcesController', () => {
   describe('getResourceByDid', () => {
     it('should return a mock resource for a valid DID', async () => {
       // Arrange
-      const didId = 'did:btco:resource:123';
+      const didId = 'did:btco:1026461333159039';
 
       // Act
       const result = await getResourceByDid(didId);

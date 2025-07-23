@@ -10,8 +10,11 @@ export interface ResourceProvider {
         offset?: number;
     }): Promise<LinkedResource[]>;
     getSatInfo(satNumber: string): Promise<{ inscription_ids: string[] }>;
+    getMetadata(inscriptionId: string): Promise<any>;
     getAllResources(options?: ResourceCrawlOptions): AsyncGenerator<LinkedResource[]>;
+    getAllResourcesChronological(options?: ResourceCrawlOptions): AsyncGenerator<LinkedResource[]>;
     getInscriptionLocationsByAddress(address: string): Promise<InscriptionRefWithLocation[]>;
+    getInscriptionByNumber(inscriptionNumber: number): Promise<Inscription>;
 }
 
 export interface ResourceCrawlOptions {

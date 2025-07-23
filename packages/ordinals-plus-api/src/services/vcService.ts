@@ -744,11 +744,33 @@ export class VCService {
     }
 
     try {
-      // Resolve issuer DID
-      const didResolution = await this.didService.resolveDID(credential.issuer.id);
-      if (didResolution.error || !didResolution.didDocument) {
-        console.error(`Failed to resolve DID: ${credential.issuer.id}`, didResolution.error);
+      // Extract issuer DID
+      const issuerDid = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer.id;
+      
+      // First try auto-detection to see what the issuer DID contains
+      let didResolution = await this.didService.resolveDID(issuerDid);
+      
+      if (didResolution.error) {
+        console.error(`Failed to resolve issuer DID ${issuerDid}: ${didResolution.error}`);
         return false;
+      }
+      
+      // Check if we got a DID Document (needed for verification)
+      if (didResolution.contentType === 'did-document' && didResolution.didDocument) {
+        console.log(`[VCService] Found DID Document for issuer: ${issuerDid}`);
+      } else {
+        console.log(`[VCService] Issuer DID contains ${didResolution.contentType} content, not a DID Document.`);
+        
+        // Try to resolve specifically as a DID Document
+        const didDocResult = await this.didService.resolveDidDocument(issuerDid);
+        
+        if (didDocResult.error || !didDocResult.didDocument) {
+          console.error(`[VCService] Cannot verify credential: issuer DID does not contain a DID Document needed for verification. Contains: ${didResolution.contentType}`);
+          return false;
+        }
+        
+        // Use the DID Document from the specific resolution
+        didResolution = { didDocument: didDocResult.didDocument };
       }
 
       // Find the verification method referenced in the proof

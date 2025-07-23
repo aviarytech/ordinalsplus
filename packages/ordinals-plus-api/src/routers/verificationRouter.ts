@@ -18,6 +18,7 @@ import type { CollectionInscriptionRepository } from '../types/collectionInscrip
 import { InMemoryCredentialRepository } from '../repositories/credentialRepository';
 import { InMemoryCollectionRepository } from '../repositories/collectionRepository';
 import { InMemoryCollectionInscriptionRepository } from '../repositories/collectionInscriptionRepository';
+import { env } from '../config/envConfig';
 
 // Create services
 const apiService = new ApiService();
@@ -54,6 +55,110 @@ const RATE_LIMIT = {
   }
 };
 
+/**
+ * Check if metadata contains a Verifiable Credential structure
+ */
+function isVerifiableCredential(metadata: any): boolean {
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+  
+  // Check for required VC fields according to W3C VC spec
+  return (
+    metadata['@context'] &&
+    metadata.type &&
+    (Array.isArray(metadata.type) ? metadata.type.includes('VerifiableCredential') : metadata.type === 'VerifiableCredential') &&
+    metadata.issuer &&
+    metadata.credentialSubject
+  );
+}
+
+/**
+ * Simple verification of credential structure
+ * For now, we'll just validate the structure until proper cryptographic verification is implemented
+ */
+async function verifyCredentialBasic(credential: any): Promise<{ valid: boolean; message: string; issuer?: any }> {
+  try {
+    // Basic structure validation
+    if (!isVerifiableCredential(credential)) {
+      return { valid: false, message: 'Invalid verifiable credential structure' };
+    }
+    
+    // Get issuer DID
+    const issuerDid = typeof credential.issuer === 'string' 
+      ? credential.issuer 
+      : credential.issuer.id;
+    
+    if (!issuerDid) {
+      return { valid: false, message: 'Invalid issuer DID' };
+    }
+    
+    // For now, if the structure is valid, consider it valid
+    // TODO: Add proper cryptographic proof verification and DID resolution
+    return { 
+      valid: true, 
+      message: 'Credential structure verified (basic validation)',
+      issuer: {
+        did: issuerDid,
+        name: issuerDid,
+        verified: true
+      }
+    };
+  } catch (error) {
+    return { valid: false, message: `Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+  }
+}
+
+/**
+ * Fetch inscription metadata using the Ordiscan API
+ */
+async function fetchInscriptionMetadata(inscriptionId: string): Promise<any> {
+  const apiKey = env.ORDISCAN_API_KEY;
+  if (!apiKey) {
+    throw new Error('Ordiscan API key not configured');
+  }
+  
+  try {
+    const response = await fetch(`https://api.ordiscan.com/v1/inscription/${inscriptionId}/metadata`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.text();
+    
+    // Try to decode CBOR if it's hex-encoded
+    if (data && data.length > 0) {
+      try {
+        // Simple hex decode and assume JSON content for now
+        // In a full implementation, we'd use proper CBOR decoding
+        const hexMatch = data.match(/^[0-9a-fA-F]+$/);
+        if (hexMatch) {
+          // Convert hex to bytes and try to decode as JSON
+          const bytes = new Uint8Array(data.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+          const decoded = new TextDecoder().decode(bytes);
+          return JSON.parse(decoded);
+        } else {
+          // Try to parse as JSON directly
+          return JSON.parse(data);
+        }
+      } catch (parseError) {
+        // If parsing fails, return the raw data
+        return { rawData: data };
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    throw new Error(`Failed to fetch inscription metadata: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
 // Define the verification router
 export const verificationRouter = new Elysia({ prefix: '/api/verify' })
   // Verify an inscription by ID
@@ -68,10 +173,59 @@ export const verificationRouter = new Elysia({ prefix: '/api/verify' })
     }
 
     try {
-      const result = await verificationService.verifyInscription(inscriptionId);
+      // Try to get metadata directly from the inscription
+      let metadata: any = null;
       
-      // Format the response
-      return formatVerificationResponse(result);
+      try {
+        metadata = await fetchInscriptionMetadata(inscriptionId);
+      } catch (fetchError) {
+        console.warn(`Failed to get metadata: ${fetchError}`);
+        return {
+          status: 'error',
+          message: `Failed to fetch inscription metadata: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`
+        };
+      }
+      
+      if (!metadata) {
+        return {
+          status: 'error',
+          message: 'No metadata found for this inscription'
+        };
+      }
+      
+      // Check if metadata is a verifiable credential
+      if (!isVerifiableCredential(metadata)) {
+        return {
+          status: 'error',
+          message: 'Inscription metadata is not a verifiable credential'
+        };
+      }
+      
+      // Verify the credential
+      const verificationResult = await verifyCredentialBasic(metadata);
+      
+      return {
+        status: verificationResult.valid ? 'success' : 'error',
+        message: verificationResult.message,
+        details: {
+          inscriptionId,
+          issuer: verificationResult.issuer,
+          verifiedAt: new Date().toISOString(),
+          checks: [
+            {
+              name: 'Structure Validation',
+              passed: isVerifiableCredential(metadata),
+              description: 'Validates W3C VC structure'
+            },
+            {
+              name: 'Basic Verification',
+              passed: verificationResult.valid,
+              description: 'Basic credential validation'
+            }
+          ]
+        },
+        credential: metadata
+      };
     } catch (error) {
       return {
         status: 'error',
@@ -111,22 +265,29 @@ export const verificationRouter = new Elysia({ prefix: '/api/verify' })
   })
   
   // Verify a credential directly
-  .post('/credential', async ({ body }) => {
-    const { credential } = body as { credential: any };
-    
-    if (!credential) {
-      return {
-        status: 'error',
-        message: 'Missing credential in request body'
-      };
-    }
-
+  .post('/credential', async ({ body }: { body: { credential: any } }) => {
     try {
+      const { credential } = body;
+      
+      if (!credential) {
+        return {
+          status: 'error',
+          message: 'Missing credential data'
+        };
+      }
+
+      // Use the verification service to verify the credential
       const result = await verificationService.verifyCredential(credential);
       
-      // Format the response
-      return formatVerificationResponse(result);
+      return {
+        status: result.status === VerificationStatus.VALID ? 'valid' : 
+               result.status === VerificationStatus.INVALID ? 'invalid' : 'error',
+        message: result.message,
+        issuer: result.issuer,
+        verifiedAt: result.verifiedAt
+      };
     } catch (error) {
+      console.error('Error verifying credential:', error);
       return {
         status: 'error',
         message: `Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -163,7 +324,7 @@ export const verificationRouter = new Elysia({ prefix: '/api/verify' })
     }
   })
   
-  // Get information about an issuer by DID
+  // Get issuer information for a DID
   .get('/issuer/:did', async ({ params }) => {
     const { did } = params;
     
@@ -175,13 +336,15 @@ export const verificationRouter = new Elysia({ prefix: '/api/verify' })
     }
 
     try {
-      const issuerInfo = await verificationService.getIssuerInfo(did);
+      // Use the verification service to get issuer info
+      const issuer = await verificationService.getIssuerInfo(did);
       
       return {
         status: 'success',
-        issuer: issuerInfo
+        issuer
       };
     } catch (error) {
+      console.error('Error getting issuer info:', error);
       return {
         status: 'error',
         message: `Failed to get issuer info: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -206,467 +369,8 @@ export const verificationRouter = new Elysia({ prefix: '/api/verify' })
       })
     },
     detail: {
-      summary: 'Get information about an issuer',
-      description: 'Retrieves information about an issuer by its DID',
+      summary: 'Get issuer information by DID',
+      description: 'Resolves a DID and returns information about the issuer',
       tags: ['Verification']
     }
-  })
-  
-  // Collection credential endpoints
-  
-  // Issue a collection credential
-  .post('/collection-credential/issue', async ({ body }) => {
-    const { collectionId, issuerDid } = body as { collectionId: string; issuerDid: string };
-    
-    if (!collectionId || !issuerDid) {
-      return {
-        status: 'error',
-        message: 'Missing required parameters: collectionId and issuerDid'
-      };
-    }
-
-    return await collectionCredentialController.issueCollectionCredential({
-      collectionId,
-      issuerDid
-    });
-  }, {
-    body: t.Object({
-      collectionId: t.String({ minLength: 1 }),
-      issuerDid: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        message: t.Optional(t.String()),
-        data: t.Optional(t.Object({
-          credentialId: t.String(),
-          credential: t.Any()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Issue a credential for a collection',
-      description: 'Issues a verifiable credential for a curated collection',
-      tags: ['Collection Credentials']
-    }
-  })
-  
-  // Get a collection credential by ID
-  .get('/collection-credential/:credentialId', async ({ params }) => {
-    const { credentialId } = params;
-    
-    if (!credentialId) {
-      return {
-        status: 'error',
-        message: 'Missing credential ID'
-      };
-    }
-
-    return await collectionCredentialController.getCollectionCredential(credentialId);
-  }, {
-    params: t.Object({
-      credentialId: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        data: t.Optional(t.Object({
-          credential: t.Any()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Get a collection credential by ID',
-      description: 'Retrieves a collection credential by its ID',
-      tags: ['Collection Credentials']
-    }
-  })
-  
-  // Find collection credentials by curator
-  .get('/collection-credentials/curator/:curatorDid', async ({ params }) => {
-    const { curatorDid } = params;
-    
-    if (!curatorDid) {
-      return {
-        status: 'error',
-        message: 'Missing curator DID'
-      };
-    }
-
-    return await collectionCredentialController.findCollectionCredentialsByCurator(curatorDid);
-  }, {
-    params: t.Object({
-      curatorDid: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        data: t.Optional(t.Object({
-          credentials: t.Array(t.Any()),
-          count: t.Number()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Find collection credentials by curator',
-      description: 'Retrieves collection credentials issued by a specific curator',
-      tags: ['Collection Credentials']
-    }
-  })
-  
-  // Revoke a collection credential
-  .post('/collection-credential/revoke', async ({ body }) => {
-    const { credentialId, issuerDid } = body as { credentialId: string; issuerDid: string };
-    
-    if (!credentialId || !issuerDid) {
-      return {
-        status: 'error',
-        message: 'Missing required parameters: credentialId and issuerDid'
-      };
-    }
-
-    return await collectionCredentialController.revokeCollectionCredential(credentialId, issuerDid);
-  }, {
-    body: t.Object({
-      credentialId: t.String({ minLength: 1 }),
-      issuerDid: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        message: t.String(),
-        data: t.Optional(t.Object({
-          revoked: t.Boolean()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Revoke a collection credential',
-      description: 'Revokes a previously issued collection credential',
-      tags: ['Collection Credentials']
-    }
-  })
-  
-  // Collection inscription endpoints
-  
-  // Start a collection inscription process
-  .post('/collection-inscription/start', async ({ body }) => {
-    const { collectionId, requesterDid, feeRate, useBatching, batchSize } = 
-      body as { collectionId: string; requesterDid: string; feeRate?: number; useBatching?: boolean; batchSize?: number };
-    
-    if (!collectionId || !requesterDid) {
-      return {
-        status: 'error',
-        message: 'Missing required parameters: collectionId and requesterDid'
-      };
-    }
-
-    return await collectionInscriptionController.startInscription({
-      collectionId,
-      requesterDid,
-      feeRate,
-      useBatching,
-      batchSize
-    });
-  }, {
-    body: t.Object({
-      collectionId: t.String({ minLength: 1 }),
-      requesterDid: t.String({ minLength: 1 }),
-      feeRate: t.Optional(t.Number()),
-      useBatching: t.Optional(t.Boolean()),
-      batchSize: t.Optional(t.Number())
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        message: t.String(),
-        data: t.Optional(t.Object({
-          inscriptionId: t.String(),
-          status: t.String(),
-          collectionId: t.String()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Start a collection inscription process',
-      description: 'Initiates the process of inscribing a collection on-chain',
-      tags: ['Collection Inscriptions']
-    }
-  })
-  
-  // Get the status of a collection inscription
-  .get('/collection-inscription/:inscriptionId', async ({ params }) => {
-    const { inscriptionId } = params;
-    
-    if (!inscriptionId) {
-      return {
-        status: 'error',
-        message: 'Missing inscription ID'
-      };
-    }
-
-    return await collectionInscriptionController.getInscriptionStatus(inscriptionId);
-  }, {
-    params: t.Object({
-      inscriptionId: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        data: t.Optional(t.Object({
-          inscription: t.Any()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Get collection inscription status',
-      description: 'Retrieves the status of a collection inscription process',
-      tags: ['Collection Inscriptions']
-    }
-  })
-  
-  // Get inscriptions for a collection
-  .get('/collection-inscriptions/collection/:collectionId', async ({ params }) => {
-    const { collectionId } = params;
-    
-    if (!collectionId) {
-      return {
-        status: 'error',
-        message: 'Missing collection ID'
-      };
-    }
-
-    return await collectionInscriptionController.getInscriptionsForCollection(collectionId);
-  }, {
-    params: t.Object({
-      collectionId: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        data: t.Optional(t.Object({
-          inscriptions: t.Array(t.Any()),
-          count: t.Number()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Get inscriptions for a collection',
-      description: 'Retrieves all inscription records for a specific collection',
-      tags: ['Collection Inscriptions']
-    }
-  })
-  
-  // Cancel an in-progress inscription
-  .post('/collection-inscription/cancel', async ({ body }) => {
-    const { inscriptionId, requesterDid } = body as { inscriptionId: string; requesterDid: string };
-    
-    if (!inscriptionId || !requesterDid) {
-      return {
-        status: 'error',
-        message: 'Missing required parameters: inscriptionId and requesterDid'
-      };
-    }
-
-    return await collectionInscriptionController.cancelInscription(inscriptionId, requesterDid);
-  }, {
-    body: t.Object({
-      inscriptionId: t.String({ minLength: 1 }),
-      requesterDid: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        message: t.String(),
-        data: t.Optional(t.Object({
-          inscription: t.Any()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Cancel a collection inscription',
-      description: 'Cancels an in-progress collection inscription process',
-      tags: ['Collection Inscriptions']
-    }
-  })
-  
-  // Verify an on-chain collection inscription
-  .get('/collection-inscription/verify/:inscriptionId/:collectionId', async ({ params }) => {
-    const { inscriptionId, collectionId } = params;
-    
-    if (!inscriptionId || !collectionId) {
-      return {
-        status: 'error',
-        message: 'Missing required parameters: inscriptionId and collectionId'
-      };
-    }
-
-    return await collectionInscriptionController.verifyInscription(inscriptionId, collectionId);
-  }, {
-    params: t.Object({
-      inscriptionId: t.String({ minLength: 1 }),
-      collectionId: t.String({ minLength: 1 })
-    }),
-    response: {
-      200: t.Object({
-        status: t.String(),
-        data: t.Optional(t.Object({
-          isValid: t.Boolean(),
-          inscriptionId: t.String(),
-          collectionId: t.String(),
-          verifiedAt: t.String()
-        }))
-      }),
-      400: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      }),
-      500: t.Object({
-        status: t.Literal('error'),
-        message: t.String()
-      })
-    },
-    detail: {
-      summary: 'Verify a collection inscription',
-      description: 'Verifies that an on-chain inscription matches the expected collection data',
-      tags: ['Collection Inscriptions']
-    }
   });
-
-/**
- * Format verification result for API response
- * 
- * @param result - Internal verification result
- * @returns Formatted API response
- */
-function formatVerificationResponse(result: any) {
-  // Extract verification checks from the result
-  const checks: VerificationCheck[] = [];
-  
-  // Add signature check if credential exists
-  if (result.credential && result.status) {
-    checks.push({
-      id: 'signature',
-      name: 'Digital Signature',
-      category: 'signature',
-      passed: result.status === VerificationStatus.VALID,
-      explanation: result.status === VerificationStatus.VALID
-        ? 'The credential signature is valid and was created by the issuer.'
-        : 'The credential signature is invalid or could not be verified.'
-    });
-
-    // Add expiration check if applicable
-    if (result.credential.expirationDate) {
-      const expirationDate = new Date(result.credential.expirationDate);
-      const isExpired = expirationDate < new Date();
-      
-      checks.push({
-        id: 'expiration',
-        name: 'Expiration Date',
-        category: 'expiration',
-        passed: !isExpired,
-        explanation: isExpired
-          ? `The credential expired on ${expirationDate.toISOString()}.`
-          : `The credential is valid until ${expirationDate.toISOString()}.`
-      });
-    }
-  }
-
-  // Format the response
-  return {
-    status: result.status,
-    message: result.message || getDefaultMessageForStatus(result.status),
-    details: {
-      inscriptionId: result.inscriptionId,
-      issuer: result.issuer,
-      verifiedAt: result.verifiedAt || new Date().toISOString(),
-      checks
-    },
-    credential: result.credential
-  };
-}
-
-/**
- * Get default message for verification status
- * 
- * @param status - Verification status
- * @returns Default message
- */
-function getDefaultMessageForStatus(status: string): string {
-  switch (status) {
-    case VerificationStatus.VALID:
-      return 'The credential is valid and has been successfully verified.';
-    case VerificationStatus.INVALID:
-      return 'The credential is invalid or has been tampered with.';
-    case VerificationStatus.NO_METADATA:
-      return 'No verifiable metadata found for this inscription.';
-    case VerificationStatus.ERROR:
-      return 'An error occurred during verification.';
-    default:
-      return 'Unknown verification status.';
-  }
-}

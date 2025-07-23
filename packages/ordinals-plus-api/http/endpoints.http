@@ -7,19 +7,19 @@ GET {{baseUrl}}/api/resources?page=1&limit=10
 Authorization: Bearer {{apiKey}}
 
 ### Get Resource by ID
-GET {{baseUrl}}/api/resources/did:btco:1234567890i0
+GET {{baseUrl}}/api/resources/did:btco:1908770696977240i0
 Authorization: Bearer {{apiKey}}
 
 ### Get Resources by DID
-GET {{baseUrl}}/api/resources/did/did:btco:1234567890i0
+GET {{baseUrl}}/api/resources/did/did:btco:1908770696977240i0
 Authorization: Bearer {{apiKey}}
 
 ### Get Resource Content
-GET {{baseUrl}}/api/resources/did:btco:1234567890i0/content
+GET {{baseUrl}}/api/resources/did:btco:1908770696977240i0/content
 Authorization: Bearer {{apiKey}}
 
 ### Get Resource Metadata
-GET {{baseUrl}}/api/resources/did:btco:1234567890i0/metadata
+GET {{baseUrl}}/api/resources/did:btco:1908770696977240i0/metadata
 Authorization: Bearer {{apiKey}}
 
 ### Health Check
@@ -29,27 +29,27 @@ GET {{baseUrl}}/api/health
 # {
 #   "dids": [
 #     {
-#       "id": "did:btco:1234567890i0",
-#       "inscriptionId": "1234567890i0",
+#       "id": "did:btco:1908770696977240i0",
+#       "inscriptionId": "1908770696977240i0",
 #       "contentType": "application/json",
 #       "content": {
-#         "id": "did:btco:1234567890i0",
+#         "id": "did:btco:1908770696977240i0",
 #         "type": "Resource"
 #       }
 #     }
 #   ],
 #   "linkedResources": [
 #     {
-#       "id": "did:btco:1234567890i0",
+#       "id": "did:btco:1908770696977240i0",
 #       "type": "Resource",
-#       "inscriptionId": "1234567890i0",
-#       "didReference": "did:btco:1234567890i0",
+#       "inscriptionId": "1908770696977240i0",
+#       "didReference": "did:btco:1908770696977240i0",
 #       "contentType": "application/json",
 #       "content": {
 #         "name": "Example Resource",
 #         "description": "This is an example resource"
 #       },
-#       "sat": "1234567890"
+#       "sat": "1908770696977240"
 #     }
 #   ],
 #   "page": 1,
@@ -70,20 +70,20 @@ GET {{baseUrl}}/api/health
 GET {{baseUrl}}/api/resources?page=1&limit=5
 
 ### Get Resource by DID (Using Correct Format Placeholder)
-GET {{baseUrl}}/api/resources/did:btco:1954913028215432/0
+GET {{baseUrl}}/api/resources/did:btco:956424811897629/0
 
 ### Get Resources by DID (Correct Format Placeholder)
-GET {{baseUrl}}/api/resources/did/did:btco:1954913028215432/0
+GET {{baseUrl}}/api/resources/did/did:btco:956424811897629/0
 
 ### Get Resource Content (Using Correct Format Placeholder)
-GET {{baseUrl}}/api/resources/did:btco:1954913028215432/0/content
+GET {{baseUrl}}/api/resources/did:btco:956424811897629/0/content
 
 ### Get Resource Metadata (Using Correct Format Placeholder)
-GET {{baseUrl}}/api/resources/did:btco:1954913028215432/0/metadata
+GET {{baseUrl}}/api/resources/did:btco:956424811897629/0/metadata
 
 ### Example Payloads (Commented Out - Updated Placeholder)
 /*
-POST {{baseUrl}}/api/resources/did:btco:1954913028215432/0/resources
+POST {{baseUrl}}/api/resources/did:btco:956424811897629/0/resources
 Content-Type: application/json
 
 {
@@ -93,25 +93,25 @@ Content-Type: application/json
 */
 
 /*
-GET {{baseUrl}}/api/resources/did:btco:1954913028215432/0
+GET {{baseUrl}}/api/resources/did:btco:956424811897629/0
 Example Response (commented):
 {
   "status": "success",
   "data": {
     "didDocument": {
       "@context": "https://www.w3.org/ns/did/v1",
-      // "id": "did:btco:1954913028215432/0", // Updated placeholder
+      // "id": "did:btco:956424811897629/0", // Updated placeholder
       "verificationMethod": [ ... ],
       "service": [ ... ]
     },
     "linkedResources": [
       {
-        // "id": "did:btco:1954913028215432/0", // Updated placeholder
+        // "id": "did:btco:956424811897629/0", // Updated placeholder
         "type": "LinkedResource",
         "contentType": "application/json",
         "content": { ... },
         "inscriptionId": "...",
-        "sat": 1954913028215432
+        "sat": 956424811897629
       }
     ]
   }
@@ -119,7 +119,7 @@ Example Response (commented):
 */
 
 /*
-GET {{baseUrl}}/api/resources/did:btco:1954913028215432/0/content
+GET {{baseUrl}}/api/resources/did:btco:956424811897629/0/content
 Example Response (commented):
 {
   "name": "Alice", 
@@ -128,21 +128,73 @@ Example Response (commented):
 */
 
 /*
-GET {{baseUrl}}/api/resources/did/did:btco:1954913028215432/0
+GET {{baseUrl}}/api/resources/did/did:btco:956424811897629/0
 Example Response (commented):
 {
   "status": "success",
   "data": {
-    "did": "did:btco:1954913028215432/0", // Updated placeholder
+    "did": "did:btco:956424811897629/0", // Updated placeholder
     "linkedResources": [
       {
-        "didReference": "did:btco:1954913028215432/0", // Updated placeholder
+        "didReference": "did:btco:956424811897629/0", // Updated placeholder
         "inscriptionId": "...",
         "contentType": "application/json",
-        "sat": 1234567890123
+        "sat": 956424811897629
       }
       // ... other resources
     ]
   }
 }
-*/ 
+*/
+
+### Get resource by DID
+GET {{baseUrl}}/api/resources/did:btco:1908770696977240i0
+
+### Get resource by DID (alternative endpoint)
+GET {{baseUrl}}/api/resources/did/did:btco:1908770696977240i0
+
+### Get resource content
+GET {{baseUrl}}/api/resources/did:btco:1908770696977240i0/content
+
+### Get resource metadata
+GET {{baseUrl}}/api/resources/did:btco:1908770696977240i0/metadata
+
+### Example response structure for any of the above:
+# {
+#   "status": "success",
+#   "data": {
+#     "resource": {
+#       "id": "did:btco:1908770696977240i0",
+#       "content": {
+#         "type": "text/plain",
+#         "data": "Hello, World!"
+#       },
+#       "metadata": {
+#         "id": "did:btco:1908770696977240i0",
+#         "created": "2023-01-01T00:00:00Z"
+#       },
+#       "didReference": "did:btco:1908770696977240i0",
+#       "inscriptionId": "...",
+#       "sat": 1234567890
+#     }
+#   }
+# } 
+
+### =====================================
+### DID RESOLUTION ENDPOINTS (ADVANCED EXAMPLES)
+### =====================================
+
+### Resolve DID with index
+GET {{baseUrl}}/api/resources/did:btco:1908770696991731/0
+
+### Get DID Document 
+GET {{baseUrl}}/api/resources/did/did:btco:1908770696991731/0
+
+### Get content by DID and index
+GET {{baseUrl}}/api/resources/did:btco:1908770696991731/0/content
+
+### Get metadata by DID and index
+GET {{baseUrl}}/api/resources/did:btco:1908770696991731/0/metadata
+
+### Create a linked resource
+POST {{baseUrl}}/api/resources/did:btco:1908770696991731/0/resources 

@@ -4,6 +4,7 @@
  * This service handles API requests to external services.
  */
 import { logger } from '../utils/logger';
+import { env } from '../config/envConfig';
 
 /**
  * Response from an API request
@@ -28,7 +29,7 @@ export class ApiService {
    * 
    * @param baseUrl - Base URL for API requests
    */
-  constructor(baseUrl: string = process.env.API_BASE_URL || 'https://api.ordinalsplus.com') {
+  constructor(baseUrl: string = env.API_BASE_URL || 'https://api.ordinalsplus.com') {
     this.baseUrl = baseUrl;
   }
 

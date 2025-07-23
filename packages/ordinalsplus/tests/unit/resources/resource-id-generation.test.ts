@@ -14,7 +14,7 @@ describe('Resource ID Generation', () => {
       };
 
       const did = createDidFromInscriptionData(inscription, 'mainnet');
-      expect(did).toBe('did:btco:1234567890');
+      expect(did).toBe('did:btco:1908770696977240');
     });
 
     it('should throw error for invalid inscription without sat info', () => {
@@ -42,6 +42,6 @@ describe('Resource ID Generation', () => {
       number: 0,
     };
     const result = createDidFromInscriptionData(inscription, 'mainnet');
-    expect(result).toBe('did:btco:1234567890');
+    expect(result).toBe('did:btco:1908770696977240');
   });
 }); 

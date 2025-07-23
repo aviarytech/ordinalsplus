@@ -1,6 +1,7 @@
 import ApiService from './apiService';
 import { ApiServiceConfig } from './types';
 import { NetworkInfo } from '../context/NetworkContext'; // Import NetworkInfo type
+import { env } from '../config/envConfig';
 
 // Define the API Provider types
 export enum ApiProviderType {
@@ -48,7 +49,7 @@ class ApiServiceProvider {
     // Default configuration - adjust as needed
     this.config = {
         type: ApiProviderType.ORDISCAN, // Default to Ordiscan or determine dynamically
-        baseUrl: import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000', // Default URL
+        baseUrl: env.VITE_BACKEND_URL || 'http://localhost:3000', // Default URL
         timeout: 10000 // Increased timeout slightly
     };
     console.log('[ApiServiceProvider] Initialized with config:', this.config);

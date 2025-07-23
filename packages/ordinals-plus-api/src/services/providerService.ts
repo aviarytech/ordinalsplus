@@ -1,4 +1,5 @@
 import { OrdiscanProvider, OrdNodeProvider, type BitcoinNetwork, type ResourceProvider } from 'ordinalsplus';
+import { env } from '../config/envConfig';
 
 // Cache for provider instances per network
 const providerCache: Partial<Record<string, ResourceProvider>> = {};
@@ -22,28 +23,32 @@ export function getProvider(network: string = 'mainnet'): ResourceProvider | nul
     // Determine configuration based on network
     switch (network) {
         case 'mainnet':
-            nodeUrl = process.env.MAINNET_ORD_NODE_URL;
-            ordiscanKey = process.env.MAINNET_ORDISCAN_API_KEY || process.env.ORDISCAN_API_KEY; // Allow global fallback
+            nodeUrl = env.MAINNET_ORD_NODE_URL;
+            ordiscanKey = env.MAINNET_ORDISCAN_API_KEY || env.ORDISCAN_API_KEY; // Allow global fallback
             break;
         case 'testnet':
-            nodeUrl = process.env.TESTNET_ORD_NODE_URL;
-            ordiscanKey = process.env.TESTNET_ORDISCAN_API_KEY; // No global fallback for testnet key
+            nodeUrl = env.TESTNET_ORD_NODE_URL;
+            ordiscanKey = env.TESTNET_ORDISCAN_API_KEY; // No global fallback for testnet key
             break;
         case 'signet':
             // Default Signet URL if env var is not set
-            nodeUrl = process.env.SIGNET_ORD_NODE_URL || 'http://127.0.0.1:80'; 
-            // Ordiscan likely doesn't support Signet
+            nodeUrl = env.SIGNET_ORD_NODE_URL || 'http://127.0.0.1:80';
+            console.log(`[ProviderService] Signet nodeUrl resolved to: ${nodeUrl}`);
+            // Ordiscan doesn't support Signet, use local ord node
             break;
         default:
             console.error(`[ProviderService] Unsupported network requested: ${network}`);
             return null;
     }
 
+    console.log(`[ProviderService] Network: ${network}, nodeUrl: ${nodeUrl}, ordiscanKey: ${ordiscanKey ? 'SET' : 'NOT SET'}`);
+
     // Prioritize OrdNodeProvider if URL is configured for the network
     if (nodeUrl) {
-        console.log(`[ProviderService] Using OrdNodeProvider for ${network} with URL: ${nodeUrl}`);
+        console.log(`[ProviderService] Creating OrdNodeProvider for ${network} with URL: ${nodeUrl}`);
         // Use 'nodeUrl' as expected by the constructor
         providerInstance = new OrdNodeProvider({ nodeUrl: nodeUrl, network: network as BitcoinNetwork }); 
+        console.log(`[ProviderService] OrdNodeProvider created successfully for ${network}`);
         // TODO: Add authentication if needed (e.g., cookie file path, user/pass)
     } 
     // Fallback to OrdiscanProvider if API key is available (for mainnet/testnet)

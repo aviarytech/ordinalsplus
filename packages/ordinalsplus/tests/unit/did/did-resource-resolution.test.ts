@@ -7,7 +7,7 @@ import { ERROR_CODES } from '../src/utils/constants';
 // Mock the ResourceResolver for testing
 const mockResourceResolver = {
   resolve: (resourceId: string) => {
-    if (resourceId === 'did:btco:1234567890/0') {
+    if (resourceId === 'did:btco:1908770696977240/0') {
       return {
         id: resourceId,
         type: 'image/png',
@@ -19,7 +19,7 @@ const mockResourceResolver = {
     }
   },
   resolveInfo: (resourceId: string) => {
-    if (resourceId === 'did:btco:1234567890/0') {
+    if (resourceId === 'did:btco:1908770696977240/0') {
       return {
         id: resourceId,
         type: 'image/png',
@@ -101,7 +101,7 @@ describe('DID URL Resource Resolution', () => {
 
   describe('parseDidUrl', () => {
     test('should correctly parse a DID URL with resource path', async () => {
-      const result = await didResolver.resolve('did:btco:1234567890/resources/0');
+      const result = await didResolver.resolve('did:btco:1908770696977240/resources/0');
       
       // Verify that the result has the expected structure
       expect(result).toHaveProperty('didResolutionMetadata');
@@ -112,7 +112,7 @@ describe('DID URL Resource Resolution', () => {
       // Type check for resourceInfo
       if (result.didResolutionMetadata.resourceInfo) {
         expect(result.didResolutionMetadata.resourceInfo).toHaveProperty('id');
-        expect(result.didResolutionMetadata.resourceInfo.id).toBe('did:btco:1234567890/0');
+        expect(result.didResolutionMetadata.resourceInfo.id).toBe('did:btco:1908770696977240/0');
         expect(result.didResolutionMetadata.resourceInfo).toHaveProperty('type');
         expect(result.didResolutionMetadata.resourceInfo.type).toBe('image/png');
       } else {
@@ -124,7 +124,7 @@ describe('DID URL Resource Resolution', () => {
     });
 
     test('should correctly parse a DID URL with resource path and info suffix', async () => {
-      const result = await didResolver.resolve('did:btco:1234567890/resources/0/info');
+      const result = await didResolver.resolve('did:btco:1908770696977240/resources/0/info');
       
       // Verify that the result has the expected structure
       expect(result).toHaveProperty('didResolutionMetadata');
@@ -135,7 +135,7 @@ describe('DID URL Resource Resolution', () => {
       // Type check for resourceInfo
       if (result.didResolutionMetadata.resourceInfo) {
         expect(result.didResolutionMetadata.resourceInfo).toHaveProperty('id');
-        expect(result.didResolutionMetadata.resourceInfo.id).toBe('did:btco:1234567890/0');
+        expect(result.didResolutionMetadata.resourceInfo.id).toBe('did:btco:1908770696977240/0');
       } else {
         fail('resourceInfo should be defined');
       }
@@ -145,7 +145,7 @@ describe('DID URL Resource Resolution', () => {
     });
 
     test('should handle errors for non-existent resources', async () => {
-      const result = await didResolver.resolve('did:btco:1234567890/resources/999');
+      const result = await didResolver.resolve('did:btco:1908770696977240/resources/999');
       
       // Verify that the result has the expected error structure
       expect(result).toHaveProperty('didResolutionMetadata');
@@ -167,7 +167,7 @@ describe('DID URL Resource Resolution', () => {
                 contentType: 'application/json',
                 created: new Date().toISOString(),
                 resourceInfo: {
-                  id: 'did:btco:1234567890/0',
+                  id: 'did:btco:1908770696977240/0',
                   type: 'image/png',
                   contentType: 'application/json'
                 }
@@ -179,7 +179,7 @@ describe('DID URL Resource Resolution', () => {
         };
       });
       
-      const result = await didResolver.resolve('did:btco:1234567890/resources/0?format=application/json');
+      const result = await didResolver.resolve('did:btco:1908770696977240/resources/0?format=application/json');
       
       // Verify that the result has the expected structure with negotiated content type
       expect(result).toHaveProperty('didResolutionMetadata');

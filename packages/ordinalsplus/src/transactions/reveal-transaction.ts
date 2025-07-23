@@ -1,6 +1,7 @@
 import * as btc from '@scure/btc-signer';
 import { base64, hex } from '@scure/base';
 import * as ordinals from 'micro-ordinals';
+import * as bitcoin from 'bitcoinjs-lib';
 import { Utxo, BitcoinNetwork } from '../types';
 import { PreparedInscription } from '../inscription/scripts/ordinal-reveal';
 import { calculateFee } from './fee-calculation';
@@ -154,38 +155,98 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       }
       const commitScript = preparedInscription.commitAddress.script;
       const commitAddress = preparedInscription.commitAddress.address;
-      const inscriptionObject = preparedInscription.inscription;
       const pubKey = preparedInscription.revealPublicKey;
+      const inscriptionScript = preparedInscription.inscriptionScript;
+      const internalKey = preparedInscription.commitAddress.internalKey;
+      
+      // Add detailed key logging
+      console.log(`[DEBUG-KEYS] Commit Address: ${commitAddress}`);
+      console.log(`[DEBUG-KEYS] Commit Script: ${Buffer.from(commitScript).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Reveal Public Key: ${Buffer.from(pubKey).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Internal Key: ${Buffer.from(internalKey).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Inscription Script: ${Buffer.from(inscriptionScript.script).toString('hex')}`);
+      console.log(`[DEBUG-KEYS] Control Block: ${Buffer.from(inscriptionScript.controlBlock).toString('hex')}`);
+      
+      // Check for zero keys
+      const isRevealKeyAllZeros = pubKey.every(byte => byte === 0);
+      const isInternalKeyAllZeros = internalKey.every(byte => byte === 0);
+      const isControlBlockAllZeros = inscriptionScript.controlBlock.every(byte => byte === 0);
+      
+      if (isRevealKeyAllZeros) {
+        console.error('[createRevealTransaction] ERROR: Reveal public key is all zeros!');
+      }
+      if (isInternalKeyAllZeros) {
+        console.error('[createRevealTransaction] ERROR: Internal key is all zeros!');
+      }
+      if (isControlBlockAllZeros) {
+        console.error('[createRevealTransaction] ERROR: Control block is all zeros!');
+      }
 
-      // Align with micro-ordinals example: Create reveal payment details
-      const revealPayment = btc.p2tr(
-        undefined as any, // Use the reveal public key
-        ordinals.p2tr_ord_reveal(pubKey, [inscriptionObject]), // TaprootScriptTree
-        network,
-        false, // allowUnknownOutputs
-        ORDINAL_CUSTOM_SCRIPTS
-      );
-
-      console.log(`[DEBUG-REVEAL-FIX] Using PRE-CALCULATED commit script for witness: ${Buffer.from(commitScript).toString('hex')}`);
-      console.log(`[DEBUG-REVEAL-FIX] Expected Commit Address from prep: ${commitAddress}`);
-      console.log(`[DEBUG-REVEAL-FIX] Reveal Payment Script (for input): ${revealPayment.script ? Buffer.from(revealPayment.script).toString('hex') : 'undefined'}`);
-      // Log the entire revealPayment object to inspect its structure for tapleaf info
-      console.log(`[DEBUG-REVEAL-FIX] Full Reveal Payment Object:`, revealPayment);
-
-      // Add the selected UTXO as the first input
-      tx.addInput({
-        ...revealPayment,
-        txid: selectedUTXO.txid,
-        index: selectedUTXO.vout,
-        witnessUtxo: { 
-          script: commitScript,
-          amount: inputAmount 
-        },
-        // Removed incorrect redeemScript property.
-        // We need to inspect revealPayment object structure to find where 
-        // tapLeafScript and controlBlock are located and add them here explicitly 
-        // for the signing process.
-      });
+      // Check the tapInternalKey before using it
+      let tapInternalKey = preparedInscription.commitAddress.internalKey;
+      
+      // Check if the internal key is all zeros
+      if (tapInternalKey.every(byte => byte === 0)) {
+        console.error('[createRevealTransaction] ERROR: tapInternalKey is all zeros!');
+        
+        // First, try to extract the key from the commit script
+        // P2TR script format: OP_1 OP_PUSHBYTES_32 <32-byte-key>
+        if (commitScript.length >= 34 && commitScript[0] === 0x51 && commitScript[1] === 0x20) {
+          const extractedKey = commitScript.slice(2, 34);
+          if (!extractedKey.every(byte => byte === 0)) {
+            console.log('[createRevealTransaction] Using internal key extracted from commit script');
+            tapInternalKey = extractedKey;
+          } else {
+            console.error('[createRevealTransaction] Extracted key is also zeros, falling back to reveal public key');
+            tapInternalKey = pubKey;
+          }
+        } else {
+          console.log('[createRevealTransaction] Using reveal public key as fallback for internal key');
+          tapInternalKey = pubKey;
+        }
+        
+        // Final validation - should never happen with the steps above
+        if (tapInternalKey.every(byte => byte === 0)) {
+          throw new Error('Cannot find valid internal key for taproot script-path spend');
+        }
+      }
+      
+      // Try to decode the control block - if it fails, we'll log an error
+      let decodedControlBlock;
+      try {
+        decodedControlBlock = btc.TaprootControlBlock.decode(inscriptionScript.controlBlock);
+        console.log(`[DEBUG-REVEAL] Successfully decoded control block`);
+      } catch (error) {
+        console.error(`[DEBUG-REVEAL] Failed to decode control block: ${error instanceof Error ? error.message : String(error)}`);
+        // Create a placeholder empty control block
+        console.error(`[DEBUG-REVEAL] Will attempt to proceed with a placeholder control block`);
+      }
+      
+      // Add the selected UTXO as the first input using the stored script info
+      try {
+        tx.addInput({
+          txid: selectedUTXO.txid,
+          index: selectedUTXO.vout,
+          witnessUtxo: {
+            script: commitScript,
+            amount: inputAmount
+          },
+          tapInternalKey: tapInternalKey,
+          tapLeafScript: [
+            [
+              decodedControlBlock || btc.TaprootControlBlock.decode(inscriptionScript.controlBlock),
+              btc.utils.concatBytes(
+                inscriptionScript.script,
+                new Uint8Array([inscriptionScript.leafVersion])
+              )
+            ]
+          ]
+        });
+        console.log(`[DEBUG-REVEAL] Successfully added input with taproot details`);
+      } catch (error) {
+        console.error(`[DEBUG-REVEAL] Error adding input: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
 
       // Destination address for the inscription output
       // Use the provided destination address if available, otherwise fall back to the commit address
@@ -206,15 +267,103 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       });
 
       // Estimate fee based on transaction size
-      // Instead of using a fixed size, calculate based on inscription size
-      const baseRevealTxSize = 200; // Base transaction overhead
+      // CRITICAL FIX: The inscription content is embedded in the witness data
+      // We need to calculate the actual transaction size including the full inscription
       const inscriptionSize = preparedInscription.inscription.body?.length || 0;
-      // Inscriptions have overhead in the transaction structure, adjust the multiplier accordingly
-      // The 1.02 multiplier accounts for witness data and script overhead
-      const estimatedVsize = baseRevealTxSize + Math.ceil(inscriptionSize * 1.02);
-
-      console.log(`[calculateFee] Inscription size: ${inscriptionSize} bytes`);
-      console.log(`[calculateFee] Estimated transaction vsize: ${estimatedVsize} vbytes`);
+      
+      // DEBUG: Log inscription structure to understand why we're getting 0 size
+      console.log('[Inscription Debug] Full inscription structure analysis:');
+      console.log('- preparedInscription keys:', Object.keys(preparedInscription));
+      console.log('- preparedInscription.inscription keys:', Object.keys(preparedInscription.inscription));
+      console.log('- preparedInscription.inscription:', JSON.stringify(preparedInscription.inscription, null, 2));
+      console.log('- inscription.body type:', typeof preparedInscription.inscription.body);
+      console.log('- inscription.body length:', preparedInscription.inscription.body?.length);
+      console.log('- inscription.body constructor:', preparedInscription.inscription.body?.constructor?.name);
+      console.log('- inscription.body is Array:', Array.isArray(preparedInscription.inscription.body));
+      console.log('- inscription body preview:', preparedInscription.inscription.body ? 
+        Array.from(preparedInscription.inscription.body).slice(0, 50) : 'undefined');
+      
+      // Check if there are any tags that might contain size information
+      if (preparedInscription.inscription.tags) {
+        console.log('- inscription.tags:', preparedInscription.inscription.tags);
+      }
+      
+      // CRITICAL FIX: Check multiple possible paths for content size
+      let actualInscriptionSize = inscriptionSize;
+      if (actualInscriptionSize === 0) {
+        console.log('[Inscription Debug] Original size was 0, trying alternative paths...');
+        
+        // Try alternative paths to get content size
+        if (typeof preparedInscription.inscription.body === 'string') {
+          actualInscriptionSize = Buffer.from(preparedInscription.inscription.body).length;
+          console.log('[Inscription Debug] Body is string, calculated size:', actualInscriptionSize);
+        } else if (preparedInscription.inscription.body instanceof Buffer) {
+          actualInscriptionSize = preparedInscription.inscription.body.length;
+          console.log('[Inscription Debug] Body is Buffer, size:', actualInscriptionSize);
+        } else if (preparedInscription.inscription.body instanceof Uint8Array) {
+          actualInscriptionSize = preparedInscription.inscription.body.length;
+          console.log('[Inscription Debug] Body is Uint8Array, size:', actualInscriptionSize);
+        } else if (preparedInscription.inscription.body && typeof preparedInscription.inscription.body === 'object') {
+          // CRITICAL FIX: Check for serialized Buffer format: { type: "Buffer", data: [...] }
+          const body = preparedInscription.inscription.body as any;
+          if (body.type === 'Buffer' && Array.isArray(body.data)) {
+            actualInscriptionSize = body.data.length;
+            console.log('[Inscription Debug] Found serialized Buffer format, size:', actualInscriptionSize);
+          } else if (body.byteLength !== undefined) {
+            actualInscriptionSize = body.byteLength;
+            console.log('[Inscription Debug] Found byteLength property:', actualInscriptionSize);
+          } else if (body.length !== undefined) {
+            actualInscriptionSize = body.length;
+            console.log('[Inscription Debug] Found length property in object:', actualInscriptionSize);
+          } else {
+            console.log('[Inscription Debug] Body is object but no size property found:', Object.keys(body));
+          }
+        }
+        
+        // If still 0, check if we have the content elsewhere
+        if (actualInscriptionSize === 0) {
+          console.log('[Inscription Debug] Still no size found, checking other locations...');
+          
+          // Check if the content is in the original preparation parameters
+          if (localStorage.getItem('inscriptionData')) {
+            try {
+              const savedData = JSON.parse(localStorage.getItem('inscriptionData') || '{}');
+              if (savedData.inscription && savedData.inscription.body) {
+                console.log('[Inscription Debug] Found content in localStorage inscription.body');
+                const storedBody = savedData.inscription.body;
+                if (typeof storedBody === 'string') {
+                  actualInscriptionSize = Buffer.from(storedBody).length;
+                  console.log('[Inscription Debug] Size from localStorage (string):', actualInscriptionSize);
+                }
+              }
+            } catch (e) {
+              console.log('[Inscription Debug] Could not parse localStorage inscription data');
+            }
+          }
+        }
+        
+        console.log('[Inscription Debug] Final calculated size:', actualInscriptionSize);
+      } else {
+        console.log('[Inscription Debug] Original size was already valid:', actualInscriptionSize);
+      }
+      
+      // For reveal transactions, use simplified empirical formula
+      // Based on real transaction data where 4059 bytes = ~1130 vB
+      let estimatedVsize: number;
+      if (actualInscriptionSize > 0) {
+        // Empirical formula based on actual Bitcoin transactions:
+        // Base overhead: ~100 vB for transaction structure and scripts
+        // Content scaling: each byte of content adds ~0.27 vB due to witness discount
+        // This gives results much closer to actual on-chain transactions
+        estimatedVsize = Math.ceil(100 + (actualInscriptionSize * 0.27));
+        
+        console.log(`[Vsize Estimation] Content size: ${actualInscriptionSize} bytes`);
+        console.log(`[Vsize Estimation] Formula: 100 + (${actualInscriptionSize} * 0.27) = ${estimatedVsize} vB`);
+      } else {
+        // For non-inscription transactions, use a simpler calculation
+        estimatedVsize = 200;
+        console.log('[Vsize Estimation] No content found, using fallback size: 200 vB');
+      }
 
       const fee = BigInt(calculateFee(estimatedVsize, feeRate));
       
@@ -227,89 +376,29 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
 
       // Calculate change amount (making sure we don't create dust outputs)
       const postageValue = BigInt(MIN_POSTAGE_VALUE);
-      const changeAmount = inputAmount - fee - postageValue;
+      
+      // CRITICAL FIX: The input amount from the commit transaction already includes the reveal fee
+      // We should not subtract a separately calculated fee again, as this causes double-counting
+      // The commit transaction was funded with: revealFee + postageValue
+      // So we should use: inputAmount - postageValue for the actual fee
+      const actualFeeAllocated = inputAmount - postageValue;
+      const changeAmount = BigInt(0); // No change expected in a properly funded reveal transaction
 
       // Add the inscription output (recipient)
-      if (changeAmount > 0) {
-        // If we have enough for both the fee and the inscription
-        tx.addOutputAddress(
-          outputAddress || '', 
-          postageValue,
-          network
-        );
-        
-        // Add progress event for adding inscription output
-        transactionTracker.addTransactionProgressEvent({
-          transactionId,
-          message: `Added inscription output: ${outputAddress} (${postageValue} sats)`,
-          timestamp: new Date()
-        });
-
-        // Add change output back to the owner's address if it's not dust
-        if (changeAmount >= BigInt(MIN_POSTAGE_VALUE) && selectedUTXO.script?.address) {
-          tx.addOutputAddress(
-            selectedUTXO.script.address,
-            changeAmount,
-            network
-          );
-          
-          // Add progress event for adding change output
-          transactionTracker.addTransactionProgressEvent({
-            transactionId,
-            message: `Added change output: ${selectedUTXO.script.address} (${changeAmount} sats)`,
-            timestamp: new Date()
-          });
-        } else if (changeAmount > 0) {
-          // If change is below dust limit but above zero, add it to the fee
-          // Add progress event for dust change
-          transactionTracker.addTransactionProgressEvent({
-            transactionId,
-            message: `Change amount ${changeAmount} is below dust limit, adding to fee`,
-            timestamp: new Date()
-          });
-        }
-      } else {
-        // If we don't have enough for change, use all remaining for the inscription
-        const availableForInscription = inputAmount - fee;
-        if (availableForInscription <= 0) {
-          // Create a structured error
-          const error = errorHandler.createError(
-            ErrorCode.INSUFFICIENT_FUNDS,
-            {
-              utxoValue: Number(inputAmount),
-              requiredFee: Number(fee)
-            },
-            `UTXO value too low to cover the fee. Need at least ${fee} sats.`
-          );
-          
-          // Set error in transaction tracker
-          transactionTracker.setTransactionError(transactionId, {
-            name: error.name,
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            category: ErrorCategory.VALIDATION,
-            severity: ErrorSeverity.ERROR,
-            timestamp: new Date(),
-            recoverable: false
-          });
-          
-          throw error;
-        }
-        
-        tx.addOutputAddress(
-          outputAddress || '',
-          availableForInscription,
-          network
-        );
-        
-        // Add progress event for adding minimal inscription output
-        transactionTracker.addTransactionProgressEvent({
-          transactionId,
-          message: `Added minimal inscription output: ${outputAddress} (${availableForInscription} sats)`,
-          timestamp: new Date()
-        });
-      }
+      // FIXED: Simply add the inscription output with postage value
+      // The remaining amount (inputAmount - postageValue) will automatically become the fee
+      tx.addOutputAddress(
+        outputAddress || '', 
+        postageValue,
+        network
+      );
+      
+      // Add progress event for adding inscription output
+      transactionTracker.addTransactionProgressEvent({
+        transactionId,
+        message: `Added inscription output: ${outputAddress} (${postageValue} sats), fee allocated: ${actualFeeAllocated} sats`,
+        timestamp: new Date()
+      });
 
       // Sign if private key is provided
       if (privateKey) {
@@ -318,7 +407,7 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
           console.log('Signing reveal transaction with provided private key for script path spend...');
           
           // Simplify the sign call, relying on default sighash for Taproot
-          // and hoping the library correctly uses the tapLeafScript from revealPayment.
+          // and hoping the library correctly uses the tapLeafScript from the stored script info.
           tx.sign(privateKey); 
 
           tx.finalize(); // Finalize *after* signing
@@ -402,21 +491,75 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       const txHex = hex.encode(txBytes);
       const txBase64 = base64.encode(txBytes);
       
+      // Calculate the actual vsize from the finalized transaction
+      // Use bitcoinjs-lib to parse the raw transaction and get accurate virtual size
+      let actualVsize: number;
+      try {
+        // Parse the raw transaction bytes
+        const parsedTx = bitcoin.Transaction.fromBuffer(Buffer.from(txBytes));
+        
+        // Get the accurate virtual size directly from bitcoinjs-lib
+        actualVsize = parsedTx.virtualSize();
+        
+        console.log(`[Vsize Debug] Total size: ${txBytes.length}, Virtual size: ${actualVsize} vB`);
+        console.log(`[Vsize Debug] Estimated vs Actual: estimated=${estimatedVsize}, actual=${actualVsize}, difference=${estimatedVsize - actualVsize} vB`);
+        console.log(`[Vsize Debug] Fee rate check: fee=${Number(fee)}, vsize=${actualVsize}, rate=${(Number(fee) / actualVsize).toFixed(2)} sat/vB`);
+        
+      } catch (error) {
+        console.warn('[Vsize Calculation] Failed to parse transaction with bitcoinjs-lib, using approximation:', error);
+        // Fallback: for SegWit transactions, vsize is typically about 75% of total size
+        // This is a rough approximation when parsing fails
+        actualVsize = Math.ceil(txBytes.length * 0.75);
+      }
+      
+      // Log the comparison between estimated and actual size for debugging
+      const actualAllocatedFee = Number(actualFeeAllocated); // Use the actual allocated fee
+      const actualEffectiveRate = (actualAllocatedFee / actualVsize).toFixed(2);
+      
+      console.log(`[Fee Comparison] Estimated vsize: ${estimatedVsize} vB, Actual vsize: ${actualVsize} vB`);
+      console.log(`[Fee Comparison] Allocated fee: ${actualAllocatedFee} sats (was estimated: ${Number(fee)} sats)`);
+      console.log(`[Fee Comparison] Target fee rate: ${feeRate} sat/vB, Actual effective rate: ${actualEffectiveRate} sat/vB`);
+      
+      // Check if the actual effective rate is significantly lower than target
+      const effectiveRate = actualAllocatedFee / actualVsize;
+      if (effectiveRate < feeRate * 0.9) { // If effective rate is more than 10% lower than target
+        console.warn(`[Fee Warning] Effective fee rate (${actualEffectiveRate} sat/vB) is significantly lower than target (${feeRate} sat/vB). Transaction may not be prioritized properly.`);
+        
+        // Calculate what the fee should be based on actual vsize
+        const correctFee = Number(calculateFee(actualVsize, feeRate));
+        const feeDifference = correctFee - actualAllocatedFee;
+        
+        console.log(`[Fee Correction] Allocated fee: ${actualAllocatedFee} sats, Correct fee: ${correctFee} sats, Difference: ${feeDifference} sats`);
+        
+        // If the fee difference is significant (more than 100 sats), we should warn about potential issues
+        if (feeDifference > 100) {
+          console.error(`[Fee Error] Significant fee underpayment detected! Transaction may not be relayed or confirmed quickly.`);
+          console.error(`[Fee Error] Consider using a higher fee rate or improving vsize estimation.`);
+          
+          // Add this information to the transaction tracker
+          transactionTracker.addTransactionProgressEvent({
+            transactionId,
+            message: `WARNING: Fee underpayment detected. Effective rate: ${actualEffectiveRate} sat/vB (target: ${feeRate} sat/vB)`,
+            timestamp: new Date()
+          });
+        }
+      }
+      
       // Add progress event for transaction prepared successfully
       transactionTracker.addTransactionProgressEvent({
         transactionId,
-        message: 'Reveal transaction prepared successfully',
+        message: `Reveal transaction prepared successfully (actual size: ${actualVsize} bytes, effective rate: ${actualEffectiveRate} sat/vB)`,
         timestamp: new Date()
       });
       
       // Set transaction to ready status
       transactionTracker.setTransactionStatus(transactionId, TransactionStatus.CONFIRMING);
       
-      // Return the result
+      // Return the result with actual vsize and actual allocated fee
       return {
         tx,
-        fee: Number(fee),
-        vsize: estimatedVsize,
+        fee: actualAllocatedFee, // Use the fee that was actually allocated in the transaction
+        vsize: actualVsize, // Return actual vsize for accurate reporting
         hex: txHex,
         base64: txBase64,
         transactionId,

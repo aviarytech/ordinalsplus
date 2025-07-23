@@ -25,8 +25,8 @@ ADDRESS=$(json '.wallet.addresses.verifiable_credential')
 REQUEST_COINS_REL=$(json '.scripts.requestCoins')
 REQUEST_COINS="$(realpath "$ROOT_DIR/$REQUEST_COINS_REL")"
 
-echo "Starting bitcoind on Signet..."
-bitcoind -conf="$BITCOIN_CONF" -daemon
+echo "Not Starting bitcoind on Signet..."
+# bitcoind -conf="$BITCOIN_CONF" -daemon
 
 # Give bitcoind a moment to start
 sleep 3

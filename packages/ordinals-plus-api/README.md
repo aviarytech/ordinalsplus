@@ -8,11 +8,13 @@ To install dependencies:
 bun install
 ```
 
-To run:
+Create a `.env` file using the example:
 
 ```bash
-bun run index.ts
+cp .env.example .env
 ```
+
+Update the variables before running tests.
 
 ## API Endpoints
 

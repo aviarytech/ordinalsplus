@@ -1,9 +1,17 @@
-import { DidResolutionOptions, DidResolutionResult, ParsedDidUrl } from './did-resolver';
+import { BtcoDidResolutionOptions, BtcoDidResolutionResult } from './btco-did-resolver';
 import { ResourceResolver } from '../resources/resource-resolver';
 import { ERROR_CODES } from '../utils/constants';
 import { parseBtcoDid } from '../utils/validators';
 import { AuditSeverity, logSecurityEvent } from '../utils/audit-logger';
 import { BitcoinNetwork } from '../types';
+
+// Define ParsedDidUrl interface locally since it's not exported
+interface ParsedDidUrl {
+  did: string;
+  resourceIndex?: number;
+  resourcePath?: string[];
+  query?: string;
+}
 
 /**
  * Resolves a DID URL to a linked resource
@@ -15,9 +23,9 @@ import { BitcoinNetwork } from '../types';
  */
 export async function resolveResource(
   parsed: ParsedDidUrl, 
-  options: DidResolutionOptions = {},
+  options: BtcoDidResolutionOptions = {},
   network: BitcoinNetwork = 'mainnet'
-): Promise<DidResolutionResult> {
+): Promise<BtcoDidResolutionResult> {
   try {
     // Extract satoshi number from DID
     const satNumber = parseBtcoDid(parsed.did)?.satNumber;
@@ -41,13 +49,9 @@ export async function resolveResource(
 
     // Create a ResourceResolver with the same network and provider options
     const resourceResolver = new ResourceResolver({
-      apiKey: options.apiKey,
-      apiEndpoint: options.apiEndpoint,
-      timeout: options.timeout,
       network: network,
       // Pass through caching options
-      cacheEnabled: options.noCache ? false : true,
-      cacheTtl: options.cacheTtl
+      cacheEnabled: !options.provider ? true : false, // Use caching if no custom provider
     });
 
     try {
@@ -61,17 +65,17 @@ export async function resolveResource(
 
       if (resourcePathMode === 'info') {
         // Return resource metadata/info
-        const resourceInfo = await resourceResolver.resolveInfo(resourceId, { noCache: options.noCache });
+        const resourceInfo = await resourceResolver.resolveInfo(resourceId);
         resource = resourceInfo;
         contentType = 'application/json';
       } else if (resourcePathMode === 'meta') {
         // Return resource metadata if available
-        const resourceInfo = await resourceResolver.resolveInfo(resourceId, { noCache: options.noCache });
+        const resourceInfo = await resourceResolver.resolveInfo(resourceId);
         resource = resourceInfo;
         contentType = 'application/json';
       } else {
         // Default: Return the actual resource content
-        resource = await resourceResolver.resolve(resourceId, { noCache: options.noCache });
+        resource = await resourceResolver.resolve(resourceId);
         contentType = resource.contentType || 'application/octet-stream';
       }
 
@@ -86,34 +90,16 @@ export async function resolveResource(
 
       // Create a successful resolution result with resource metadata
       return {
-        didResolutionMetadata: {
+        didDocument: null, // Resource resolution doesn't return a DID document
+        resolutionMetadata: {
           contentType,
           created: new Date().toISOString(),
           // Add resource metadata in the resolution metadata
-          resourceInfo: {
-            id: resourceId,
-            type: resource.type || 'Unknown',
-            contentType: contentType
-          }
+          message: `Resource ${resourceId} resolved successfully`
         },
-        didDocument: null, // Resource resolution doesn't return a DID document
         didDocumentMetadata: {}
       };
     } catch (error) {
-      // Log resource resolution error if auditing is enabled
-      if (options.enableAudit) {
-        await logSecurityEvent(
-          'resource_resolution_error',
-          AuditSeverity.ERROR,
-          parsed.did,
-          options.actor,
-          { 
-            resourceId,
-            error: error instanceof Error ? error.message : String(error) 
-          }
-        );
-      }
-
       console.error(`[DidResolver] Error resolving resource ${resourceId}:`, error);
       return createErrorResult(
         ERROR_CODES.RESOURCE_NOT_FOUND,
@@ -136,13 +122,14 @@ export async function resolveResource(
  * @param message - The error message
  * @returns A DID resolution result with the error
  */
-function createErrorResult(code: string, message: string): DidResolutionResult {
+function createErrorResult(code: string, message: string): BtcoDidResolutionResult {
   return {
-    didResolutionMetadata: {
+    didDocument: null,
+    resolutionMetadata: {
       error: code,
+      message: message,
       contentType: 'application/did+json'
     },
-    didDocument: null,
     didDocumentMetadata: {}
   };
 }

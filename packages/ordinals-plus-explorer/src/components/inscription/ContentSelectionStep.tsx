@@ -9,6 +9,7 @@ const supportedContentTypes = [
   { mime: 'application/json', label: 'JSON', isText: true },
   { mime: 'image/png', label: 'PNG Image', isText: false },
   { mime: 'image/jpeg', label: 'JPEG Image', isText: false },
+  { mime: 'image/gif', label: 'GIF Image', isText: false },
   { mime: 'image/svg+xml', label: 'SVG Image', isText: false },
 ];
 
@@ -106,21 +107,57 @@ const ContentSelectionStep: React.FC = () => {
     const reader = new FileReader();
     
     reader.onload = (e) => {
-      const result = e.target?.result?.toString() || '';
-      setContent(result);
-      setFilePreview(result);
-      setShowPreview(true);
-      validateContent(result);
+      // IMPORTANT: Don't call toString() on a result that's already a string
+      // FileReader.readAsDataURL already returns a string
+      const result = e.target?.result;
+      
+      console.log('[DEBUG processFile] File loaded successfully');
+      console.log(`[DEBUG processFile] Result type: ${typeof result}`);
+      console.log(`[DEBUG processFile] File type: ${selectedFile.type}`);
+      
+      if (result) {
+        // For both text and binary files, the result will be a string
+        // - For text files via readAsText: a normal text string
+        // - For binary files via readAsDataURL: a data URL string
+        const contentStr = typeof result === 'string' ? result : '';
+        
+        console.log(`[DEBUG processFile] Content length: ${contentStr.length}`);
+        if (contentStr.length > 0) {
+          console.log(`[DEBUG processFile] Content starts with: ${contentStr.substring(0, 30)}...`);
+        }
+        
+        // Store the result directly
+        setContent(contentStr);
+        setFilePreview(contentStr);
+        setShowPreview(true);
+        
+        // Update content in parent state immediately to prevent validation issues
+        setContentData({
+          type: selectedFile.type,
+          content: contentStr,
+          preview: contentStr
+        });
+        
+        validateContent(contentStr);
+      } else {
+        console.error('[DEBUG processFile] File read resulted in null or undefined');
+        setError('file', 'Error reading file: empty content');
+      }
     };
     
-    reader.onerror = () => {
+    reader.onerror = (error) => {
+      console.error('[DEBUG processFile] Error reading file:', error, reader.error);
       setError('file', `Error reading file: ${reader.error?.message || 'Unknown error'}`);
     };
     
+    console.log(`[DEBUG processFile] Starting to read file: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`);
+    
     // Read as text or data URL based on file type
     if (selectedFile.type.startsWith('text/') || selectedFile.type === 'application/json') {
+      console.log('[DEBUG processFile] Reading as text');
       reader.readAsText(selectedFile);
     } else {
+      console.log('[DEBUG processFile] Reading as data URL');
       reader.readAsDataURL(selectedFile);
     }
   };

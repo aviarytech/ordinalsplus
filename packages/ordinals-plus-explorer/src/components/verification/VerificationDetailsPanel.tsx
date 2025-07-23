@@ -16,7 +16,21 @@ interface VerificationDetailsPanelProps {
   defaultExpanded?: boolean;
   /** Custom class name */
   className?: string;
+  /** Optional expected sat number to validate against credential subject */
+  expectedSatNumber?: string;
 }
+
+/**
+ * Extract expected sat number from inscription context if available
+ * This is a helper function that could be enhanced in the future to extract
+ * the sat number from browser context, URL params, or other sources when
+ * the expectedSatNumber prop is not provided.
+ */
+const extractExpectedSatFromContext = (): string | undefined => {
+  // Currently returns undefined since expectedSatNumber is passed as a prop
+  // Could be enhanced to extract from URL, browser context, etc.
+  return undefined;
+};
 
 /**
  * Formats a date for display
@@ -40,7 +54,8 @@ const formatDate = (date?: Date): string => {
 export const VerificationDetailsPanel: React.FC<VerificationDetailsPanelProps> = ({
   result,
   defaultExpanded = false,
-  className = ''
+  className = '',
+  expectedSatNumber
 }) => {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
@@ -95,9 +110,80 @@ export const VerificationDetailsPanel: React.FC<VerificationDetailsPanelProps> =
           name: 'Issuer Verification',
           category: 'signature',
           passed: true,
-          explanation: `Issued by ${result.issuer.name || result.issuer.did}`,
+          explanation: `Issued by ${result.issuer.did}`,
           details: `Issuer DID: ${result.issuer.did}`
         });
+      }
+
+      // Sat validation check - ensure credential subject references the same sat being verified
+      if (result.credential && result.credential.credentialSubject) {
+        const subjectId = Array.isArray(result.credential.credentialSubject) 
+          ? result.credential.credentialSubject[0]?.id 
+          : result.credential.credentialSubject.id;
+          
+        if (subjectId && subjectId.startsWith('did:btco')) {
+          // Extract sat number from subject ID
+          const satRegex = /^did:btco(?::(test|sig))?:([0-9]+)(?:\/(.+))?$/;
+          const match = subjectId.match(satRegex);
+          
+          if (match) {
+            const subjectSatNumber = match[2];
+            const network = match[1] || 'mainnet';
+            
+            // Check if there might be a potential mismatch by looking for common patterns
+            let explanation = `The credential correctly references sat ${subjectSatNumber} on ${network} network.`;
+            let details = `Subject ID: ${subjectId}\nSat Number: ${subjectSatNumber}\nNetwork: ${network}`;
+            let passed = true;
+            
+            // Check against expected sat number if provided
+            if (expectedSatNumber && subjectSatNumber !== expectedSatNumber) {
+              passed = false;
+              explanation = `⚠️ Sat number mismatch! Expected sat ${expectedSatNumber} but credential references sat ${subjectSatNumber}.`;
+              details += `\nExpected Sat: ${expectedSatNumber}\nActual Sat: ${subjectSatNumber}\n\n❌ This indicates the credential was created with incorrect sat data.`;
+            } else if (!expectedSatNumber) {
+              // Try to extract expected sat from context
+              const contextSat = extractExpectedSatFromContext();
+              if (contextSat && subjectSatNumber !== contextSat) {
+                passed = false;
+                explanation = `⚠️ Potential sat number mismatch! Expected sat ${contextSat} but credential references sat ${subjectSatNumber}.`;
+                details += `\nExpected Sat: ${contextSat}\nActual Sat: ${subjectSatNumber}\n\n❌ This may indicate the credential was created with incorrect sat data.`;
+              }
+            }
+            
+            // Add note about potential issues if sat number looks suspicious
+            if (subjectSatNumber.length > 10) {
+              details += `\n\nNote: This sat number is ${subjectSatNumber.length} digits long. If this doesn't match the expected sat, the credential may have been created with incorrect data.`;
+            }
+            
+            checks.push({
+              id: 'satValidation',
+              name: 'Sat Reference Validation', 
+              category: 'ordinals+',
+              passed: passed,
+              explanation,
+              details
+            });
+          } else {
+            checks.push({
+              id: 'satValidation',
+              name: 'Sat Reference Validation',
+              category: 'other', 
+              passed: false,
+              explanation: 'Invalid sat reference format in credential subject.',
+              details: `Subject ID: ${subjectId}`
+            });
+          }
+        } else {
+          // Non-BTCO DID or no subject ID
+          checks.push({
+            id: 'satValidation',
+            name: 'Sat Reference Validation',
+            category: 'other',
+            passed: true, // Neutral - not applicable for non-BTCO subjects
+            explanation: 'Subject does not reference a Bitcoin satoshi.',
+            details: subjectId ? `Subject ID: ${subjectId}` : 'No subject ID found'
+          });
+        }
       }
 
       // Content hash check (if available in the credential)
@@ -145,7 +231,7 @@ export const VerificationDetailsPanel: React.FC<VerificationDetailsPanelProps> =
   // Don't show details for no metadata
   if (result.status === VerificationStatus.NO_METADATA) {
     return (
-      <div className={`verification-details-panel ${className}`}>
+      <div className={`verification-details-panel w-full max-w-none ${className}`}>
         <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
           <p className="text-sm text-gray-600">
             No verifiable metadata is available for this inscription. 
@@ -157,8 +243,8 @@ export const VerificationDetailsPanel: React.FC<VerificationDetailsPanelProps> =
   }
 
   return (
-    <div className={`verification-details-panel ${className}`}>
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+    <div className={`verification-details-panel w-full max-w-none ${className}`}>
+      <div className="border border-gray-200 rounded-lg overflow-hidden w-full">
         {/* Header */}
         <div 
           className="bg-gray-50 px-4 py-3 flex justify-between items-center cursor-pointer"

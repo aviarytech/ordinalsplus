@@ -1,12 +1,14 @@
 import { OrdiscanProvider } from './resources/providers/ordiscan-provider';
 import { OrdNodeProvider } from './resources/providers/ord-node-provider';
+import { StaticDataProvider } from './resources/providers/static-data-provider';
 
 // --- Type Exports ---
 // Export all types directly from the types index
 export * from './types';
 
 // --- DID Exports ---
-export { BtcoDid, createDidFromInscriptionData, isBtcoDid } from './did/index';
+export { BtcoDidResolver, createDidFromInscriptionData, isBtcoDid } from './did/index';
+export type { BtcoDidResolutionResult, BtcoDidResolutionOptions } from './did/btco-did-resolver';
 
 // --- Key Management Exports ---
 export {
@@ -34,7 +36,8 @@ export {
     isValidResourceId, 
     parseBtcoDid, 
     extractSatNumber, 
-    extractIndexFromInscription, 
+    extractIndexFromInscription,
+    encoding,
     BTCO_METHOD, 
     ERROR_CODES, 
     MAX_SAT_NUMBER 
@@ -42,6 +45,14 @@ export {
 
 export * from './utils/address-utils';
 export { NETWORKS, getScureNetwork } from './utils/networks';
+
+// --- CBOR Utility Exports ---
+export {
+    encodeCbor,
+    decodeCbor,
+    isCbor,
+    extractCborMetadata
+} from './utils/cbor-utils';
 
 // --- Resource Utility Exports ---
 export {
@@ -64,7 +75,7 @@ export {
 
 export { OrdiscanProvider } from './resources/providers/ordiscan-provider';
 
-export { OrdiscanProvider as default, OrdNodeProvider };
+export { OrdiscanProvider as default, OrdNodeProvider, StaticDataProvider };
 
 export * from './utils/constants';
 
@@ -114,3 +125,7 @@ export {
   OrdinalsIndexer,
   MemoryIndexerDatabase
 } from './indexer';
+
+export {
+    VCService
+} from './vc/service';

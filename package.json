@@ -1,18 +1,23 @@
 {
   "scripts": {
     "btc:signet": "bitcoind -conf=./bitcoin.conf",
-    "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --data-dir=./data/signet index run",
-    "ord:server": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --data-dir=./data/signet server",
+    "ord:index": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --index-sats --data-dir=./data/signet index run",
+    "ord:server": "ord -s --bitcoin-rpc-url=http://127.0.0.1:38332 --cookie-file=./data/signet/.cookie --index-sats --data-dir=./data/signet server",
     "test": "npm run test:all",
-    "test:all": "echo '\n📦 Testing all packages\n' && npm run test:summary:ordinalsplus && npm run test:summary:api && npm run test:summary:explorer && echo '\n✅ All tests completed successfully!\n'",
+    "test:all": "echo '\n📦 Testing all packages\n' && npm run test:summary:ordinalsplus && npm run test:summary:api && npm run test:summary:explorer && npm run test:summary:indexer && echo '\n✅ All tests completed successfully!\n'",
     "test:summary:ordinalsplus": "echo '\n📋 Testing ordinalsplus package...' && cd packages/ordinalsplus && (bun test > /tmp/test-output.txt 2>&1 || (cat /tmp/test-output.txt && exit 1)) && grep -E 'pass|fail|skip|test|Test|PASS|FAIL|SKIP' /tmp/test-output.txt | grep -v 'node_modules' | tail -n 10",
     "test:summary:api": "echo '\n📋 Testing ordinals-plus-api package...' && cd packages/ordinals-plus-api && (bun test > /tmp/test-output.txt 2>&1 || (cat /tmp/test-output.txt && exit 1)) && grep -E 'pass|fail|skip|test|Test|PASS|FAIL|SKIP' /tmp/test-output.txt | grep -v 'node_modules' | tail -n 10",
     "test:summary:explorer": "echo '\n📋 Testing ordinals-plus-explorer package...' && cd packages/ordinals-plus-explorer && (vitest run > /tmp/test-output.txt 2>&1 || (cat /tmp/test-output.txt && exit 1)) && grep -E 'pass|fail|skip|test|Test|PASS|FAIL|SKIP' /tmp/test-output.txt | grep -v 'node_modules' | tail -n 10",
+    "test:summary:indexer": "echo '\n📋 Testing ordinals-plus-indexer package...' && cd packages/ordinals-plus-indexer && (bun test > /tmp/test-output.txt 2>&1 || (cat /tmp/test-output.txt && exit 1)) && grep -E 'pass|fail|skip|test|Test|PASS|FAIL|SKIP' /tmp/test-output.txt | grep -v 'node_modules' | tail -n 10",
     "test:ordinalsplus": "echo '\n📋 Running full tests for ordinalsplus package...' && cd packages/ordinalsplus && bun test",
     "test:api": "echo '\n📋 Running full tests for ordinals-plus-api package...' && cd packages/ordinals-plus-api && bun test",
     "test:explorer": "echo '\n📋 Running full tests for ordinals-plus-explorer package...' && cd packages/ordinals-plus-explorer && vitest run",
     "test:watch": "echo \"Running tests in watch mode is only supported in individual packages\"",
-    "test:windsurf": "node scripts/run-tests-in-windsurf.js"
+    "test:windsurf": "node scripts/run-tests-in-windsurf.js",
+    "test:coverage": "npm run coverage:ordinalsplus && npm run coverage:api && npm run coverage:explorer",
+    "coverage:ordinalsplus": "cd packages/ordinalsplus && bun test --coverage",
+    "coverage:api": "cd packages/ordinals-plus-api && bun test --coverage",
+    "coverage:explorer": "cd packages/ordinals-plus-explorer && vitest run --coverage"
   },
   "devDependencies": {
     "@ljharb/tsconfig": "^0.3.2",

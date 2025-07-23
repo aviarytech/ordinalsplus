@@ -86,12 +86,12 @@ ordinalsplus/
 import OrdinalsPlus, { BtcoDid, ResourceResolver, ProviderType } from 'ordinalsplus';
 
 // Working with DIDs
-const did = new BtcoDid('did:btco:1234567890');
+const did = new BtcoDid('did:btco:1908770696977240');
 console.log(`DID: ${did.getDid()}`);
 console.log(`Sat Number: ${did.getSatNumber()}`);
 
 // Validate DIDs
-const isValid = OrdinalsPlus.utils.isValidBtcoDid('did:btco:1234567890');
+const isValid = OrdinalsPlus.utils.isValidBtcoDid('did:btco:1908770696977240');
 
 // Working with resources using Ordiscan provider
 const resolver = new ResourceResolver({
@@ -103,7 +103,7 @@ const resolver = new ResourceResolver({
 });
 
 // Get resource content
-const resource = await resolver.resolve('did:btco:1234567890/0');
+const resource = await resolver.resolve('did:btco:1908770696991731/0');
 console.log(`Content Type: ${resource.contentType}`);
 console.log(`Content: ${JSON.stringify(resource.content)}`);
 

@@ -107,9 +107,11 @@ class ApiService {
   // --- Network Specific Methods ---
   // All methods below now accept networkType as the first argument
 
-  private buildUrl(path: string, networkType: string, params?: Record<string, string>): string {
+  private buildUrl(path: string, networkType?: string, params?: Record<string, string>): string {
     const url = new URL(`${this.baseUrl}${path}`);
-    url.searchParams.append('network', networkType);
+    if (networkType) {
+      url.searchParams.append('network', networkType);
+    }
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -336,12 +338,28 @@ class ApiService {
    * Get Resources Linked to a DID for a specific network
    */
   async getLinkedResources(networkType: string, did: string): Promise<LinkedResource[]> {
-    // Assuming the backend returns the array directly under 'data' key or similar
-    const url = this.buildUrl(`/api/dids/${encodeURIComponent(did)}/resources`, networkType); // Assuming path
+    const url = this.buildUrl(`/api/dids/${did}/resources`, networkType);
     console.log(`[ApiService] Getting linked resources: ${url}`);
     const response = await fetch(url);
-    // Adjust if the backend returns a different structure (e.g., { data: LinkedResource[] })
-    return await handleApiResponse<LinkedResource[]>(response);
+    
+    // The DID router returns: { status: 'success', data: { resources: [...], count: N } }
+    // handleApiResponse returns data.data (the inner object) if it exists
+    const result = await handleApiResponse<{
+      resources?: LinkedResource[];
+      count?: number;
+    }>(response);
+    
+    console.log(`[ApiService] DID resources response:`, result);
+    
+    // Since handleApiResponse returns the inner data object, check for resources directly
+    if (result.resources) {
+      console.log(`[ApiService] Found ${result.resources.length} resources:`, result.resources);
+      return result.resources;
+    }
+    
+    // Fallback for unexpected response format
+    console.warn('[ApiService] No resources found in response:', result);
+    return [];
   }
   
   /**
@@ -359,16 +377,71 @@ class ApiService {
   }
   
   /**
-   * Resolve a DID to get its DID Document
+   * Resolve a DID to get its DID Document and all inscriptions
    */
-  async resolveDid(didId: string): Promise<{ didDocument: any }> {
-    // Get the network from the context or use default
-    const networkType = this.getNetworkFromContext() || 'mainnet';
-    
-    const url = this.buildUrl(`/api/dids/${encodeURIComponent(didId)}/resolve`, networkType);
+  async resolveDid(didId: string): Promise<{
+    didDocument: any;
+    inscriptions?: Array<{
+      inscriptionId: string;
+      content: string;
+      metadata: any;
+      contentUrl?: string;
+      isValidDid?: boolean;
+      didDocument?: any;
+      error?: string;
+    }>;
+    resolutionMetadata?: {
+      contentType?: string;
+      error?: string;
+      message?: string;
+      inscriptionId?: string;
+      satNumber?: string;
+      created?: string;
+      deactivated?: boolean;
+      network?: string;
+      totalInscriptions?: number;
+    };
+    didDocumentMetadata?: {
+      created?: string;
+      updated?: string;
+      deactivated?: boolean;
+      inscriptionId?: string;
+      network?: string;
+    };
+  }> {
+    const url = this.buildUrl(`/api/dids/${encodeURIComponent(didId)}/resolve`);
     console.log(`[ApiService] Resolving DID: ${url}`);
     const response = await fetch(url);
-    return await handleApiResponse<{ didDocument: any }>(response);
+    return await handleApiResponse<{
+      didDocument: any;
+      inscriptions?: Array<{
+        inscriptionId: string;
+        content: string;
+        metadata: any;
+        contentUrl?: string;
+        isValidDid?: boolean;
+        didDocument?: any;
+        error?: string;
+      }>;
+      resolutionMetadata?: {
+        contentType?: string;
+        error?: string;
+        message?: string;
+        inscriptionId?: string;
+        satNumber?: string;
+        created?: string;
+        deactivated?: boolean;
+        network?: string;
+        totalInscriptions?: number;
+      };
+      didDocumentMetadata?: {
+        created?: string;
+        updated?: string;
+        deactivated?: boolean;
+        inscriptionId?: string;
+        network?: string;
+      };
+    }>(response);
   }
   
   /**
@@ -573,6 +646,63 @@ class ApiService {
         throw new Error('Invalid broadcast response data received from API');
     }
     return { txid: data.txid };
+  }
+
+  /**
+   * Get satoshi number for a given UTXO
+   */
+  async getSatNumber(networkType: string, utxo: string): Promise<number> {
+    const url = this.buildUrl(`/api/utxo/${encodeURIComponent(utxo)}/sat-number`, networkType);
+    console.log(`[ApiService] Getting sat number: ${url}`);
+    
+    const response = await fetch(url);
+    const result = await handleApiResponse<{ satNumber: number }>(response);
+    return result.satNumber;
+  }
+
+  /**
+   * Verify a credential using backend verification
+   */
+  async verifyCredential(credential: any): Promise<{
+    status: string;
+    message?: string;
+    issuer?: any;
+    verifiedAt?: Date;
+  }> {
+    const url = `${this.baseUrl}/api/verify/credential`;
+    console.log(`[ApiService] Verifying credential: ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential })
+    });
+    
+    return await handleApiResponse<{
+      status: string;
+      message?: string;
+      issuer?: any;
+      verifiedAt?: Date;
+    }>(response);
+  }
+
+  /**
+   * Get issuer information for a DID
+   */
+  async getIssuerInfo(did: string): Promise<{
+    status: string;
+    message?: string;
+    issuer: any;
+  }> {
+    const url = `${this.baseUrl}/api/verify/issuer/${encodeURIComponent(did)}`;
+    console.log(`[ApiService] Getting issuer info: ${url}`);
+    
+    const response = await fetch(url);
+    return await handleApiResponse<{
+      status: string;
+      message?: string;
+      issuer: any;
+    }>(response);
   }
 }
 

@@ -25,6 +25,7 @@ interface FeeEstimatorProps {
     minimumRequiredAmount: number;
     commitTxSize: number;
     revealTxSize: number;
+    feeRate: number;
   } | null) => void;
 }
 
@@ -91,7 +92,8 @@ const FeeEstimator: React.FC<FeeEstimatorProps> = ({
         totalFee: calculatedFees.totalFee,
         minimumRequiredAmount: calculatedFees.minimumRequiredAmount,
         commitTxSize: calculatedFees.commitTxSize,
-        revealTxSize: calculatedFees.revealTxSize
+        revealTxSize: calculatedFees.revealTxSize,
+        feeRate: currentFeeRate
       });
     }
   }, [inscriptionSizeBytes, utxoCount, addressType, includeChange, currentFeeRate, onFeeCalculated]);

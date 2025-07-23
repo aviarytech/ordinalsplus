@@ -35,6 +35,8 @@ export interface CommitTransactionParams {
   network: BitcoinNetwork;
   /** Optional minimum amount for the commit output */
   minimumCommitAmount?: number;
+  /** CRITICAL: The specific UTXO selected by the user for inscription (must be first input) */
+  selectedInscriptionUtxo?: Utxo;
 }
 
 /**
@@ -96,7 +98,8 @@ export async function prepareCommitTransaction(
     changeAddress, 
     feeRate,
     network,
-    minimumCommitAmount = MIN_DUST_LIMIT
+    minimumCommitAmount = MIN_DUST_LIMIT,
+    selectedInscriptionUtxo
   } = params;
   
   // Validate inputs
@@ -124,23 +127,76 @@ export async function prepareCommitTransaction(
   // possibly accounting for the reveal transaction's fee
   const commitOutputValue = Math.max(minimumCommitAmount, MIN_DUST_LIMIT);
   
+  // CRITICAL FIX: Handle user-selected UTXO for inscription
+  let selectedUtxos: Utxo[] = [];
+  let totalInputValue = 0;
+  
+  if (selectedInscriptionUtxo) {
+    // ALWAYS use the user-selected UTXO as the first input
+    selectedUtxos.push(selectedInscriptionUtxo);
+    totalInputValue = selectedInscriptionUtxo.value;
+    
+    console.log(`[COMMIT] Using user-selected UTXO as first input: ${selectedInscriptionUtxo.txid}:${selectedInscriptionUtxo.vout} (${selectedInscriptionUtxo.value} sats)`);
+  }
+  
   // Estimate commit transaction size for initial fee calculation
-  // Start with a reasonable guess of 1 input, 2 outputs (commit + change)
+  // Start with 1 input (either selected or will be selected), 2 outputs (commit + change)
   const estimatedCommitVBytes = estimateCommitTxSize(1, 2);
   
   // Calculate estimated fee
   const estimatedCommitFee = Number(calculateFee(estimatedCommitVBytes, feeRate));
   
-  // Select UTXOs to cover the amount needed (commit output + estimated fee)
-  const options: SimpleUtxoSelectionOptions = {
-    targetAmount: commitOutputValue + estimatedCommitFee
-  };
+  // Calculate total amount needed
+  const totalNeeded = commitOutputValue + estimatedCommitFee;
   
-  const selectionResult = selectUtxos(utxos, options);
-  const { selectedUtxos, totalInputValue } = selectionResult;
+  // Check if we need additional UTXOs for funding
+  if (totalInputValue < totalNeeded) {
+    const additionalAmountNeeded = totalNeeded - totalInputValue;
+    
+    // Filter out the already selected UTXO from available options
+    const availableForFunding = selectedInscriptionUtxo 
+      ? utxos.filter(utxo => !(utxo.txid === selectedInscriptionUtxo.txid && utxo.vout === selectedInscriptionUtxo.vout))
+      : utxos;
+    
+    if (availableForFunding.length === 0 && totalInputValue < totalNeeded) {
+      throw new Error(`Insufficient funds. Selected UTXO has ${totalInputValue} sats but need ${totalNeeded} sats total. No additional UTXOs available.`);
+    }
+    
+    // Select additional UTXOs to cover the remaining amount
+    const options: SimpleUtxoSelectionOptions = {
+      targetAmount: additionalAmountNeeded
+    };
+    
+    try {
+      const fundingResult = selectUtxos(availableForFunding, options);
+      
+      // Add the funding UTXOs AFTER the selected inscription UTXO
+      selectedUtxos.push(...fundingResult.selectedUtxos);
+      totalInputValue += fundingResult.totalInputValue;
+      
+      console.log(`[COMMIT] Added ${fundingResult.selectedUtxos.length} funding UTXOs for additional ${fundingResult.totalInputValue} sats`);
+    } catch (error) {
+      throw new Error(`Insufficient total funds. Selected UTXO: ${totalInputValue} sats, Additional needed: ${additionalAmountNeeded} sats. ${error instanceof Error ? error.message : 'Unknown funding error'}`);
+    }
+  } else {
+    console.log(`[COMMIT] Selected UTXO has sufficient funds (${totalInputValue} >= ${totalNeeded})`);
+  }
+  
+  // If no user-selected UTXO, fall back to automatic selection
+  if (!selectedInscriptionUtxo) {
+    console.log(`[COMMIT] No user-selected UTXO provided, using automatic selection`);
+    
+    const options: SimpleUtxoSelectionOptions = {
+      targetAmount: totalNeeded
+    };
+    
+    const selectionResult = selectUtxos(utxos, options);
+    selectedUtxos = selectionResult.selectedUtxos;
+    totalInputValue = selectionResult.totalInputValue;
+  }
   
   if (!selectedUtxos || selectedUtxos.length === 0) {
-    throw new Error('Insufficient funds to cover commit value and estimated fee.');
+    throw new Error('No UTXOs selected for the transaction.');
   }
   
   // Create transaction tracker entry at the beginning
@@ -203,7 +259,7 @@ export async function prepareCommitTransaction(
   // Add progress event for fee calculation
   transactionTracker.addTransactionProgressEvent({
     transactionId,
-    message: `Calculated fee: ${recalculatedCommitFee} sats (${feeRate} sat/vB)`,
+    message: `Calculated fee: ${recalculatedCommitFee} sats (${feeRate} sat/vB for ${actualCommitVBytes} vB)`,
     timestamp: new Date()
   });
   
