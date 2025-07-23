@@ -4,28 +4,22 @@
  * This service handles the inscription of resources linked to DIDs,
  * ensuring they are inscribed on the same satoshi as their parent DID.
  */
-import { v4 as uuidv4 } from 'uuid';
 import { 
   ResourceType, 
   DEFAULT_VALIDATION_RULES 
 } from '../../../ordinalsplus/src/types/resource';
-import type { 
-  ResourceContentType, 
-  ResourceMetadata,
-  ResourceType
-} from '../types/resource';
 import type { 
   CreateResourceParams,
   ResourceCreationOutput,
   WalletConfig,
   FeeConfig
 } from '../../../ordinalsplus/src/types/resource';
-import { InscriptionOrchestrator } from '../../../ordinalsplus/src/inscription/InscriptionOrchestrator';
-import { DEFAULT_VALIDATION_RULES, ResourceValidationRules } from '../validation/resourceValidation';
 import { DIDService, DID_REGEX } from './didService';
 import { VCService } from './vcService';
 import { logger } from '../utils/logger';
 import { env } from '../config/envConfig';
+import type ApiService from './apiService';
+import type { ResourceMetadata } from 'ordinalsplus';
 
 // Environment variable for Ord node URL (default to localhost:80 if not set)
 const ORD_NODE_URL = env.ORD_NODE_URL || 'http://127.0.0.1:80';
