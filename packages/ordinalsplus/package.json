@@ -29,7 +29,9 @@
     }
   },
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist",
+    "build": "bun build ./src/index.ts --outdir ./dist && npx tsc --emitDeclarationOnly",
+    "build:types": "npx tsc --emitDeclarationOnly",
+    "build:js": "bun build ./src/index.ts --outdir ./dist",
     "dev": "tsc --watch",
     "clean": "rm -rf dist",
     "lint": "eslint src",
@@ -90,11 +92,11 @@
     "@types/jsonld": "^1.5.15",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "typescript-eslint": "^8.38.0",
     "bun-types": "^1.2.11",
     "eslint": "^8.57.0",
     "globals": "^15.0.0",
-    "typescript": "^5.2.2"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0"
   },
   "engines": {
     "node": ">=18.0.0"
