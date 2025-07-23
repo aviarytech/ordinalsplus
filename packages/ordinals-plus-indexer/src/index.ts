@@ -232,7 +232,7 @@ class ResourceStorage {
     const luaScript = `
       local cursor = redis.call('GET', 'indexer:cursor')
       local start = tonumber(cursor or ARGV[1]) + 1
-      local end_num = start + tonumber(ARGV[2]) - 1
+      local endInscription = start + tonumber(ARGV[2]) - 1
       local workerId = ARGV[3]
       
       -- Check if this batch is already claimed by checking for existing claims
@@ -242,7 +242,7 @@ class ResourceStorage {
         if claimData then
           local claim = cjson.decode(claimData)
           -- Check for overlap with existing claims
-          if (start <= claim.end and end_num >= claim.start) then
+          if (start <= claim.endInscription and endInscription >= claim.start) then
             return nil -- Batch already claimed
           end
         end
@@ -251,7 +251,7 @@ class ResourceStorage {
       -- Create the claim
       local claim = {
         start = start,
-        ["end"] = end_num,
+        endInscription = endInscription,
         workerId = workerId,
         claimedAt = redis.call('TIME')[1]
       }
@@ -273,7 +273,14 @@ class ResourceStorage {
         return null; // No batch available
       }
 
-      const claim: BatchClaim = JSON.parse(result as string);
+      const claimData = JSON.parse(result as string);
+      // Convert the Lua field name back to the expected interface
+      const claim: BatchClaim = {
+        start: claimData.start,
+        end: claimData.endInscription,
+        workerId: claimData.workerId,
+        claimedAt: claimData.claimedAt
+      };
       return claim;
     } catch (error) {
       console.error('Error claiming batch:', error);
