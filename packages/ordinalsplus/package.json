@@ -1,6 +1,6 @@
 {
   "name": "ordinalsplus",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A JavaScript/TypeScript library for working with BTCO DIDs and DID Linked Resources on the Bitcoin blockchain",
   "type": "module",
   "main": "./dist/index.js",
@@ -39,7 +39,6 @@
     "test:psbt": "NODE_OPTIONS='--no-warnings' bun test test/psbt-creation.test.ts",
     "prepare": "npm run build",
     "prepublishOnly": "npm run lint",
-
     "example": "bun examples/basic-usage.ts",
     "example:resolve": "bun run examples/resource-resolution.ts"
   },
