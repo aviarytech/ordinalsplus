@@ -37,7 +37,7 @@
     "@types/react-dom": "^18.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.14",
-    "bun-types": "^1.2.13",
+    "bun-types": "1.2.5",
     "cypress": "^14.3.0",
     "happy-dom": "^17.4.6",
     "postcss": "^8.4.24",
