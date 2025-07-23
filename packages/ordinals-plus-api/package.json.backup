@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.ts",
+    "dev:local": "./dev-setup.sh && bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
@@ -40,4 +41,4 @@
     "tiny-secp256k1": "^2.2.3",
     "uuid": "^11.1.0"
   }
-} 
+}
