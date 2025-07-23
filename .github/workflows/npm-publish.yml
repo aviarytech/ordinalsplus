@@ -16,10 +16,6 @@ jobs:
       packages: 'write'
       actions: 'read'
       
-    defaults:
-      run:
-        working-directory: packages/ordinalsplus
-        
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,10 +29,13 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install
+        run: cd packages/ordinalsplus && bun install
 
       - name: Build
-        run: bun run build
+        run: cd packages/ordinalsplus && bun run build
+
+      - name: Install root dependencies
+        run: npm install
 
       - name: Semantic Release
         env:
