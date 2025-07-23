@@ -7,7 +7,16 @@ const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const POLL_INTERVAL = Number(process.env.POLL_INTERVAL ?? '5000'); // Check every 5 seconds
 const BATCH_SIZE = Number(process.env.BATCH_SIZE ?? '100');
-const WORKER_ID = process.env.WORKER_ID ?? `worker-${Date.now()}`;
+
+// Generate a unique worker ID with process ID, timestamp, and random component
+const generateWorkerId = (): string => {
+  const timestamp = Date.now();
+  const processId = process.pid;
+  const random = Math.floor(Math.random() * 10000);
+  return `worker-${processId}-${timestamp}-${random}`;
+};
+
+const WORKER_ID = process.env.WORKER_ID ?? generateWorkerId();
 const START_INSCRIPTION = Number(process.env.START_INSCRIPTION ?? '0');
 const NETWORK = (process.env.NETWORK || 'mainnet') as BitcoinNetwork; // 'mainnet', 'signet', 'testnet'
 
@@ -223,7 +232,7 @@ class ResourceStorage {
     const luaScript = `
       local cursor = redis.call('GET', 'indexer:cursor')
       local start = tonumber(cursor or ARGV[1]) + 1
-      local end = start + tonumber(ARGV[2]) - 1
+      local end_num = start + tonumber(ARGV[2]) - 1
       local workerId = ARGV[3]
       
       -- Check if this batch is already claimed by checking for existing claims
@@ -233,7 +242,7 @@ class ResourceStorage {
         if claimData then
           local claim = cjson.decode(claimData)
           -- Check for overlap with existing claims
-          if (start <= claim.end and end >= claim.start) then
+          if (start <= claim.end and end_num >= claim.start) then
             return nil -- Batch already claimed
           end
         end
@@ -242,7 +251,7 @@ class ResourceStorage {
       -- Create the claim
       local claim = {
         start = start,
-        end = end,
+        ["end"] = end_num,
         workerId = workerId,
         claimedAt = redis.call('TIME')[1]
       }

@@ -36,9 +36,9 @@ The indexer uses a Redis-based coordination system to ensure multiple replicas c
 # Required
 REDIS_URL=redis://localhost:6379
 INDEXER_URL=http://localhost:80  # or Ordiscan API
-WORKER_ID=worker-1               # Unique ID for each replica
 
 # Optional
+WORKER_ID=worker-1               # Unique ID for each replica (auto-generated if not set)
 POLL_INTERVAL=5000               # Milliseconds between polls
 BATCH_SIZE=100                   # Inscriptions per batch
 START_INSCRIPTION=0              # Starting inscription number
@@ -49,17 +49,29 @@ ORDISCAN_API_KEY=your_key        # Required for ordiscan provider
 
 ## Running Multiple Replicas
 
-1. **Set unique worker IDs**:
-   ```bash
-   # Replica 1
-   WORKER_ID=worker-1 npm start
-   
-   # Replica 2  
-   WORKER_ID=worker-2 npm start
-   
-   # Replica 3
-   WORKER_ID=worker-3 npm start
-   ```
+The indexer automatically generates unique worker IDs using process ID, timestamp, and random components. You can run multiple replicas without any configuration:
+
+```bash
+# Terminal 1
+npm start
+
+# Terminal 2  
+npm start
+
+# Terminal 3
+npm start
+```
+
+Each worker will have a unique ID like `worker-12345-1703123456789-4567`.
+
+**Manual Worker IDs**: You can still set `WORKER_ID` environment variable for easier identification:
+
+```bash
+# For easier monitoring
+WORKER_ID=worker-1 npm start
+WORKER_ID=worker-2 npm start
+WORKER_ID=worker-3 npm start
+```
 
 2. **Monitor active workers**:
    ```bash

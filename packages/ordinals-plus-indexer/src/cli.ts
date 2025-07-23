@@ -88,7 +88,7 @@ Environment Variables:
   NETWORK           Bitcoin network: mainnet|signet|testnet (default: mainnet)
   POLL_INTERVAL     Polling interval in ms (default: 30000)
   BATCH_SIZE        Work range size per worker (default: 100)
-  WORKER_ID         Unique worker identifier (default: worker-<timestamp>)
+  WORKER_ID         Unique worker identifier (auto-generated if not set)
   START_INSCRIPTION Starting inscription number (default: 0)
 
 Features:
