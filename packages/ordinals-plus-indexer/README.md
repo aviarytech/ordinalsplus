@@ -119,3 +119,4 @@ The indexer provides comprehensive monitoring:
 - Reduce BATCH_SIZE
 - Monitor Redis memory usage
 - Check for memory leaks in long-running workers
+
