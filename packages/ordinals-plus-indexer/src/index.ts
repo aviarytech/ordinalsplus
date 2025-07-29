@@ -7,6 +7,8 @@ const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const POLL_INTERVAL = Number(process.env.POLL_INTERVAL ?? '5000'); // Check every 5 seconds
 const BATCH_SIZE = Number(process.env.BATCH_SIZE ?? '100');
+const CONCURRENT_PROCESSING = Number(process.env.CONCURRENT_PROCESSING ?? '10'); // Process inscriptions concurrently
+const CACHE_TTL = Number(process.env.CACHE_TTL ?? '3600'); // 1 hour cache TTL
 
 // Generate a unique worker ID with process ID, timestamp, and random component
 const generateWorkerId = (): string => {
@@ -60,16 +62,48 @@ interface InscriptionError {
   workerId: string;
 }
 
+interface CachedSatInfo {
+  inscription_ids: string[];
+  cachedAt: number;
+}
+
 /**
- * Analyzer for classifying resources into Ordinals Plus vs Non-Ordinals Plus
+ * Optimized analyzer for classifying resources into Ordinals Plus vs Non-Ordinals Plus
  */
-class ResourceAnalyzer {
+class OptimizedResourceAnalyzer {
   private provider: OrdNodeProvider | OrdiscanProvider;
   private network: BitcoinNetwork;
+  private satCache: Map<number, CachedSatInfo> = new Map();
+  private inscriptionCache: Map<string, any> = new Map();
+  private cacheCleanupInterval: NodeJS.Timeout;
 
   constructor(provider: OrdNodeProvider | OrdiscanProvider, network: BitcoinNetwork) {
     this.provider = provider;
     this.network = network;
+    
+    // Clean up cache every 5 minutes
+    this.cacheCleanupInterval = setInterval(() => {
+      this.cleanupCache();
+    }, 5 * 60 * 1000);
+  }
+
+  private cleanupCache(): void {
+    const now = Date.now();
+    const maxAge = CACHE_TTL * 1000;
+    
+    // Clean sat cache
+    for (const [sat, info] of this.satCache.entries()) {
+      if (now - info.cachedAt > maxAge) {
+        this.satCache.delete(sat);
+      }
+    }
+    
+    // Clean inscription cache
+    for (const [id, info] of this.inscriptionCache.entries()) {
+      if (now - info.cachedAt > maxAge) {
+        this.inscriptionCache.delete(id);
+      }
+    }
   }
 
   async analyzeInscription(inscriptionId: string, inscriptionNumber: number, contentType: string, metadata: any, workerId: string): Promise<{
@@ -79,7 +113,7 @@ class ResourceAnalyzer {
   }> {
     try {
       // Generate the proper resource ID format
-      const resourceId = await this.generateResourceId(inscriptionId, inscriptionNumber);
+      const resourceId = await this.generateResourceIdOptimized(inscriptionId, inscriptionNumber);
 
       let ordinalsResource: OrdinalsResource | null = null;
       let nonOrdinalsResource: NonOrdinalsResource | null = null;
@@ -146,10 +180,17 @@ class ResourceAnalyzer {
     return 'verifiable-credential';
   }
 
-  private async generateResourceId(inscriptionId: string, inscriptionNumber: number): Promise<string> {
+  private async generateResourceIdOptimized(inscriptionId: string, inscriptionNumber: number): Promise<string> {
     try {
-      // First, get the inscription details to find its satoshi number
-      const inscriptionDetails = await this.provider.getInscription(inscriptionId);
+      // Check cache first for inscription details
+      let inscriptionDetails = this.inscriptionCache.get(inscriptionId);
+      if (!inscriptionDetails) {
+        inscriptionDetails = await this.provider.getInscription(inscriptionId);
+        this.inscriptionCache.set(inscriptionId, {
+          ...inscriptionDetails,
+          cachedAt: Date.now()
+        });
+      }
       
       if (!inscriptionDetails || typeof inscriptionDetails.sat !== 'number') {
         throw new Error(`Inscription details missing or invalid sat number: ${JSON.stringify(inscriptionDetails)}`);
@@ -157,8 +198,16 @@ class ResourceAnalyzer {
       
       const satNumber = inscriptionDetails.sat;
       
-      // Then get all inscriptions on that satoshi
-      const satInfo = await this.provider.getSatInfo(satNumber.toString());
+      // Check cache first for sat info
+      let satInfo = this.satCache.get(satNumber);
+      if (!satInfo) {
+        const freshSatInfo = await this.provider.getSatInfo(satNumber.toString());
+        satInfo = {
+          inscription_ids: freshSatInfo.inscription_ids,
+          cachedAt: Date.now()
+        };
+        this.satCache.set(satNumber, satInfo);
+      }
       
       if (!satInfo || !Array.isArray(satInfo.inscription_ids)) {
         throw new Error(`Sat info missing or invalid inscription_ids: ${JSON.stringify(satInfo)}`);
@@ -184,6 +233,12 @@ class ResourceAnalyzer {
   private formatDid(satNumber: number, index: number): string {
     const networkPrefix = this.network === 'signet' ? 'sig:' : this.network === 'testnet' ? 'test:' : '';
     return `did:btco:${networkPrefix}${satNumber}/${index}`;
+  }
+
+  destroy(): void {
+    if (this.cacheCleanupInterval) {
+      clearInterval(this.cacheCleanupInterval);
+    }
   }
 }
 
@@ -538,7 +593,7 @@ class ResourceStorage {
 class ScalableIndexerWorker {
   private provider: OrdNodeProvider | OrdiscanProvider;
   private storage: ResourceStorage;
-  private analyzer: ResourceAnalyzer;
+  private analyzer: OptimizedResourceAnalyzer;
   private workerId: string;
   private running = false;
 
@@ -561,7 +616,7 @@ class ScalableIndexerWorker {
     }
     
     this.storage = new ResourceStorage(REDIS_URL);
-    this.analyzer = new ResourceAnalyzer(this.provider, NETWORK);
+    this.analyzer = new OptimizedResourceAnalyzer(this.provider, NETWORK);
     this.workerId = WORKER_ID;
   }
 
@@ -588,6 +643,9 @@ class ScalableIndexerWorker {
     console.log(`🛑 Stopping Worker: ${this.workerId}`);
     this.running = false;
     
+    // Clean up analyzer
+    this.analyzer.destroy();
+    
     // Release any active claim for this worker
     await this.storage.releaseWorkerClaim(this.workerId);
     
@@ -608,72 +666,18 @@ class ScalableIndexerWorker {
 
         console.log(`📋 Worker ${this.workerId} processing batch ${batch.start}-${batch.end}`);
         
-        let ordinalsFound = 0;
-        let nonOrdinalsFound = 0;
-        let failures = 0;
-        let firstMissingInscription: number | null = null;
-
-        // Process each inscription in the batch
-        for (let inscriptionNumber = batch.start; inscriptionNumber <= batch.end && this.running; inscriptionNumber++) {
-          try {
-            const inscription = await this.provider.getInscriptionByNumber(inscriptionNumber);
-            
-            if (inscription?.id) {
-              // Try to get metadata
-              const metadata = await this.provider.getMetadata(inscription.id);
-              
-              // Analyze the inscription
-              const { ordinalsResource, nonOrdinalsResource, error } = await this.analyzer.analyzeInscription(
-                inscription.id,
-                inscriptionNumber,
-                inscription.content_type || 'unknown',
-                metadata,
-                this.workerId
-              );
-
-              // Store results
-              if (ordinalsResource) {
-                await this.storage.storeOrdinalsResource(ordinalsResource);
-                ordinalsFound++;
-                console.log(`✅ Ordinals Plus: ${ordinalsResource.resourceId} (${ordinalsResource.ordinalsType})`);
-              } else if (nonOrdinalsResource) {
-                await this.storage.storeNonOrdinalsResource(nonOrdinalsResource);
-                nonOrdinalsFound++;
-              } else if (error) {
-                await this.storage.storeInscriptionError(error);
-                failures++;
-                console.log(`❌ Error stored: ${error.inscriptionId} - ${error.error}`);
-              }
-            } else {
-              // This inscription doesn't exist yet - record the first missing one
-              if (firstMissingInscription === null) {
-                firstMissingInscription = inscriptionNumber;
-              }
-              failures++;
-            }
-
-          } catch (error) {
-            // This inscription doesn't exist yet - record the first missing one
-            if (firstMissingInscription === null) {
-              firstMissingInscription = inscriptionNumber;
-            }
-            failures++;
-            // Only log non-404 errors since 404s are expected for missing inscriptions
-            if (error instanceof Error && !error.message?.includes('404')) {
-              console.warn(`⚠️ Error processing #${inscriptionNumber}:`, error.message);
-            }
-          }
-        }
-
+        // Process inscriptions in parallel with concurrency control
+        const results = await this.processBatchParallel(batch);
+        
         // Handle batch completion - ONLY advance cursor to where we've actually processed inscriptions
-        const failureRate = failures / BATCH_SIZE;
+        const failureRate = results.failures / BATCH_SIZE;
         if (failureRate > HIGH_FAILURE_THRESHOLD) {
-          if (firstMissingInscription !== null) {
+          if (results.firstMissingInscription !== null) {
             // We hit missing inscriptions - only advance cursor to just before the first missing one
-            const maxProcessedInscription = firstMissingInscription - 1;
+            const maxProcessedInscription = results.firstMissingInscription - 1;
             if (maxProcessedInscription >= batch.start) {
               await this.storage.completeBatch(maxProcessedInscription);
-              console.log(`📍 Advanced cursor to ${maxProcessedInscription}, waiting for inscription #${firstMissingInscription} to be created`);
+              console.log(`📍 Advanced cursor to ${maxProcessedInscription}, waiting for inscription #${results.firstMissingInscription} to be created`);
             } else {
               console.log(`📍 No inscriptions processed in batch ${batch.start}-${batch.end}, cursor unchanged`);
             }
@@ -688,7 +692,7 @@ class ScalableIndexerWorker {
         } else {
           // Successfully completed batch - safe to advance cursor to the end
           await this.storage.completeBatch(batch.end);
-          console.log(`📊 Batch ${batch.start}-${batch.end} completed: ${ordinalsFound} Ordinals Plus, ${nonOrdinalsFound} Non-Ordinals, ${failures} failures`);
+          console.log(`📊 Batch ${batch.start}-${batch.end} completed: ${results.ordinalsFound} Ordinals Plus, ${results.nonOrdinalsFound} Non-Ordinals, ${results.failures} failures`);
         }
         
         // Show overall stats
@@ -701,6 +705,103 @@ class ScalableIndexerWorker {
       }
     }
   }
+
+  private async processBatchParallel(batch: BatchClaim): Promise<{
+    ordinalsFound: number;
+    nonOrdinalsFound: number;
+    failures: number;
+    firstMissingInscription: number | null;
+  }> {
+    const inscriptionNumbers = Array.from(
+      { length: batch.end - batch.start + 1 },
+      (_, i) => batch.start + i
+    );
+
+    let ordinalsFound = 0;
+    let nonOrdinalsFound = 0;
+    let failures = 0;
+    let firstMissingInscription: number | null = null;
+
+    // Process inscriptions in chunks to control concurrency
+    for (let i = 0; i < inscriptionNumbers.length; i += CONCURRENT_PROCESSING) {
+      const chunk = inscriptionNumbers.slice(i, i + CONCURRENT_PROCESSING);
+      
+      // Process chunk in parallel
+      const chunkPromises = chunk.map(async (inscriptionNumber) => {
+        try {
+          const inscription = await this.provider.getInscriptionByNumber(inscriptionNumber);
+          
+          if (inscription?.id) {
+            // Try to get metadata
+            const metadata = await this.provider.getMetadata(inscription.id);
+            
+            // Analyze the inscription
+            const { ordinalsResource, nonOrdinalsResource, error } = await this.analyzer.analyzeInscription(
+              inscription.id,
+              inscriptionNumber,
+              inscription.content_type || 'unknown',
+              metadata,
+              this.workerId
+            );
+
+            // Store results
+            if (ordinalsResource) {
+              await this.storage.storeOrdinalsResource(ordinalsResource);
+              console.log(`✅ Ordinals Plus: ${ordinalsResource.resourceId} (${ordinalsResource.ordinalsType})`);
+              return { type: 'ordinals' as const, resource: ordinalsResource };
+            } else if (nonOrdinalsResource) {
+              await this.storage.storeNonOrdinalsResource(nonOrdinalsResource);
+              return { type: 'non-ordinals' as const, resource: nonOrdinalsResource };
+            } else if (error) {
+              await this.storage.storeInscriptionError(error);
+              console.log(`❌ Error stored: ${error.inscriptionId} - ${error.error}`);
+              return { type: 'error' as const, error };
+            }
+          } else {
+            // This inscription doesn't exist yet
+            return { type: 'missing' as const, inscriptionNumber };
+          }
+
+        } catch (error) {
+          // This inscription doesn't exist yet
+          return { type: 'missing' as const, inscriptionNumber };
+        }
+      });
+
+      // Wait for chunk to complete and collect results
+      const chunkResults = await Promise.all(chunkPromises);
+      
+      // Process results
+      for (const result of chunkResults) {
+        if (!result) continue; // Skip undefined results
+        
+        if (result.type === 'ordinals') {
+          ordinalsFound++;
+        } else if (result.type === 'non-ordinals') {
+          nonOrdinalsFound++;
+        } else if (result.type === 'error') {
+          failures++;
+        } else if (result.type === 'missing') {
+          if (firstMissingInscription === null) {
+            firstMissingInscription = result.inscriptionNumber;
+          }
+          failures++;
+        }
+      }
+
+      // Brief pause between chunks to avoid overwhelming the API
+      if (i + CONCURRENT_PROCESSING < inscriptionNumbers.length) {
+        await this.sleep(100);
+      }
+    }
+
+    return {
+      ordinalsFound,
+      nonOrdinalsFound,
+      failures,
+      firstMissingInscription
+    };
+  }
 }
 
 // Main execution
@@ -710,7 +811,7 @@ async function run(): Promise<void> {
 }
 
 // Export for testing
-export { ScalableIndexerWorker, ResourceStorage, ResourceAnalyzer };
+export { ScalableIndexerWorker, ResourceStorage, OptimizedResourceAnalyzer };
 
 // Start if this file is run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
