@@ -47,6 +47,14 @@ interface OrdNodeFullInscriptionResponse {
     content_type?: string;
 }
 
+interface OrdNodeBlockResponse {
+    height: number;
+    hash: string;
+    time: number;
+    previous_block?: string;
+    inscriptions?: { id: string; number?: number }[];
+}
+
 export class OrdNodeProvider implements ResourceProvider {
     private readonly nodeUrl: string;
     private readonly timeout: number;
@@ -72,6 +80,52 @@ export class OrdNodeProvider implements ResourceProvider {
             }
         );
         return response.data;
+    }
+
+    /**
+     * Fetch latest block info (if supported by the Ord server).
+     */
+    async getLatestBlock(): Promise<OrdNodeBlockResponse | null> {
+        // 1. Try /blockheight to get numeric tip height
+        try {
+            const hr = await this.fetchApi<any>(`/blockheight`);
+            let h: number | undefined;
+            if (typeof hr === 'number') {
+                h = hr;
+            } else if (typeof hr === 'string') {
+                h = parseInt(hr, 10);
+            } else if (hr && typeof hr.height === 'number') {
+                h = hr.height;
+            }
+            if (h !== undefined && !isNaN(h)) {
+                return await this.getBlockByHeight(h);
+            }
+        } catch (_) {
+            // ignore and fall through
+        }
+
+        // 2. Try /block/latest (newer versions)
+        try {
+            const resp = await this.fetchApi<OrdNodeBlockResponse>(`/block/latest`);
+            return resp as OrdNodeBlockResponse;
+        } catch (_) {
+            // 3. Fallback to generic /block for latest block
+            try {
+                const resp = await this.fetchApi<OrdNodeBlockResponse>(`/block`);
+                return resp as OrdNodeBlockResponse;
+            } catch (error) {
+                console.warn('[OrdNodeProvider] Unable to fetch latest block via /blockheight, /block/latest or /block:', (error as any)?.message || error);
+                return null;
+            }
+        }
+    }
+
+    /**
+     * Fetch block by height (fallback when /block/latest unsupported)
+     */
+    async getBlockByHeight(height: number): Promise<OrdNodeBlockResponse> {
+        const resp = await this.fetchApi<OrdNodeBlockResponse>(`/block/${height}`);
+        return resp as OrdNodeBlockResponse;
     }
 
     async getSatInfo(satNumber: string): Promise<{ inscription_ids: string[] }> {
@@ -102,25 +156,27 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async getMetadata(inscriptionId: string): Promise<any> {
-        try {
-            const response = await this.fetchApi<string>(`/r/metadata/${inscriptionId}`);
-            
-            // The ord server returns a JSON-quoted hex string, we need to parse it first
-            let hexString = response as string;
-            
-            // If it's JSON-quoted (starts and ends with quotes), parse it
-            if (typeof hexString === 'string' && hexString.startsWith('"') && hexString.endsWith('"')) {
-                hexString = JSON.parse(hexString);
+        const candidatePaths = [
+            `/r/metadata/${inscriptionId}`,      // ord >=0.15
+            `/metadata/${inscriptionId}`,        // some forks
+            `/inscription/${inscriptionId}/metadata` // ord <=0.14
+        ];
+        for (const path of candidatePaths) {
+            try {
+                const response = await this.fetchApi<string>(path);
+                let hexString = response as string;
+                if (typeof hexString === 'string' && hexString.startsWith('"') && hexString.endsWith('"')) {
+                    hexString = JSON.parse(hexString);
+                }
+                return extractCborMetadata(hexToBytes(hexString));
+            } catch (error) {
+                // try next path if 404
+                if (error instanceof Error && error.message.includes('status 404')) {
+                    continue;
+                }
             }
-            
-            return extractCborMetadata(hexToBytes(hexString));
-        } catch (error) {
-            // Only log non-404 errors since 404s are expected for inscriptions without metadata
-            if (error instanceof Error && !error.message.includes('status 404')) {
-                console.warn(`[OrdNodeProvider] Failed to retrieve metadata for inscription ${inscriptionId}:`, error);
-            }
-            return null;
         }
+        return null; // no metadata found
     }
 
     async resolve(resourceId: string): Promise<LinkedResource> {
@@ -438,5 +494,28 @@ export class OrdNodeProvider implements ResourceProvider {
             content_type: response.data.content_type,
             content_url: `${this.nodeUrl}/content/${response.data.id}`
         };
+    }
+
+    /**
+     * List inscription IDs for a given block height.
+     */
+    async getBlockInscriptions(height: number): Promise<string[]> {
+        const candidatePaths = [
+            `/block/${height}/inscriptions`,
+            `/inscriptions/block/${height}`
+        ];
+        for (const p of candidatePaths) {
+            try {
+                const resp = await this.fetchApi<{ inscriptions: string[] }>(p);
+                if (Array.isArray((resp as any).inscriptions)) {
+                    return (resp as any).inscriptions;
+                }
+            } catch (e) {
+                if (e instanceof Error && e.message.includes('status 404')) {
+                    continue;
+                }
+            }
+        }
+        return [];
     }
 } 

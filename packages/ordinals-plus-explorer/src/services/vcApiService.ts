@@ -35,7 +35,7 @@ export async function fetchSystemVCApiProviders(): Promise<VCApiProvider[]> {
  */
 export async function fetchDefaultVCApiProvider(): Promise<VCApiProvider | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/vc-api/providers/default`);
+    const response = await fetch(`${env.VITE_BACKEND_URL}/api/vc-api/providers/default`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch default VC API provider: ${response.statusText}`);
@@ -127,7 +127,7 @@ export async function createExchange(
 ): Promise<any> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/vc-api/providers/${providerId}/exchanges`,
+      `${env.VITE_BACKEND_URL}/api/vc-api/providers/${providerId}/exchanges`,
       {
         method: 'POST',
         headers: {
@@ -157,7 +157,7 @@ export async function createExchange(
  */
 export async function fetchWorkflowConfiguration(providerId: string): Promise<any> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/vc-api/providers/${providerId}/workflow-configuration`);
+    const response = await fetch(`${env.VITE_BACKEND_URL}/api/vc-api/providers/${providerId}/workflow-configuration`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch workflow configuration: ${response.statusText}`);
@@ -185,7 +185,7 @@ export async function participateInExchange(
 ): Promise<any> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/vc-api/providers/${providerId}/exchanges/${exchangeId}/participate`,
+      `${env.VITE_BACKEND_URL}/api/vc-api/providers/${providerId}/exchanges/${exchangeId}/participate`,
       {
         method: 'POST',
         headers: {

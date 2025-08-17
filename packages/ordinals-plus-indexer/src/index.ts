@@ -3,12 +3,21 @@ import type { BitcoinNetwork } from 'ordinalsplus';
 import { createClient, RedisClientType } from 'redis';
 
 // Configuration from environment
-const INDEXER_URL = process.env.INDEXER_URL ?? 'http://localhost:80';
-const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
+const INDEXER_URL = process.env.INDEXER_URL;
+if (!INDEXER_URL) {
+  throw new Error('INDEXER_URL is not set');
+}
+const REDIS_URL = process.env.REDIS_URL;
+if (!REDIS_URL) {
+  throw new Error('REDIS_URL is not set');
+}
 const POLL_INTERVAL = Number(process.env.POLL_INTERVAL ?? '5000'); // Check every 5 seconds
 const BATCH_SIZE = Number(process.env.BATCH_SIZE ?? '100');
 const CONCURRENT_PROCESSING = Number(process.env.CONCURRENT_PROCESSING ?? '10'); // Process inscriptions concurrently
 const CACHE_TTL = Number(process.env.CACHE_TTL ?? '3600'); // 1 hour cache TTL
+const START_FROM_CURRENT = process.env.START_FROM_CURRENT === 'true';
+const BLOCK_TAIL_MODE = process.env.BLOCK_TAIL_MODE === 'true'; // if true, use block tail watcher
+const DEBUG_BLOCK = process.env.DEBUG_BLOCK ? Number(process.env.DEBUG_BLOCK) : undefined;
 
 // Generate a unique worker ID with process ID, timestamp, and random component
 const generateWorkerId = (): string => {
@@ -421,35 +430,43 @@ class ResourceStorage {
 
   // Resource storage methods
   async storeOrdinalsResource(resource: OrdinalsResource): Promise<void> {
-    // Store in list for chronological ordering (newest items pushed to front)
-    await this.client.lPush('ordinals-plus-resources', resource.resourceId);
-    
-    // Store detailed resource data in a hash for easy API retrieval
+    const exists = await this.client.sIsMember('indexed:inscriptions', resource.inscriptionId);
+    if (exists) return;
+
     const resourceKey = `ordinals_plus:resource:${resource.inscriptionId}`;
-    await this.client.hSet(resourceKey, {
-      inscriptionId: resource.inscriptionId,
-      inscriptionNumber: resource.inscriptionNumber.toString(),
-      resourceId: resource.resourceId,
-      ordinalsType: resource.ordinalsType,
-      contentType: resource.contentType,
-      indexedAt: resource.indexedAt.toString(),
-      indexedBy: 'indexer',
-      network: this.extractNetworkFromResourceId(resource.resourceId)
-    });
-    
-    // Update stats
-    await this.client.incr(`ordinals-plus:stats:${resource.ordinalsType}`);
-    await this.client.incr('ordinals-plus:stats:total');
+    const network = this.extractNetworkFromResourceId(resource.resourceId);
+    await this.client.multi()
+      // keep chronological list of resource IDs
+      .lPush('ordinals-plus-resources', resource.resourceId)
+      // detailed resource hash for API lookup
+      .hSet(resourceKey, {
+        inscriptionId: resource.inscriptionId,
+        inscriptionNumber: resource.inscriptionNumber.toString(),
+        resourceId: resource.resourceId,
+        ordinalsType: resource.ordinalsType,
+        contentType: resource.contentType,
+        indexedAt: resource.indexedAt.toString(),
+        network
+      })
+      // dedup key
+      .sAdd('indexed:inscriptions', resource.inscriptionId)
+      // stats
+      .incr('ordinals-plus:stats:total')
+      .incr(`ordinals-plus:stats:${resource.ordinalsType}`)
+      .exec();
   }
 
   async storeNonOrdinalsResource(resource: NonOrdinalsResource): Promise<void> {
-    // Store in list for chronological ordering (newest items pushed to front)
-    await this.client.lPush('non-ordinals-resources', resource.resourceId);
-    
-    // Update stats
-    await this.client.incr('non-ordinals:stats:total');
-    const contentTypeKey = resource.contentType.split('/')[0] || 'unknown';
-    await this.client.incr(`non-ordinals:stats:${contentTypeKey}`);
+    const exists = await this.client.sIsMember('indexed:inscriptions', resource.inscriptionId);
+    if (exists) return;
+
+    const typeKey = resource.contentType.split('/')[0] || 'unknown';
+    await this.client.multi()
+      .lPush('non-ordinals-resources', resource.inscriptionId)
+      .sAdd('indexed:inscriptions', resource.inscriptionId)
+      .incr('non-ordinals:stats:total')
+      .incr(`non-ordinals:stats:${typeKey}`)
+      .exec();
   }
 
   private extractNetworkFromResourceId(resourceId: string): string {
@@ -585,6 +602,12 @@ class ResourceStorage {
       return [];
     }
   }
+
+  // Added: allow external updates to the cursor
+  async setCursor(value: number): Promise<void> {
+    await this.client.set('indexer:cursor', value.toString());
+    console.log(`📍 Cursor manually set to inscription ${value}`);
+  }
 }
 
 /**
@@ -596,6 +619,7 @@ class ScalableIndexerWorker {
   private analyzer: OptimizedResourceAnalyzer;
   private workerId: string;
   private running = false;
+  private debugBlock: number | undefined = DEBUG_BLOCK;
 
   constructor() {
     // Initialize provider based on configuration
@@ -628,6 +652,9 @@ class ScalableIndexerWorker {
     console.log(`🚀 Starting Resource Indexer Worker: ${this.workerId} on ${NETWORK}`);
     console.log(`📡 Using provider: ${PROVIDER_TYPE}`);
     console.log(`🏠 Provider endpoint: ${PROVIDER_TYPE === 'ordiscan' ? 'Ordiscan API' : INDEXER_URL}`);
+    if (BLOCK_TAIL_MODE) {
+      console.log('🌀 Block tail mode enabled (crawl last 5 blocks then watch for new).');
+    }
     
     await this.storage.connect();
     this.running = true;
@@ -635,6 +662,22 @@ class ScalableIndexerWorker {
     // Set up graceful shutdown
     process.on('SIGINT', () => this.stop());
     process.on('SIGTERM', () => this.stop());
+
+    if (BLOCK_TAIL_MODE) {
+      await this.runTailLoop();
+      return;
+    }
+
+    // If configured to start from the current tip, compute the latest inscription number and set the cursor
+    if (START_FROM_CURRENT) {
+      const currentCursor = await this.storage.getCurrentCursor();
+      if (currentCursor <= START_INSCRIPTION) {
+        console.log('⏫ Determining latest inscription number to start from...');
+        const latestNumber = await this.getLatestInscriptionNumber();
+        await this.storage.setCursor(latestNumber);
+        console.log(`🚀 Starting from latest inscription #${latestNumber}. Awaiting new inscriptions...`);
+      }
+    }
 
     await this.workerLoop();
   }
@@ -669,6 +712,16 @@ class ScalableIndexerWorker {
         // Process inscriptions in parallel with concurrency control
         const results = await this.processBatchParallel(batch);
         
+        // Handle batch completion - check for overshoot (all misses)
+        if (results.ordinalsFound === 0 && results.nonOrdinalsFound === 0 && results.failures === BATCH_SIZE) {
+          // Likely started beyond chain tip – step back one batch and retry later
+          const backCursor = Math.max(0, batch.start - BATCH_SIZE);
+          await this.storage.setCursor(backCursor);
+          console.log(`🔄 Overshoot detected: stepping cursor back to ${backCursor} and waiting for new data...`);
+          await this.sleep(POLL_INTERVAL);
+          continue; // Retry loop
+        }
+
         // Handle batch completion - ONLY advance cursor to where we've actually processed inscriptions
         const failureRate = results.failures / BATCH_SIZE;
         if (failureRate > HIGH_FAILURE_THRESHOLD) {
@@ -801,6 +854,143 @@ class ScalableIndexerWorker {
       failures,
       firstMissingInscription
     };
+  }
+
+  // Added helper to discover the latest valid inscription number using exponential + binary search
+  private async getLatestInscriptionNumber(): Promise<number> {
+    // 1. Try quick path via latest block endpoint
+    try {
+      if (typeof (this.provider as any).getLatestBlock === 'function') {
+        const latestBlock = await (this.provider as any).getLatestBlock();
+        if (latestBlock) {
+          let h = latestBlock.height;
+          const backLimit = 10; // scan up to 10 blocks back
+          for (let offset = 0; offset <= backLimit && h - offset >= 0; offset++) {
+            const blk = offset === 0 ? latestBlock : await (this.provider as any).getBlockByHeight(h - offset);
+            if (blk && blk.inscriptions && blk.inscriptions.length > 0) {
+              const nums = blk.inscriptions.map((i: any) => i.number).filter((n: any) => typeof n === 'number');
+              if (nums.length > 0) {
+                return Math.max(...nums);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to fetch latest block, falling back to binary search:', (e as any)?.message || e);
+    }
+
+    // 2. Fallback: exponential + binary search on inscription numbers
+    let low = 0;
+    let high = 1;
+    while (true) {
+      try {
+        const ins = await this.provider.getInscriptionByNumber(high);
+        if (!ins || !ins.id) throw new Error('invalid');
+        low = high;
+        high *= 2;
+      } catch {
+        break;
+      }
+    }
+    while (low + 1 < high) {
+      const mid = Math.floor((low + high) / 2);
+      try {
+        const ins = await this.provider.getInscriptionByNumber(mid);
+        if (!ins || !ins.id) throw new Error('invalid');
+        low = mid;
+      } catch {
+        high = mid;
+      }
+    }
+    return low;
+  }
+
+  // Tail loop for BLOCK_TAIL_MODE
+  private async runTailLoop(): Promise<void> {
+    const BLOCK_LOOKBACK = 5;
+    let latestBlock = await (this.provider as any).getLatestBlock?.();
+    if (!latestBlock || typeof latestBlock.height !== 'number') {
+      console.error('❌ Provider does not support latest block endpoint – cannot run tail mode');
+      this.running = false;
+      return;
+    }
+    let currentHeight = latestBlock.height;
+    let nextHeightToProcess = Math.max(0, currentHeight - BLOCK_LOOKBACK + 1);
+    console.log(`⏩ Will process blocks ${nextHeightToProcess} → ${currentHeight} to catch up.`);
+    while (this.running) {
+      try {
+        if (nextHeightToProcess > currentHeight) {
+          // Wait for new blocks
+          await this.sleep(POLL_INTERVAL);
+          const lb = await (this.provider as any).getLatestBlock?.();
+          if (lb && lb.height > currentHeight) {
+            currentHeight = lb.height;
+            console.log(`📦 New block detected: ${currentHeight}`);
+          }
+          continue;
+        }
+        const block = nextHeightToProcess === latestBlock.height ? latestBlock : await (this.provider as any).getBlockByHeight(nextHeightToProcess);
+        await this.processBlock(block, nextHeightToProcess);
+        nextHeightToProcess++;
+      } catch (err) {
+        console.error('❌ Tail loop error:', (err as any)?.message || err);
+        await this.sleep(2000);
+      }
+    }
+  }
+
+  private async processBlock(block: any, height: number): Promise<void> {
+    let inscriptionIds: string[] = [];
+    if (block && Array.isArray(block.inscriptions)) {
+      inscriptionIds = block.inscriptions;
+    } else if (block && typeof block.inscriptions === 'number') {
+      inscriptionIds = await (this.provider as any).getBlockInscriptions?.(height) ?? [];
+    } else {
+      // Try fetching via helper if object lacked array
+      inscriptionIds = await (this.provider as any).getBlockInscriptions?.(height) ?? [];
+    }
+    if (inscriptionIds.length === 0) {
+      if (this.debugBlock === height) {
+        console.log(`[DEBUG] No inscriptions IDs resolved for block ${height}`);
+      }
+      return;
+    }
+    console.log(`🔍 Processing block ${height} with ${inscriptionIds.length} inscriptions`);
+    for (const insId of inscriptionIds) {
+      try {
+        const inscription = await this.provider.getInscription(insId);
+        const metadata = await this.provider.getMetadata(insId);
+        const { ordinalsResource, nonOrdinalsResource, error } = await this.analyzer.analyzeInscription(
+          insId,
+          inscription.number ?? -1,
+          inscription.content_type || 'unknown',
+          metadata,
+          this.workerId
+        );
+        if (this.debugBlock === height) {
+          console.log('[DEBUG]', {
+            insId,
+            contentType: inscription.content_type,
+            hasMetadata: !!metadata,
+            classification: ordinalsResource ? 'ordinals-plus' : nonOrdinalsResource ? 'non-ordinals' : 'error',
+            error: error?.error
+          });
+        }
+        if (ordinalsResource) {
+          await this.storage.storeOrdinalsResource(ordinalsResource);
+        } else if (nonOrdinalsResource) {
+          await this.storage.storeNonOrdinalsResource(nonOrdinalsResource);
+        } else if (error) {
+          await this.storage.storeInscriptionError(error);
+        }
+      } catch (e) {
+        if (this.debugBlock === height) {
+          console.warn(`[DEBUG] Failed inscription ${insId}:`, (e as any)?.message || e);
+        }
+        console.warn(`⚠️ Failed to process inscription in block ${height}:`, (e as any)?.message || e);
+      }
+    }
   }
 }
 
