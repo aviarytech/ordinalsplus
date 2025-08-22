@@ -1,6 +1,7 @@
 // Export transaction utilities
 export * from './fee-calculation';
 export * from './commit-transaction';
+export * from './batch-commit-transaction';
 export * from './utxo-selection';
 export * from './resource-creation';
 export * from './reveal-transaction';

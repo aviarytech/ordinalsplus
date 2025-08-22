@@ -13,6 +13,7 @@ import { InscriptionError } from '../utils/error-handler';
  * Transaction status enum
  */
 export enum TransactionStatus {
+  PREPARED = 'PREPARED',
   PENDING = 'PENDING',
   CONFIRMING = 'CONFIRMING',
   CONFIRMED = 'CONFIRMED',
@@ -30,7 +31,8 @@ export enum TransactionStatus {
  */
 export enum TransactionType {
   COMMIT = 'COMMIT',
-  REVEAL = 'REVEAL'
+  REVEAL = 'REVEAL',
+  BATCH_COMMIT = 'BATCH_COMMIT'
 }
 
 /**
