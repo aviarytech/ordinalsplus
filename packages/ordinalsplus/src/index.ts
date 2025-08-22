@@ -86,7 +86,8 @@ export {
     validateResourceCreationParams,
     prepareCommitTransaction,
     createRevealTransaction,
-    transactionTracker
+    transactionTracker,
+    prepareBatchCommitTransaction
 } from './transactions';
 
 export type { 
@@ -94,7 +95,10 @@ export type {
     CommitTransactionParams,
     CommitTransactionResult,
     RevealTransactionParams,
-    RevealTransactionResult
+    RevealTransactionResult,
+    BatchCommitTransactionParams,
+    BatchCommitTransactionResult,
+    BatchCommitOutputInfo
 } from './transactions';
 
 // --- Transaction Status Tracking Exports ---
