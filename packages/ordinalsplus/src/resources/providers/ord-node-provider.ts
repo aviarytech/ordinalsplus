@@ -107,6 +107,7 @@ export class OrdNodeProvider implements ResourceProvider {
      * Fetch latest block info (if supported by the Ord server).
      */
     async getLatestBlock(): Promise<OrdNodeBlockResponse | null> {
+        console.log(`[getLatestBlock] Getting latest block...`);
         // 1. Try /blockheight to get numeric tip height
         try {
             const hr = await this.fetchApi<any>(`/blockheight`);
