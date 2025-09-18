@@ -1,9 +1,9 @@
 import { describe, test, expect, mock } from 'bun:test';
 import * as btc from '@scure/btc-signer';
 import { hex } from '@scure/base';
-import { Utxo } from '../src/types';
-import { createRevealTransaction } from '../src/transactions/reveal-transaction.js';
-import { PreparedInscription, InscriptionScriptInfo } from '../src/inscription/scripts/ordinal-reveal.js';
+import { Utxo } from '../../../src/types';
+import { createRevealTransaction } from '../../../src/transactions/reveal-transaction';
+import { PreparedInscription, InscriptionScriptInfo } from '../../../src/inscription/scripts/ordinal-reveal';
 
 /**
  * Test suite for reveal transaction implementation.

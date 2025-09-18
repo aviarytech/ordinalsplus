@@ -1,6 +1,13 @@
-import crypto from 'crypto';
-import { promises as fs } from 'fs';
-import path from 'path';
+import * as nodeCrypto from 'crypto';
+import * as fsModule from 'fs';
+import { FileHandle } from 'fs/promises';
+import * as pathModule from 'path';
+
+// Environment-safe handles (browser gets undefined; Node gets real modules)
+const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
+const fs = (fsModule as any)?.promises as typeof import('fs').promises | undefined;
+const path = pathModule as any;
+const nodeCryptoRef = nodeCrypto as any;
 
 /**
  * Severity levels for audit events
@@ -62,7 +69,7 @@ export class AuditLogger {
   private logBuffer: AuditEvent[] = [];
   private lastLogHash: string = '';
   private currentLogFile: string = '';
-  private logFileHandle: fs.FileHandle | null = null;
+  private logFileHandle: FileHandle | null = null;
   private currentLogSize: number = 0;
 
   /**
@@ -77,6 +84,11 @@ export class AuditLogger {
       tamperDetection: config.tamperDetection !== false,
       logToConsole: config.logToConsole || false
     };
+
+    // Disable file-based logging in browser environments
+    if (isBrowser) {
+      this.config.enabled = false;
+    }
 
     // Initialize the logger
     this.initialize();
@@ -107,14 +119,14 @@ export class AuditLogger {
 
     try {
       // Create log directory if it doesn't exist
-      await fs.mkdir(this.config.storagePath!, { recursive: true });
+      await fs!.mkdir(this.config.storagePath!, { recursive: true });
       
       // Set up initial log file
       this.currentLogFile = this.generateLogFileName();
       
       // Try to open an existing log file to read the last hash
       try {
-        const existingLogs = await fs.readFile(this.currentLogFile, 'utf8');
+        const existingLogs = await fs!.readFile(this.currentLogFile, 'utf8');
         const events = existingLogs.trim().split('\n').map(line => JSON.parse(line));
         
         if (events.length > 0 && this.config.tamperDetection) {
@@ -129,7 +141,7 @@ export class AuditLogger {
       }
       
       // Open the log file for appending
-      this.logFileHandle = await fs.open(this.currentLogFile, 'a');
+      this.logFileHandle = await fs!.open(this.currentLogFile, 'a');
       
       // Schedule log cleanup
       this.scheduleLogCleanup();
@@ -165,7 +177,7 @@ export class AuditLogger {
    */
   private async cleanupOldLogs(): Promise<void> {
     try {
-      const files = await fs.readdir(this.config.storagePath!);
+      const files = await fs!.readdir(this.config.storagePath!);
       const now = Date.now();
       const retentionMs = this.config.retentionDays! * 24 * 60 * 60 * 1000;
 
@@ -173,11 +185,11 @@ export class AuditLogger {
         if (!file.startsWith('audit-') || !file.endsWith('.log')) continue;
 
         const filePath = path.join(this.config.storagePath!, file);
-        const stats = await fs.stat(filePath);
+        const stats = await fs!.stat(filePath);
         const fileAge = now - stats.mtime.getTime();
 
         if (fileAge > retentionMs) {
-          await fs.unlink(filePath);
+          await fs!.unlink(filePath);
         }
       }
     } catch (error) {
@@ -189,14 +201,29 @@ export class AuditLogger {
    * Create a hash of the event combined with the previous hash
    */
   private createHash(event: AuditEvent): string {
-    const hash = crypto.createHash('sha256');
+    if (nodeCryptoRef?.createHash) {
+      const hash = nodeCryptoRef.createHash('sha256');
+      const eventWithoutHash = { ...event };
+      delete eventWithoutHash.previousHash;
+      hash.update(JSON.stringify(eventWithoutHash));
+      hash.update(this.lastLogHash || '');
+      return hash.digest('hex');
+    }
+    // Fallback: return empty hash in environments without Node crypto
     const eventWithoutHash = { ...event };
     delete eventWithoutHash.previousHash;
-    
-    hash.update(JSON.stringify(eventWithoutHash));
-    hash.update(this.lastLogHash || '');
-    
-    return hash.digest('hex');
+    try {
+      // Browser Web Crypto fallback
+      const encoder = new TextEncoder();
+      const data = encoder.encode(JSON.stringify(eventWithoutHash) + (this.lastLogHash || ''));
+      const subtle = (globalThis.crypto as any)?.subtle;
+      if (subtle?.digest) {
+        // Note: This path is async; to keep API sync, we skip and return empty
+        // Consider refactoring to async in future if needed
+        // await subtle.digest('SHA-256', data)
+      }
+    } catch {}
+    return '';
   }
 
   /**
@@ -273,7 +300,7 @@ export class AuditLogger {
         
         // Create a new log file
         this.currentLogFile = this.generateLogFileName();
-        this.logFileHandle = await fs.open(this.currentLogFile, 'a');
+        this.logFileHandle = await fs!.open(this.currentLogFile, 'a');
         this.currentLogSize = 0;
       }
       
@@ -301,7 +328,7 @@ export class AuditLogger {
 
     try {
       const filePath = logFilePath || this.currentLogFile;
-      const content = await fs.readFile(filePath, 'utf8');
+      const content = await fs!.readFile(filePath, 'utf8');
       const events = content.trim().split('\n').map(line => JSON.parse(line) as AuditEvent);
       
       if (events.length === 0) {
@@ -319,10 +346,13 @@ export class AuditLogger {
         const currentEvent = { ...event };
         delete currentEvent.previousHash;
         
-        const hash = crypto.createHash('sha256');
-        hash.update(JSON.stringify(currentEvent));
-        hash.update(previousHash);
-        const expectedHash = hash.digest('hex');
+        let expectedHash = '';
+        if (nodeCryptoRef?.createHash) {
+          const hash = nodeCryptoRef.createHash('sha256');
+          hash.update(JSON.stringify(currentEvent));
+          hash.update(previousHash);
+          expectedHash = hash.digest('hex');
+        }
         
         // Compare hashes
         if (storedHash !== expectedHash) {
@@ -366,7 +396,7 @@ export class AuditLogger {
     if (!this.config.enabled) return [];
     
     try {
-      const content = await fs.readFile(this.currentLogFile, 'utf8');
+      const content = await fs!.readFile(this.currentLogFile, 'utf8');
       const events = content.trim().split('\n').map(line => JSON.parse(line) as AuditEvent);
       
       // Return the most recent events
@@ -384,7 +414,7 @@ export class AuditLogger {
     if (!this.config.enabled) return [];
     
     try {
-      const content = await fs.readFile(this.currentLogFile, 'utf8');
+      const content = await fs!.readFile(this.currentLogFile, 'utf8');
       const events = content.trim().split('\n').map(line => JSON.parse(line) as AuditEvent);
       
       // Filter events based on criteria

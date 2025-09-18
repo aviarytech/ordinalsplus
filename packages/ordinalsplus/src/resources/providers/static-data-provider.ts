@@ -45,6 +45,14 @@ export class StaticDataProvider implements ResourceProvider {
     }
   }
 
+  getAddressOutputs(address: string): Promise<string[]> {
+    throw new Error('StaticDataProvider: getAddressOutputs() not implemented - use for DID resolution only');
+  }
+
+  getOutputDetails(outpoint: string): Promise<{ value: number; script_pubkey: string; spent: boolean; inscriptions: string[] }> {
+    throw new Error('StaticDataProvider: getOutputDetails() not implemented - use for DID resolution only');
+  }
+
   /**
    * Add a single sat's data
    */

@@ -49,6 +49,8 @@ export interface InscriptionContent {
   content: Uint8Array;
   /** Optional metadata for the inscription */
   metadata?: Record<string, string>;
+  /** Optional pointer tag to target a specific sat offset in the input */
+  pointer?: bigint;
 }
 
 /**
@@ -316,7 +318,8 @@ export function validateContent(content: Uint8Array | string, contentType: strin
 export function prepareContent(
   content: Uint8Array | string,
   contentType: string,
-  metadata?: InscriptionMetadata
+  metadata?: InscriptionMetadata,
+  pointer?: bigint
 ): InscriptionContent {
   // Validate content
   validateContent(content, contentType);
@@ -347,7 +350,8 @@ export function prepareContent(
   return {
     contentType,
     content: contentBytes,
-    metadata
+    metadata,
+    pointer
   };
 }
 

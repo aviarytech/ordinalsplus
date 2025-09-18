@@ -15,6 +15,8 @@ export interface ResourceProvider {
     getAllResourcesChronological(options?: ResourceCrawlOptions): AsyncGenerator<LinkedResource[]>;
     getInscriptionLocationsByAddress(address: string): Promise<InscriptionRefWithLocation[]>;
     getInscriptionByNumber(inscriptionNumber: number): Promise<Inscription>;
+    getAddressOutputs(address: string): Promise<string[]>;
+    getOutputDetails(outpoint: string): Promise<{ value: number; script_pubkey: string; spent: boolean; inscriptions: string[] }>;
 }
 
 export interface ResourceCrawlOptions {

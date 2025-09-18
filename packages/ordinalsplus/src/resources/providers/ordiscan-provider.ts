@@ -442,4 +442,12 @@ export class OrdiscanProvider implements ResourceProvider {
             content_url: response.data.content_url
         };
     }
+
+    getAddressOutputs(address: string): Promise<string[]> {
+        throw new Error('OrdiscanProvider: getAddressOutputs() not implemented - use for DID resolution only');
+    }
+
+    getOutputDetails(outpoint: string): Promise<{ value: number; script_pubkey: string; spent: boolean; inscriptions: string[] }> {
+        throw new Error('OrdiscanProvider: getOutputDetails() not implemented - use for DID resolution only');
+    }
 } 

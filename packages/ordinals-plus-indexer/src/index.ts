@@ -3,11 +3,11 @@ import type { BitcoinNetwork } from 'ordinalsplus';
 import { createClient, RedisClientType } from 'redis';
 
 // Configuration from environment
-const INDEXER_URL = process.env.INDEXER_URL;
+const INDEXER_URL = process.env.INDEXER_URL as string;
 if (!INDEXER_URL) {
   throw new Error('INDEXER_URL is not set');
 }
-const REDIS_URL = process.env.REDIS_URL;
+const REDIS_URL = process.env.REDIS_URL as string;
 if (!REDIS_URL) {
   throw new Error('REDIS_URL is not set');
 }
@@ -16,8 +16,12 @@ const BATCH_SIZE = Number(process.env.BATCH_SIZE ?? '100');
 const CONCURRENT_PROCESSING = Number(process.env.CONCURRENT_PROCESSING ?? '10'); // Process inscriptions concurrently
 const CACHE_TTL = Number(process.env.CACHE_TTL ?? '3600'); // 1 hour cache TTL
 const START_FROM_CURRENT = process.env.START_FROM_CURRENT === 'true';
-const BLOCK_TAIL_MODE = process.env.BLOCK_TAIL_MODE === 'true'; // if true, use block tail watcher
+// Default to block-tail mode unless explicitly disabled
+const BLOCK_TAIL_MODE = process.env.BLOCK_TAIL_MODE ? (process.env.BLOCK_TAIL_MODE === 'true') : true; // if true, use block tail watcher
 const DEBUG_BLOCK = process.env.DEBUG_BLOCK ? Number(process.env.DEBUG_BLOCK) : undefined;
+const REVERSE_REINDEX = process.env.REVERSE_REINDEX === 'true';
+const START_BLOCK = process.env.START_BLOCK ? Number(process.env.START_BLOCK) : undefined;
+const END_BLOCK = process.env.END_BLOCK ? Number(process.env.END_BLOCK) : undefined;
 
 // Generate a unique worker ID with process ID, timestamp, and random component
 const generateWorkerId = (): string => {
@@ -46,6 +50,8 @@ interface OrdinalsResource {
   contentType: string;
   metadata: any;
   indexedAt: number;
+  blockHeight?: number;
+  blockTimestamp?: number;
 }
 
 interface NonOrdinalsResource {
@@ -115,14 +121,14 @@ class OptimizedResourceAnalyzer {
     }
   }
 
-  async analyzeInscription(inscriptionId: string, inscriptionNumber: number, contentType: string, metadata: any, workerId: string): Promise<{
+  async analyzeInscription(inscriptionId: string, inscriptionNumber: number, contentType: string, metadata: any, workerId: string, preloadedInscription?: any): Promise<{
     ordinalsResource: OrdinalsResource | null;
     nonOrdinalsResource: NonOrdinalsResource | null;
     error: InscriptionError | null;
   }> {
     try {
       // Generate the proper resource ID format
-      const resourceId = await this.generateResourceIdOptimized(inscriptionId, inscriptionNumber);
+      const resourceId = await this.generateResourceIdOptimized(inscriptionId, inscriptionNumber, preloadedInscription);
 
       let ordinalsResource: OrdinalsResource | null = null;
       let nonOrdinalsResource: NonOrdinalsResource | null = null;
@@ -130,6 +136,16 @@ class OptimizedResourceAnalyzer {
       // Check if this is an Ordinals Plus resource
       if (metadata && this.isOrdinalsPlus(metadata)) {
         // This is an Ordinals Plus resource
+        const minedHeight = (preloadedInscription && typeof preloadedInscription.height === 'number')
+          ? preloadedInscription.height
+          : (preloadedInscription && typeof preloadedInscription.genesis_height === 'number'
+            ? preloadedInscription.genesis_height
+            : undefined);
+        const minedTs = (preloadedInscription && typeof preloadedInscription.timestamp === 'number')
+          ? preloadedInscription.timestamp
+          : (preloadedInscription && typeof preloadedInscription.genesis_timestamp === 'number'
+            ? preloadedInscription.genesis_timestamp
+            : undefined);
         ordinalsResource = {
           resourceId,
           inscriptionId,
@@ -137,7 +153,9 @@ class OptimizedResourceAnalyzer {
           ordinalsType: this.getOrdinalsType(metadata),
           contentType: contentType || 'application/json',
           metadata,
-          indexedAt: Date.now()
+          indexedAt: Date.now(),
+          ...(typeof minedHeight === 'number' ? { blockHeight: minedHeight } : {}),
+          ...(typeof minedTs === 'number' ? { blockTimestamp: minedTs } : {})
         };
       } else {
         // This is a non-Ordinals Plus resource
@@ -189,14 +207,20 @@ class OptimizedResourceAnalyzer {
     return 'verifiable-credential';
   }
 
-  private async generateResourceIdOptimized(inscriptionId: string, inscriptionNumber: number): Promise<string> {
+  private async generateResourceIdOptimized(inscriptionId: string, inscriptionNumber: number, preloadedInscription?: any): Promise<string> {
     try {
       // Check cache first for inscription details
-      let inscriptionDetails = this.inscriptionCache.get(inscriptionId);
+      let inscriptionDetails = preloadedInscription || this.inscriptionCache.get(inscriptionId);
       if (!inscriptionDetails) {
         inscriptionDetails = await this.provider.getInscription(inscriptionId);
         this.inscriptionCache.set(inscriptionId, {
           ...inscriptionDetails,
+          cachedAt: Date.now()
+        });
+      } else if (preloadedInscription) {
+        // Warm the cache with the supplied details
+        this.inscriptionCache.set(inscriptionId, {
+          ...preloadedInscription,
           cachedAt: Date.now()
         });
       }
@@ -446,7 +470,9 @@ class ResourceStorage {
         ordinalsType: resource.ordinalsType,
         contentType: resource.contentType,
         indexedAt: resource.indexedAt.toString(),
-        network
+        network,
+        ...(typeof resource.blockHeight === 'number' ? { blockHeight: resource.blockHeight.toString() } : {}),
+        ...(typeof resource.blockTimestamp === 'number' ? { blockTimestamp: resource.blockTimestamp.toString() } : {})
       })
       // dedup key
       .sAdd('indexed:inscriptions', resource.inscriptionId)
@@ -583,6 +609,18 @@ class ResourceStorage {
     console.log(`🔓 Released claim for worker: ${workerId}`);
   }
 
+  async clearAllClaims(): Promise<void> {
+    try {
+      const claimKeys = await this.client.keys('indexer:claim:*');
+      if (claimKeys.length > 0) {
+        await this.client.del(claimKeys);
+        console.log(`🧹 Cleared ${claimKeys.length} outstanding worker claim(s)`);
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to clear outstanding worker claims:', error);
+    }
+  }
+
   async getActiveWorkerClaims(): Promise<BatchClaim[]> {
     try {
       const claimKeys = await this.client.keys('indexer:claim:*');
@@ -663,6 +701,12 @@ class ScalableIndexerWorker {
     process.on('SIGINT', () => this.stop());
     process.on('SIGTERM', () => this.stop());
 
+    // Reverse reindex mode takes precedence when enabled
+    if (REVERSE_REINDEX) {
+      await this.runReverseReindexLoop();
+      return;
+    }
+
     if (BLOCK_TAIL_MODE) {
       await this.runTailLoop();
       return;
@@ -714,10 +758,28 @@ class ScalableIndexerWorker {
         
         // Handle batch completion - check for overshoot (all misses)
         if (results.ordinalsFound === 0 && results.nonOrdinalsFound === 0 && results.failures === BATCH_SIZE) {
-          // Likely started beyond chain tip – step back one batch and retry later
-          const backCursor = Math.max(0, batch.start - BATCH_SIZE);
-          await this.storage.setCursor(backCursor);
-          console.log(`🔄 Overshoot detected: stepping cursor back to ${backCursor} and waiting for new data...`);
+          // Likely started beyond chain tip – clear claims, reset cursor near actual tip, and retry later
+          try {
+            await this.storage.releaseWorkerClaim(this.workerId);
+          } catch (e) {
+            console.warn('⚠️ Failed to release worker claim before resetting cursor:', (e as any)?.message || e);
+          }
+          try {
+            await this.storage.clearAllClaims();
+          } catch (e) {
+            console.warn('⚠️ Failed to clear outstanding worker claims:', (e as any)?.message || e);
+          }
+          let target = Math.max(0, batch.start - BATCH_SIZE);
+          try {
+            const latestNumber = await this.getLatestInscriptionNumber();
+            if (Number.isFinite(latestNumber) && latestNumber > 0) {
+              target = Math.max(0, latestNumber - 1);
+            }
+          } catch (e) {
+            console.warn('⚠️ Could not determine latest inscription number, using backCursor heuristic');
+          }
+          await this.storage.setCursor(target);
+          console.log(`🔄 Overshoot detected: claims cleared, cursor set to ${target}. Waiting for new data...`);
           await this.sleep(POLL_INTERVAL);
           continue; // Retry loop
         }
@@ -794,7 +856,8 @@ class ScalableIndexerWorker {
               inscriptionNumber,
               inscription.content_type || 'unknown',
               metadata,
-              this.workerId
+              this.workerId,
+              inscription
             );
 
             // Store results
@@ -908,7 +971,7 @@ class ScalableIndexerWorker {
 
   // Tail loop for BLOCK_TAIL_MODE
   private async runTailLoop(): Promise<void> {
-    const BLOCK_LOOKBACK = 5;
+    const BLOCK_LOOKBACK = Number(process.env.BLOCK_LOOKBACK ?? '5');
     let latestBlock = await (this.provider as any).getLatestBlock?.();
     if (!latestBlock || typeof latestBlock.height !== 'number') {
       console.error('❌ Provider does not support latest block endpoint – cannot run tail mode');
@@ -940,6 +1003,45 @@ class ScalableIndexerWorker {
     }
   }
 
+  // Reverse reindex loop: walk blocks from tip (or START_BLOCK) down to END_BLOCK (or 0)
+  private async runReverseReindexLoop(): Promise<void> {
+    console.log('🔁 Reverse reindex mode enabled.');
+    // Determine starting height
+    let startHeight: number | undefined = START_BLOCK;
+    let startHeightNum: number;
+    if (startHeight === undefined) {
+      const latestBlock = await (this.provider as any).getLatestBlock?.();
+      if (!latestBlock || typeof latestBlock.height !== 'number') {
+        console.error('❌ Provider does not support latest block endpoint – cannot run reverse reindex');
+        this.running = false;
+        return;
+      }
+      startHeightNum = latestBlock.height as number;
+    } else {
+      startHeightNum = startHeight;
+    }
+    const endHeightNum: number = END_BLOCK !== undefined ? END_BLOCK : 0;
+    console.log(`⬇️  Reindexing blocks ${startHeightNum} → ${endHeightNum} (descending)`);
+    let processed = 0;
+    for (let h = startHeightNum; this.running && h >= endHeightNum; h--) {
+      try {
+        const block = await (this.provider as any).getBlockByHeight?.(h);
+        await this.processBlock(block, h);
+        processed++;
+        if (processed % 100 === 0) {
+          console.log(`📦 Reverse reindex progress: processed ${processed} blocks (current height ${h})`);
+          // Light pacing to avoid overwhelming the provider
+          await this.sleep(200);
+        }
+      } catch (err) {
+        console.error('❌ Reverse loop error:', (err as any)?.message || err);
+        await this.sleep(200);
+      }
+    }
+    console.log('✅ Reverse reindex completed.');
+    this.running = false;
+  }
+
   private async processBlock(block: any, height: number): Promise<void> {
     let inscriptionIds: string[] = [];
     if (block && Array.isArray(block.inscriptions)) {
@@ -966,7 +1068,8 @@ class ScalableIndexerWorker {
           inscription.number ?? -1,
           inscription.content_type || 'unknown',
           metadata,
-          this.workerId
+          this.workerId,
+          inscription
         );
         if (this.debugBlock === height) {
           console.log('[DEBUG]', {

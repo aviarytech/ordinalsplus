@@ -251,6 +251,21 @@ const DIDPage: React.FC<DIDPageProps> = ({ onResourceSelect }) => {
           </div>
         </div>
       );
+    } else if (detectedContentType === 'text/html' && inscription.contentUrl) {
+      // Render HTML content in an iframe so it can load its own assets safely
+      return (
+        <div className="mt-1">
+          <iframe
+            src={inscription.contentUrl}
+            className="w-full h-40 border border-gray-300 dark:border-gray-600 rounded"
+            sandbox="allow-scripts allow-same-origin"
+            title={`HTML content ${inscription.inscriptionId}`}
+          />
+          <div className="text-xs text-gray-500 mt-1">
+            {detectedContentType} • {inscription.inscriptionId}
+          </div>
+        </div>
+      );
     } else if (detectedContentType === 'application/json' || 
                (inscription.content && inscription.content.trim().startsWith('{') && inscription.content.trim().endsWith('}'))) {
       // Pretty print JSON content
@@ -280,7 +295,22 @@ const DIDPage: React.FC<DIDPageProps> = ({ onResourceSelect }) => {
         );
       }
     } else {
-      // Default text content display
+      // Default: if we have a URL and it's not an image/JSON, try iframe preview; otherwise show text
+      if (inscription.contentUrl && (!detectedContentType || !detectedContentType.startsWith('image/'))) {
+        return (
+          <div className="mt-1">
+            <iframe
+              src={inscription.contentUrl}
+              className="w-full h-40 border border-gray-300 dark:border-gray-600 rounded"
+              sandbox="allow-scripts allow-same-origin"
+              title={`Content ${inscription.inscriptionId}`}
+            />
+            <div className="text-xs text-gray-500 mt-1">
+              {detectedContentType || 'text/html'} • {inscription.inscriptionId}
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="mt-1">
           <div className="p-2 bg-gray-100 dark:bg-gray-600 rounded text-xs font-mono break-all max-h-20 overflow-y-auto">

@@ -69,6 +69,67 @@ class ApiService {
   }
 
   /**
+   * Get a resource inscription by its ID
+   */
+  async getResourceInscription(id: string): Promise<any> {
+    const url = `${this.baseUrl}/api/resource-inscriptions/${encodeURIComponent(id)}`;
+    const response = await fetch(url);
+    return await handleApiResponse<any>(response);
+  }
+
+  async prepareResourceInscription(id: string, network: string, recipientAddress: string, feeRate?: number): Promise<any> {
+    const url = `${this.baseUrl}/api/resource-inscriptions/${encodeURIComponent(id)}/prepare?network=${encodeURIComponent(network)}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipientAddress, ...(feeRate ? { feeRate } : {}) })
+    });
+    return await handleApiResponse<any>(response);
+  }
+
+  async acceptCommitForResourceInscription(id: string, commitTxid: string): Promise<any> {
+    const url = `${this.baseUrl}/api/resource-inscriptions/${encodeURIComponent(id)}/commit`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commitTxid })
+    });
+    return await handleApiResponse<any>(response);
+  }
+
+  async finalizeRevealForResourceInscription(id: string, revealTxid: string): Promise<any> {
+    const url = `${this.baseUrl}/api/resource-inscriptions/${encodeURIComponent(id)}/reveal`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ revealTxid })
+    });
+    return await handleApiResponse<any>(response);
+  }
+
+  /**
+   * Start a batch of resource inscriptions
+   */
+  async startBatchResourceInscriptions(networkType: string, requests: Array<{
+    parentDid: string;
+    requesterDid: string;
+    label: string;
+    resourceType: string;
+    file: { buffer: Uint8Array; type: string };
+    feeRate?: number;
+    metadata?: Record<string, any>;
+  }>): Promise<{ items: any[]; count: number }> {
+    const url = this.buildUrl('/api/resource-inscriptions/batch', networkType);
+    console.log(`[ApiService] Starting batch resource inscriptions: ${url}`);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests })
+    });
+    return await handleApiResponse<{ items: any[]; count: number }>(response);
+  }
+
+  /**
    * Get the base URL configuration
    */
   getConfig(): { baseUrl: string } {
@@ -409,7 +470,8 @@ class ApiService {
       network?: string;
     };
   }> {
-    const url = this.buildUrl(`/api/dids/${encodeURIComponent(didId)}/resolve`);
+    const networkType = this.getNetworkFromContext() || 'mainnet';
+    const url = this.buildUrl(`/api/dids/${encodeURIComponent(didId)}/resolve`, networkType);
     console.log(`[ApiService] Resolving DID: ${url}`);
     const response = await fetch(url);
     return await handleApiResponse<{
@@ -501,13 +563,13 @@ class ApiService {
    * This should be implemented based on how network context is managed in the application
    */
   private getNetworkFromContext(): string | null {
-    // This is a placeholder - implement based on your application's context management
-    // For example, you might have a NetworkContext that stores the current network
-    // or you might get it from localStorage, etc.
+    // Prefer the NetworkContext key, fall back to legacy key
     try {
-      // Try to get from localStorage as a fallback
-      const storedNetwork = localStorage.getItem('currentNetwork');
-      return storedNetwork || 'mainnet';
+      const ctxKey = localStorage.getItem('ordinalsplus_selected_network_id'); // e.g., 'signet' | 'mainnet' | 'testnet'
+      if (ctxKey) return ctxKey;
+      const legacyKey = localStorage.getItem('currentNetwork');
+      if (legacyKey) return legacyKey;
+      return 'mainnet';
     } catch (e) {
       console.warn('[ApiService] Could not get network from context:', e);
       return 'mainnet';
@@ -658,6 +720,17 @@ class ApiService {
     const response = await fetch(url);
     const result = await handleApiResponse<{ satNumber: number }>(response);
     return result.satNumber;
+  }
+
+  /**
+   * Get inscriptions for an address (owner_output locations)
+   */
+  async getAddressInscriptions(networkType: string, address: string): Promise<Array<{ id: string; owner_output: string }>> {
+    const url = this.buildUrl(`/api/addresses/${encodeURIComponent(address)}/inscriptions`, networkType);
+    console.log(`[ApiService] Getting address inscriptions: ${url}`);
+    const response = await fetch(url);
+    const result = await handleApiResponse<Array<{ id: string; owner_output: string }>>(response);
+    return result;
   }
 
   /**

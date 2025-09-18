@@ -15,7 +15,7 @@
     "formik": "^2.4.6",
     "lucide-react": "^0.216.0",
     "multiformats": "^13.3.3",
-    "ordinalsplus": "^1.2.1",
+    "ordinalsplus": "file:../ordinalsplus",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-error-boundary": "^6.0.0",

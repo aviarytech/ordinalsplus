@@ -7,6 +7,7 @@ import ApiServiceProvider from '../services/ApiServiceProvider';
 import { LinkedResource } from 'ordinalsplus';
 import { VerificationComponent } from './verification';
 import { VerificationService } from '../services/verificationService';
+import { useNetwork } from '../context/NetworkContext';
 // Component-specific interface that matches what we're actually using
 interface LinkedResourceViewProps {
   resource: LinkedResource; // Use the project's LinkedResource type
@@ -29,6 +30,8 @@ const LinkedResourceViewer: React.FC<LinkedResourceViewProps> = ({
     const apiServiceInstance = ApiServiceProvider.getInstance();
     return new VerificationService(apiServiceInstance, { enableDebugLogging: false });
   });
+
+  const { network: activeNetwork } = useNetwork();
 
   const isJsonContent = resource.contentType?.includes('json') || false;
 
@@ -54,7 +57,8 @@ const LinkedResourceViewer: React.FC<LinkedResourceViewProps> = ({
     const fetchTextContent = async () => {
       if (
         resource.inscriptionId && 
-        (resource.contentType?.includes('text/') || 
+        // For generic text but NOT HTML, fetch and show as text
+        (resource.contentType?.includes('text/') && resource.contentType !== 'text/html' || 
          resource.contentType === 'unknown' ||
          resource.contentType === '')
       ) {
@@ -81,17 +85,19 @@ const LinkedResourceViewer: React.FC<LinkedResourceViewProps> = ({
     return `https://ordiscan.com/inscription/${resource.inscriptionId}`;
   };
 
-  // Format a DID using sat number and inscription index
+  // Format a DID using sat number and inscription index and prefix by network when applicable
   const formatDid = (): string => {
     if (resource.sat) {
       // Extract inscription index from inscriptionId
       const match = resource.inscriptionId?.match(/i(\d+)$/);
       const index = match && match[1] ? match[1] : '0';
-      return `did:btco:${resource.sat}/${index}`;
+      const netPrefix = activeNetwork?.type === 'testnet' ? 'test:' : activeNetwork?.type === 'signet' ? 'sig:' : '';
+      return `did:btco:${netPrefix}${resource.sat}/${index}`;
     }
     // For backwards compatibility only - log warning
     console.warn('Resource missing sat number, cannot create proper DID format');
-    return resource.didReference || `did:btco:${resource.inscriptionId}`;
+    const netPrefix = activeNetwork?.type === 'testnet' ? 'test:' : activeNetwork?.type === 'signet' ? 'sig:' : '';
+    return resource.didReference || `did:btco:${netPrefix}${resource.inscriptionId}`;
   };
 
   const renderResourceContent = () => {
@@ -104,7 +110,23 @@ const LinkedResourceViewer: React.FC<LinkedResourceViewProps> = ({
       );
     }
 
-    // Add check for fetched text content
+    // HTML content should be rendered via iframe
+    if (resource.contentType === 'text/html' && resource.content_url) {
+      return (
+        <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+          <div className="relative h-96 bg-white dark:bg-gray-900">
+            <iframe
+              src={resource.content_url}
+              className="w-full h-full"
+              sandbox="allow-scripts allow-same-origin"
+              title={`HTML content ${resource.inscriptionId}`}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    // Add check for fetched text content (non-HTML)
     if (fetchedText && !textError && !textLoading) {
       return (
         <div className="bg-white dark:bg-gray-800 p-4 rounded-md overflow-auto max-h-[30rem]">
@@ -127,33 +149,34 @@ const LinkedResourceViewer: React.FC<LinkedResourceViewProps> = ({
 
     if (resource.contentType?.includes('image')) {      
       return (
-        <div className={`relative flex flex-col items-center justify-center ${expanded ? 'py-4' : 'h-40'}`}>
-          {!imageLoaded && !imageError && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 animate-pulse">
-              <span className="text-sm text-gray-500">Loading...</span>
-            </div>
-          )}
-          {imageError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-700">
-              <span className="text-sm text-gray-500 dark:text-gray-400">Image failed to load</span>
-            </div>
-          )}
-          
-          <img 
-            src={resource.content_url} 
-            alt={`Resource ${resource.inscriptionId}`}
-            className={`max-h-60 object-contain rounded-md ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity ${expanded ? 'max-w-md' : 'max-w-full'}`}
-            onLoad={() => setImageLoaded(true)}
-            onError={() => {
-              console.error(`Failed to load image for inscription ${resource.inscriptionId}`);
-              setImageError(true);
-            }}
-          />
+        <div className={`relative ${expanded ? 'w-full' : 'w-full'} ${expanded ? 'py-4' : ''}`}>
+          <div className={`${expanded ? 'max-w-md mx-auto' : ''} relative w-full ${expanded ? 'pt-[100%]' : 'pt-[100%]'} bg-gray-50 dark:bg-gray-700 rounded-md`}>
+            {!imageLoaded && !imageError && (
+              <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                <span className="text-sm text-gray-500">Loading...</span>
+              </div>
+            )}
+            {imageError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-sm text-gray-500 dark:text-gray-400">Image failed to load</span>
+              </div>
+            )}
+            <img 
+              src={resource.content_url} 
+              alt={`Resource ${resource.inscriptionId}`}
+              className={`absolute inset-0 w-full h-full object-contain rounded-md ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity`}
+              onLoad={() => setImageLoaded(true)}
+              onError={() => {
+                console.error(`Failed to load image for inscription ${resource.inscriptionId}`);
+                setImageError(true);
+              }}
+            />
+          </div>
         </div>
       );
     }
 
-    if (resource.contentType?.includes('text')) {
+    if (resource.contentType?.includes('text') && resource.contentType !== 'text/html') {
       return (
         <div className="bg-white dark:bg-gray-800 p-4 rounded-md overflow-auto max-h-[30rem]">
           <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800 dark:text-gray-200 break-all">

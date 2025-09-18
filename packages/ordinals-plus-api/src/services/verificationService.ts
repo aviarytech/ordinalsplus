@@ -6,6 +6,8 @@
  */
 import { VerificationStatus, type VerificationResult, type IssuerInfo } from '../types/verification';
 import { ApiService } from './apiService';
+import { DIDService } from './didService';
+import { VCService } from './vcService';
 import { logger } from '../utils/logger';
 import { BtcoDidResolver } from 'ordinalsplus';
 import { env } from '../config/envConfig';
@@ -57,6 +59,8 @@ export class VerificationService {
   private issuerCache: Map<string, IssuerCacheEntry> = new Map();
   private config: VerificationServiceConfig;
   private didResolver: BtcoDidResolver;
+  private didService: DIDService;
+  private vcService: VCService;
 
   /**
    * Create a new verification service
@@ -73,6 +77,13 @@ export class VerificationService {
     
     // Initialize DID resolver with server-side capabilities
     this.didResolver = new BtcoDidResolver();
+
+    // Initialize DIDService and VCService for cryptographic VC verification
+    this.didService = new DIDService();
+    this.vcService = new VCService(this.didService, {
+      // Use default provider config; can be overridden via env or future config
+      enableLogging: this.config.enableDebugLogging === true
+    });
   }
 
   /**
@@ -174,8 +185,20 @@ export class VerificationService {
     }
 
     try {
-      // Basic verification without external dependencies
-      const isValid = await this.basicVerifyCredential(credential);
+      // First, perform DID/document structure sanity check
+      const basicValid = await this.basicVerifyCredential(credential);
+      if (!basicValid) {
+        const invalidResult: VerificationResult = {
+          status: VerificationStatus.INVALID,
+          message: 'Credential structure or issuer DID resolution failed',
+          credential
+        };
+        this.cacheVerificationResult(cacheKey, invalidResult);
+        return invalidResult;
+      }
+
+      // Perform cryptographic signature verification using VCService
+      const isValid = await this.vcService.verifyCredential(credential);
       
       let result: VerificationResult;
       
@@ -197,7 +220,7 @@ export class VerificationService {
       } else {
         result = {
           status: VerificationStatus.INVALID,
-          message: 'Credential verification failed',
+          message: 'Credential signature verification failed',
           credential
         };
       }
@@ -241,6 +264,7 @@ export class VerificationService {
         return false;
       }
       
+      console.log('issuerDid', issuerDid);
       // Resolve the DID to verify it exists and is valid
       try {
         const didResolution = await this.didResolver.resolve(issuerDid);

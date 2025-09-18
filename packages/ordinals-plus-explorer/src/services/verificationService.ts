@@ -166,6 +166,7 @@ export class VerificationService implements IVerificationService {
       }
 
       // Verify the credential
+      this.logDebug(`Verifying credential: ${JSON.stringify(metadata)}`);
       const result = await this.verifyCredential(metadata);
       this.cacheResult(cacheKey, result);
       return result;

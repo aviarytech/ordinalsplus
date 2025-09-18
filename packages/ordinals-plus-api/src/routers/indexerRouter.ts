@@ -12,18 +12,17 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
     try {
       const page = parseInt(query.page as string) || 1;
       const limit = Math.min(parseInt(query.limit as string) || 50, 100); // Max 100 per page
+      const sort = (query.sort as string) === 'asc' ? 'asc' : 'desc';
+      const networkFilter = typeof query.network === 'string' ? query.network.toLowerCase() : undefined; // 'mainnet' | 'signet' | 'testnet'
       
       // Calculate pagination
       const totalCount = await resourceManager.getOrdinalsCount();
       const totalPages = Math.ceil(totalCount / limit);
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit - 1;
-      
-      // Get paginated inscriptions with complete resource data in reverse order
-      const inscriptionData = await resourceManager.getOrdinalsWithData(startIndex, endIndex);
+      // Load ALL items to enable global sort by mined block, then paginate
+      const allInscriptionData = await resourceManager.getOrdinalsWithData(0, totalCount, sort as any);
       
       // Transform to API response format expected by the UI
-      const inscriptions = inscriptionData.map((resource: any) => ({
+      const baseInscriptions = allInscriptionData.map((resource: any) => ({
         inscriptionId: resource.inscriptionId,
         inscriptionNumber: resource.inscriptionNumber,
         resourceId: resource.resourceId, // This is the DID path (did:btco:123/0 or did:btco:sig:123/0)
@@ -36,26 +35,79 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
         inscriptionUrl: `${ORD_SERVER_URL}/inscription/${resource.inscriptionId}`,
         metadataUrl: `${ORD_SERVER_URL}/r/metadata/${resource.inscriptionId}`
       }));
+
+      // Enrich with block info (height/time) for mined data (use mined timestamp for ordering correctness)
+      let inscriptions = await Promise.all(
+        baseInscriptions.map(async (item) => {
+          try {
+            const resp = await fetch(`${ORD_SERVER_URL}/inscription/${item.inscriptionId}`, {
+              headers: { 'Accept': 'application/json' }
+            });
+            if (!resp.ok) throw new Error(`ord server returned ${resp.status}`);
+            const info: any = await resp.json();
+            // Prefer mined info
+            const height = (info && typeof info.height === 'number' ? info.height : (typeof info?.genesis_height === 'number' ? info.genesis_height : undefined)) as number | undefined;
+            const tsSec = (info && typeof info.timestamp === 'number' ? info.timestamp : (typeof info?.genesis_timestamp === 'number' ? info.genesis_timestamp : undefined)) as number | undefined;
+            const iso = typeof tsSec === 'number' ? new Date(tsSec * 1000).toISOString() : null;
+            return { ...item, blockHeight: typeof height === 'number' ? height : null, blockTime: iso, blockTimestampSec: tsSec } as any;
+          } catch {
+            return { ...item, blockHeight: null, blockTime: null, blockTimestampSec: undefined } as any;
+          }
+        })
+      );
+
+      // Final ordering strictly by mined block height (global)
+      inscriptions = inscriptions.sort((a: any, b: any) => {
+        const ha = typeof a.blockHeight === 'number' ? a.blockHeight : null;
+        const hb = typeof b.blockHeight === 'number' ? b.blockHeight : null;
+        if (ha !== null && hb !== null) {
+          return sort === 'asc' ? ha - hb : hb - ha;
+        }
+        // Push unknown heights to the end regardless of sort
+        if (ha !== null && hb === null) return -1;
+        if (ha === null && hb !== null) return 1;
+        return 0;
+      });
+      
+      // Paginate after global sort
+      const start = (page - 1) * limit;
+      const end = Math.min(start + limit, inscriptions.length);
+      const pageInscriptions = inscriptions.slice(start, end);
       
       // Get indexer stats
       const stats = await resourceManager.getStats();
+      // Try to get current block height from ORD server if available
+      let blockHeight: number | null = null;
+      try {
+        const resp = await fetch(`${ORD_SERVER_URL}/blockheight`);
+        if (resp.ok) {
+          const txt = await resp.text();
+          const h = parseInt(txt, 10);
+          if (!Number.isNaN(h)) blockHeight = h;
+        }
+      } catch (_) {
+        // ignore
+      }
       
       return {
         success: true,
         data: {
-          inscriptions: inscriptions,
+          inscriptions: pageInscriptions,
           pagination: {
             page,
             limit,
-            total: totalCount,
-            totalPages: totalPages,
+            // Report counts based on filtered view when a filter is applied
+            total: (networkFilter ? allInscriptionData.length : totalCount),
+            totalPages: Math.ceil((networkFilter ? allInscriptionData.length : totalCount) / limit),
             hasNext: page < totalPages,
             hasPrev: page > 1
           },
           stats: {
             totalOrdinalsPlus: totalCount,
             lastUpdated: stats?.lastUpdated ? new Date(stats.lastUpdated).toISOString() : null,
-            indexerVersion: process.env.npm_package_version || 'unknown'
+            indexerVersion: process.env.npm_package_version || 'unknown',
+            cursor: stats?.cursor ?? null,
+            blockHeight
           }
         }
       };
@@ -69,11 +121,13 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
   }, {
     query: t.Object({
       page: t.Optional(t.String()),
-      limit: t.Optional(t.String())
+      limit: t.Optional(t.String()),
+      sort: t.Optional(t.String()),
+      network: t.Optional(t.String())
     }),
     detail: {
       summary: 'Get Ordinals Plus Inscriptions',
-      description: 'Retrieve all Ordinals Plus inscriptions from the indexer cache in reverse chronological order (newest first)',
+      description: 'Retrieve all Ordinals Plus inscriptions from the indexer cache. Use sort=desc (default) for reverse chronological, sort=asc for chronological order.',
       tags: ['Indexer']
     }
   })
@@ -86,6 +140,18 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
     try {
       const stats = await resourceManager.getStats();
       const totalCount = await resourceManager.getOrdinalsCount();
+      // Try to get current block height from ORD server if available
+      let blockHeight: number | null = null;
+      try {
+        const resp = await fetch(`${ORD_SERVER_URL}/blockheight`);
+        if (resp.ok) {
+          const txt = await resp.text();
+          const h = parseInt(txt, 10);
+          if (!Number.isNaN(h)) blockHeight = h;
+        }
+      } catch (_) {
+        // ignore
+      }
       
       return {
         success: true,
@@ -95,7 +161,9 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
           ordinalsFound: stats?.ordinalsFound || 0,
           errors: stats?.errors || 0,
           lastUpdated: stats?.lastUpdated ? new Date(stats.lastUpdated).toISOString() : null,
-          indexerVersion: process.env.npm_package_version || 'unknown'
+          indexerVersion: process.env.npm_package_version || 'unknown',
+          cursor: stats?.cursor ?? null,
+          blockHeight
         }
       };
     } catch (error) {

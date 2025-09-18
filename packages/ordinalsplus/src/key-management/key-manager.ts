@@ -535,6 +535,7 @@ export class KeyManager {
         }
         case 'secp256k1': {
           const secp = await import('@noble/secp256k1');
+          console.log('verifyWithKeyPair', signature, data, keyPair.publicKey);
           return secp.verify(signature, data, keyPair.publicKey);
         }
         case 'schnorr': {

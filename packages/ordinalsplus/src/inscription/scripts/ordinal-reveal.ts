@@ -8,6 +8,7 @@
 import * as btc from '@scure/btc-signer';
 import * as ordinals from 'micro-ordinals';
 import { utf8 } from '@scure/base';
+import { schnorr } from '@noble/curves/secp256k1';
 import { BitcoinNetwork } from '../../types';
 import { InscriptionContent } from '../content/mime-handling';
 import { P2TRAddressInfo, P2TRKeyPair } from '../p2tr/key-utils';
@@ -52,6 +53,22 @@ export interface PreparedInscription {
 }
 
 /**
+ * Complete information for a prepared batch inscription (multiple inscriptions in one reveal)
+ */
+export interface PreparedBatchInscription {
+  /** The P2TR address details for the commit transaction */
+  commitAddress: P2TRAddressInfo;
+  /** The inscriptions to embed in a single witness */
+  inscriptions: OrdinalInscription[];
+  /** The public key used for the reveal transaction */
+  revealPublicKey: Uint8Array;
+  /** The private key for the reveal transaction (if generated internally) */
+  revealPrivateKey?: Uint8Array;
+  /** The inscription script details */
+  inscriptionScript: InscriptionScriptInfo;
+}
+
+/**
  * Converts InscriptionContent to the OrdinalInscription format used by micro-ordinals
  * 
  * @param content - The prepared inscription content
@@ -73,10 +90,17 @@ export function createOrdinalInscription(content: InscriptionContent): OrdinalIn
     tags.metadata = content.metadata;
   }
   
-  return {
+  const inscription: ordinals.Inscription = {
     tags,
     body: content.content
   };
+
+  // If a pointer was provided, include it to target a specific sat offset
+  if (typeof content.pointer !== 'undefined') {
+    (inscription.tags as any).pointer = content.pointer;
+  }
+
+  return inscription as OrdinalInscription;
 }
 
 /**
@@ -97,6 +121,22 @@ export function generateInscriptionScript(
   
   // Generate the script tree using micro-ordinals
   return ordinals.p2tr_ord_reveal(revealPublicKey, [inscription]);
+}
+
+/**
+ * Generates the inscription script for multiple inscriptions using micro-ordinals
+ */
+export function generateBatchInscriptionScript(
+  revealPublicKey: Uint8Array,
+  inscriptions: OrdinalInscription[]
+): any {
+  if (revealPublicKey.length !== 32) {
+    throw new Error(`Invalid x-only reveal public key length: ${revealPublicKey.length}`);
+  }
+  if (!Array.isArray(inscriptions) || inscriptions.length === 0) {
+    throw new Error('At least one inscription is required');
+  }
+  return ordinals.p2tr_ord_reveal(revealPublicKey, inscriptions);
 }
 
 /**
@@ -164,7 +204,6 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
     
     console.log(`[prepareInscription] Generated private key: ${Buffer.from(privateKey).toString('hex')}`);
     
-    const { schnorr } = require('@noble/curves/secp256k1');
     const fullPubKey = schnorr.getPublicKey(privateKey);
     console.log(`[prepareInscription] Generated full public key: ${Buffer.from(fullPubKey).toString('hex')}`);
     
@@ -212,7 +251,6 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
     // If we still somehow have a zero key, generate a new random one as a last resort
     const emergencyKey = new Uint8Array(32);
     crypto.getRandomValues(emergencyKey);
-    const { schnorr } = require('@noble/curves/secp256k1');
     const emergencyPubKey = schnorr.getPublicKey(emergencyKey);
     internalKey = emergencyPubKey.length === 33 ? emergencyPubKey.slice(1) : emergencyPubKey;
     console.log(`[prepareInscription] EMERGENCY: Generated new internal key: ${Buffer.from(internalKey).toString('hex')}`);
@@ -238,10 +276,7 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
   const scriptInfo = extractScriptInfoFromP2TR(p2tr);
   
   // Create script from output
-  const script = p2tr.script || btc.OutScript.encode({
-    type: 'tr',
-    pubkey: internalKey
-  });
+  const script = p2tr.script || btc.OutScript.encode({ type: 'tr', pubkey: internalKey });
   
   // Final verification before returning
   console.log(`[prepareInscription] Commit address: ${p2tr.address}`);
@@ -261,3 +296,92 @@ export function prepareInscription(params: PrepareInscriptionParams): PreparedIn
     inscriptionScript: scriptInfo
   };
 } 
+
+/**
+ * Parameters for preparing a batch inscription (single commit/reveal with many inscriptions)
+ */
+export interface PrepareBatchInscriptionParams {
+  /** The contents to inscribe */
+  contents: InscriptionContent[];
+  /** The public key for the reveal transaction (if providing your own) */
+  revealPublicKey?: Uint8Array;
+  /** The Bitcoin network to use */
+  network?: BitcoinNetwork;
+  /** The recovery public key to use for the commit address (optional) */
+  recoveryPublicKey?: Uint8Array;
+}
+
+/**
+ * Prepares a batch inscription by generating a single script that includes multiple inscriptions
+ */
+export function prepareBatchInscription(params: PrepareBatchInscriptionParams): PreparedBatchInscription {
+  const {
+    contents,
+    revealPublicKey,
+    network = 'mainnet',
+    recoveryPublicKey
+  } = params;
+
+  if (!Array.isArray(contents) || contents.length === 0) {
+    throw new Error('contents must include at least one InscriptionContent');
+  }
+
+  // Convert contents to OrdinalInscription[]
+  const ordinalInscriptions = contents.map((c) => createOrdinalInscription(c));
+
+  // Generate a key pair if not provided
+  let pubKey: Uint8Array;
+  let privKey: Uint8Array | undefined;
+
+  if (!revealPublicKey) {
+    const privateKey = new Uint8Array(32);
+    crypto.getRandomValues(privateKey);
+    const fullPubKey = schnorr.getPublicKey(privateKey);
+    pubKey = fullPubKey.length === 33 ? fullPubKey.slice(1) : fullPubKey;
+    privKey = privateKey;
+  } else {
+    pubKey = revealPublicKey;
+  }
+
+  // Build script tree for all inscriptions
+  const scriptTree = generateBatchInscriptionScript(pubKey, ordinalInscriptions);
+
+  // Choose internal key
+  let internalKey: Uint8Array;
+  if (recoveryPublicKey && !recoveryPublicKey.every((b) => b === 0)) {
+    internalKey = recoveryPublicKey;
+  } else {
+    internalKey = pubKey;
+  }
+
+  const btcNetwork = getScureNetwork(network);
+  const p2tr = btc.p2tr(
+    internalKey,
+    scriptTree,
+    btcNetwork,
+    false,
+    [ordinals.OutOrdinalReveal]
+  );
+
+  if (!p2tr.address) {
+    throw new Error('Failed to create P2TR address for batch commit transaction');
+  }
+
+  const scriptInfo = extractScriptInfoFromP2TR(p2tr);
+  const script = p2tr.script || btc.OutScript.encode({
+    type: 'tr',
+    pubkey: internalKey
+  });
+
+  return {
+    commitAddress: {
+      address: p2tr.address,
+      script,
+      internalKey
+    },
+    inscriptions: ordinalInscriptions,
+    revealPublicKey: pubKey,
+    revealPrivateKey: privKey,
+    inscriptionScript: scriptInfo
+  };
+}

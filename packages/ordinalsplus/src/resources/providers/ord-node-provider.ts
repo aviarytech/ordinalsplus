@@ -47,6 +47,27 @@ interface OrdNodeFullInscriptionResponse {
     content_type?: string;
 }
 
+interface OrdNodeAddressResponse {
+    outputs?: string[];
+    inscriptions?: string[];
+    sat_balance?: number;
+    runes_balances?: any;
+}
+
+interface OrdNodeOutputResponse {
+    address: string;
+    confirmations: number;
+    indexed: boolean;
+    inscriptions: string[];
+    outpoint: string;
+    runes: any[];
+    sat_ranges: number[][] | null;
+    script_pubkey: string;
+    spent: boolean;
+    transaction: string;
+    value: number;
+}
+
 interface OrdNodeBlockResponse {
     height: number;
     hash: string;
@@ -134,25 +155,61 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async getSatNumber(outpoint: string): Promise<number> {
-        const response = await this.fetchApi<{
-            address: string;
-            confirmations: number;
-            indexed: boolean;
-            inscriptions: string[];
-            outpoint: string;
-            runes: any[];
-            sat_ranges: number[][] | null;
-            script_pubkey: string;
-            spent: boolean;
-            transaction: string;
-            value: number;
-        }>(`/output/${outpoint}`);
-        if (!response.sat_ranges || response.sat_ranges.length === 0 || response.sat_ranges[0].length === 0) {
-            throw new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No sat ranges found for output ${outpoint}`);
+        const endpoints = [
+            `/output/${outpoint}`,   // ord mainline
+            `/outputs/${outpoint}`   // some forks use plural
+        ];
+        let lastError: unknown = null;
+        for (const ep of endpoints) {
+            try {
+                const response = await this.fetchApi<{
+                    address: string;
+                    confirmations: number;
+                    indexed: boolean;
+                    inscriptions: string[];
+                    outpoint: string;
+                    runes: any[];
+                    sat_ranges: number[][] | null;
+                    script_pubkey: string;
+                    spent: boolean;
+                    transaction: string;
+                    value: number;
+                }>(ep);
+                if (response?.sat_ranges && response.sat_ranges.length && response.sat_ranges[0].length) {
+                    return response.sat_ranges[0][0];
+                }
+                lastError = new Error(`${ERROR_CODES.INVALID_RESOURCE_ID}: No sat ranges found for output ${outpoint} at ${ep}`);
+            } catch (e) {
+                lastError = e;
+                continue;
+            }
         }
-        
-        // Return the first number from the first range (ranges are [inclusive, exclusive])
-        return response.sat_ranges[0][0];
+        throw (lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown error fetching sat number')));
+    }
+
+    /**
+     * Check whether a given outpoint currently contains any inscriptions
+     */
+    async hasInscriptionInOutput(outpoint: string): Promise<boolean> {
+        const endpoints = [
+            `/output/${outpoint}`,
+            `/outputs/${outpoint}`
+        ];
+        for (const ep of endpoints) {
+            try {
+                const response = await this.fetchApi<any>(ep);
+                if (Array.isArray(response?.inscriptions)) {
+                    return response.inscriptions.length > 0;
+                }
+                if (Array.isArray(response?.inscription_ids)) {
+                    return response.inscription_ids.length > 0;
+                }
+            } catch {
+                // try next endpoint
+                continue;
+            }
+        }
+        return false;
     }
 
     async getMetadata(inscriptionId: string): Promise<any> {
@@ -360,19 +417,16 @@ export class OrdNodeProvider implements ResourceProvider {
             return [];
         }
 
-        const idsEndpoint = `/address/${address}/inscription_ids`;
+        // Use consolidated /address endpoint (requires ord with --index-addresses)
+        const addressEndpoint = `/address/${address}`;
         let inscriptionIds: string[] = [];
-
         try {
-            const idResponse = await this.fetchApi<{ ids: string[] }>(idsEndpoint);
-            if (idResponse?.ids && Array.isArray(idResponse.ids)) {
-                inscriptionIds = idResponse.ids;
-            } else {
-                console.warn(`[OrdNodeProvider] No inscription IDs found or unexpected format for address ${address} at ${idsEndpoint}.`);
-                return [];
+            const addrResponse = await this.fetchApi<OrdNodeAddressResponse>(addressEndpoint);
+            if (addrResponse && Array.isArray(addrResponse.inscriptions)) {
+                inscriptionIds = addrResponse.inscriptions;
             }
         } catch (error) {
-            console.error(`[OrdNodeProvider] Error fetching inscription IDs for address ${address} from ${idsEndpoint}:`, error);
+            console.error(`[OrdNodeProvider] Error fetching address summary for ${address} at ${addressEndpoint}:`, error);
             return [];
         }
 
@@ -494,6 +548,35 @@ export class OrdNodeProvider implements ResourceProvider {
             content_type: response.data.content_type,
             content_url: `${this.nodeUrl}/content/${response.data.id}`
         };
+    }
+
+    async getAddressOutputs(address: string): Promise<string[]> {
+        if (!address) return [];
+        const resp = await this.fetchApi<OrdNodeAddressResponse>(`/address/${address}`);
+        return Array.isArray(resp?.outputs) ? resp.outputs : [];
+    }
+
+    async getOutputDetails(outpoint: string): Promise<{ value: number; script_pubkey: string; spent: boolean; inscriptions: string[] }> {
+        const endpoints = [
+            `/output/${outpoint}`,
+            `/outputs/${outpoint}`
+        ];
+        let lastError: unknown = null;
+        for (const ep of endpoints) {
+            try {
+                const response = await this.fetchApi<OrdNodeOutputResponse>(ep);
+                return {
+                    value: response.value,
+                    script_pubkey: response.script_pubkey,
+                    spent: !!response.spent,
+                    inscriptions: Array.isArray(response.inscriptions) ? response.inscriptions : []
+                };
+            } catch (e) {
+                lastError = e;
+                continue;
+            }
+        }
+        throw (lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown error fetching output details')));
     }
 
     /**

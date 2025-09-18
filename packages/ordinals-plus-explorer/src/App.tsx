@@ -16,7 +16,9 @@ import { WalletProvider } from './context/WalletContext';
 import { ApiProvider } from './context/ApiContext';
 import { ToastProvider } from './contexts/ToastContext';
 import ErrorBoundary from './components/ui/ErrorBoundary';
+import IndexerStatsBar from './components/IndexerStatsBar';
 import './index.css';
+import BatchInscriptionPage from './pages/BatchInscriptionPage';
 
 function App() {
   return (
@@ -44,14 +46,8 @@ function App() {
                             >
                               Explorer
                             </Link>
-                            <Link
-                              to="/create"
-                              className="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
-                            >
-                              Create
-                            </Link>
-
-
+                            <Link to="/create" className="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">Create</Link>
+                            <Link to="/batch" className="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors">Batch</Link>
                             <Link
                               to="/settings"
                               className="border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors"
@@ -64,6 +60,11 @@ function App() {
                     </div>
                   </nav>
 
+                  {/* Stats Bar */}
+                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-3">
+                    <IndexerStatsBar />
+                  </div>
+
                   {/* Main Content */}
                   <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
                     <Routes>
@@ -74,6 +75,7 @@ function App() {
                       <Route path="/linked-resources" element={<LinkedResourcesPage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/create" element={<CreatePage />} />
+                      <Route path="/batch" element={<BatchInscriptionPage />} />
                       <Route path="/create-collection" element={<CreateCollectionPage />} />
                       <Route path="/collections" element={<CollectionsListPage />} />
                       <Route path="/collections/:collectionId" element={<CollectionDetailPage />} />

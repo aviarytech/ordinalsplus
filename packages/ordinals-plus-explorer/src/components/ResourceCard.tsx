@@ -82,13 +82,26 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
       );
     }
     
-    // For text content we fetched successfully, show a preview
-    if (previewText) {
+    // If HTML content, use iframe preview
+    if (resource.contentType.includes('text/html') && resource.content_url) {
+      return (
+        <div className="relative w-full pt-[100%] border-t border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-700">
+          <iframe
+            src={resource.content_url}
+            title={`Preview ${resource.id}`}
+            className="absolute inset-0 w-full h-full"
+            sandbox="allow-scripts allow-same-origin"
+          />
+        </div>
+      );
+    }
+
+    // For text content we fetched successfully, show a preview snippet
+    if (previewText && resource.contentType !== 'text/html') {
       const previewLength = 100;
       const displayText = previewText.length > previewLength
         ? previewText.substring(0, previewLength) + '...'
         : previewText;
-        
       return (
         <div className="p-2 text-sm font-mono overflow-hidden">
           {displayText}
@@ -99,17 +112,18 @@ const ResourceCard: React.FC<ResourceCardProps> = ({ resource, onClick, isSelect
     // For image content
     if (resource.contentType?.startsWith('image/')) {
       return resource.content_url ? (
-        <div className="bg-gray-100 dark:bg-gray-800 h-16 flex items-center justify-center">
+        <div className="relative w-full pt-[100%] bg-gray-100 dark:bg-gray-800">
           <img 
             src={resource.content_url} 
             alt="Resource preview" 
-            className="max-h-16 max-w-full object-contain"
+            className="absolute inset-0 w-full h-full object-contain"
             onError={(e) => {
               e.currentTarget.style.display = 'none';
-              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              const placeholder = e.currentTarget.nextElementSibling as HTMLElement | null;
+              if (placeholder) placeholder.classList.remove('hidden');
             }}
           />
-          <span className="hidden text-xs text-gray-500">Image not available</span>
+          <span className="hidden absolute inset-0 flex items-center justify-center text-xs text-gray-500">Image not available</span>
         </div>
       ) : (
         <div className="p-2 text-sm text-gray-500 dark:text-gray-400">

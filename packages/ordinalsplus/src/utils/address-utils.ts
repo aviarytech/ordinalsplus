@@ -1,7 +1,8 @@
-import { Utxo } from '../types';
+import type { Utxo } from '../types';
 // --- Import ResourceProvider interface and location type --- 
-import { ResourceProvider, InscriptionRefWithLocation } from '../resources/providers/types';
+import { ResourceProvider } from '../resources/providers/types';
 // Removed direct provider imports
+import { fetchWithTimeout } from './fetch-utils';
 
 /**
  * Fetches UTXOs, including scriptPubKey, for a given Bitcoin address,
@@ -25,99 +26,68 @@ export async function getAddressUtxos(
         // Basic check to ensure a valid provider with the required method is passed
         throw new Error('A valid ResourceProvider instance with getInscriptionLocationsByAddress method is required.');
     }
-
-    // --- Remove Ordiscan API Key Check and direct instantiation --- 
-    /*
-    const ordiscanApiKey = process.env.ORDISCAN_API_KEY;
-    if (!ordiscanApiKey) { ... }
-    const ordiscanOptions: OrdiscanProviderOptions = { apiKey: ordiscanApiKey };
-    const ordiscanProvider = new OrdiscanProvider(ordiscanOptions);
-    */
-
-    // --- Use passed-in provider --- 
-    const baseMempoolUrl = network === 'testnet'
-        ? 'https://mempool.space/testnet/api'
-        : network === 'signet'
-            ? 'https://mempool.space/signet/api'
-            : 'https://mempool.space/api';
-    const utxoListUrl = `${baseMempoolUrl}/address/${address}/utxo`;
-
-    console.log(`[getAddressUtxos] Fetching base UTXO list from: ${utxoListUrl}`);
-    console.log(`[getAddressUtxos] Fetching ordinal locations using provided ResourceProvider for address ${address}...`);
+    console.log(`[getAddressUtxos] Fetching outputs for address ${address} on ${network}...`);
 
     try {
-        // --- Fetch Ordinal Locations (Provider) and UTXOs (Mempool) in Parallel ---
-        const [utxoResponse, inscriptionLocationsResult] = await Promise.all([
-            fetch(utxoListUrl),
-            provider.getInscriptionLocationsByAddress(address) // Use the passed-in provider
-        ]);
-
-        // 1. Process Ordinal Locations from Provider
-        const ordinalLocations = new Set<string>();
-        console.log(`[getAddressUtxos] Received ${inscriptionLocationsResult.length} inscription locations from provider.`);
-        inscriptionLocationsResult.forEach(inscriptionRef => {
-            ordinalLocations.add(inscriptionRef.location);
-        });
-        console.log(`[getAddressUtxos] Identified ${ordinalLocations.size} unique ordinal locations.`);
-
-        // 2. Process Basic UTXO list from Mempool
-        if (!utxoResponse.ok) {
-            let errorBody = '';
-            try { errorBody = await utxoResponse.text(); } catch {}
-            throw new Error(`Mempool API error (UTXO list) ${utxoResponse.status}: ${errorBody || utxoResponse.statusText}`);
+        // Try provider first (Ord node with address index)
+        let outputs: string[] = [];
+        try {
+            outputs = await provider.getAddressOutputs(address);
+        } catch (primaryErr) {
+            console.warn(`[getAddressUtxos] provider.getAddressOutputs failed, attempting Esplora fallback:`, primaryErr);
         }
-        const basicUtxos = await utxoResponse.json() as { txid: string; vout: number; value: number; status: any }[];
 
-        if (!basicUtxos || basicUtxos.length === 0) {
-            console.log(`[getAddressUtxos] No basic UTXOs found for address ${address} on ${network}.`);
+        // Fallback: use Esplora to enumerate address UTXOs when Ord node lacks --index-addresses
+        if (!outputs || outputs.length === 0) {
+            const esploraBase = network === 'mainnet'
+                ? 'https://mempool.space/api'
+                : network === 'testnet'
+                    ? 'https://mempool.space/testnet/api'
+                    : 'https://mempool.space/signet/api';
+            const url = `${esploraBase}/address/${address}/utxo`;
+            console.log(`[getAddressUtxos] Fetching UTXOs from Esplora: ${url}`);
+            type EsploraUtxo = { txid: string; vout: number; value: number };
+            const resp = await fetchWithTimeout<EsploraUtxo[]>(url, { timeout: 8000, headers: { 'Accept': 'application/json' } });
+            console.log(`[getAddressUtxos] Esplora response:`, resp, url);
+            const esploraUtxos = resp.data || [];
+            outputs = esploraUtxos.map(u => `${u.txid}:${u.vout}`);
+        }
+
+        if (!outputs || outputs.length === 0) {
+            console.log(`[getAddressUtxos] No outputs found for address ${address}.`);
             return [];
         }
-        console.log(`[getAddressUtxos] Found ${basicUtxos.length} basic UTXOs from Mempool. Filtering ordinals and fetching scriptPubKeys...`);
 
-        // 3. Fetch full transaction details for each UTXO (to get scriptPubKey) and filter ordinals
-        const enrichedUtxosPromises = basicUtxos.map(async (basicUtxo): Promise<Utxo | null> => {
-            const utxoLocationKey = `${basicUtxo.txid}:${basicUtxo.vout}`;
-            if (ordinalLocations.has(utxoLocationKey)) {
-                console.log(`[getAddressUtxos] Filtering ordinal UTXO: ${utxoLocationKey} (found in provider results)`);
-                return null; // Skip this UTXO as it contains an ordinal
-            }
-
-            // Fetch TX details only if it's not an ordinal
-            const txDetailUrl = `${baseMempoolUrl}/tx/${basicUtxo.txid}`;
+        // For each output, fetch details, filter out spent or ordinal-bearing outputs
+        const utxoPromises = outputs.map(async (out: string): Promise<Utxo | null> => {
             try {
-                const txResponse = await fetch(txDetailUrl);
-                if (!txResponse.ok) {
-                    console.warn(`[getAddressUtxos] Failed to fetch TX details for ${basicUtxo.txid}. Status: ${txResponse.status}`);
-                    return null; // Skip this UTXO if TX details fail
-                }
-                const txDetails = await txResponse.json();
-
-                const txDetailsTyped = txDetails as { vout: any[] };
-                const output = (txDetailsTyped && Array.isArray(txDetailsTyped.vout)) ? txDetailsTyped.vout[basicUtxo.vout] : undefined;
-                const scriptPubKey = output?.scriptpubkey;
-
-                if (scriptPubKey) {
-                    return {
-                        txid: basicUtxo.txid,
-                        vout: basicUtxo.vout,
-                        value: basicUtxo.value,
-                        scriptPubKey: scriptPubKey,
-                        status: basicUtxo.status
-                    };
-                } else {
-                    console.warn(`[getAddressUtxos] scriptpubkey not found for output ${basicUtxo.vout} in TX ${basicUtxo.txid}. Output data:`, output);
+                const [txid, voutStr] = out.split(':');
+                const vout = parseInt(voutStr, 10);
+                console.log(`[getAddressUtxos] Fetching output details for ${out}`);
+                const details = await provider.getOutputDetails(out);
+                if (details.spent) {
                     return null;
                 }
-            } catch (txError) {
-                console.warn(`[getAddressUtxos] Error fetching/processing TX details for ${basicUtxo.txid}:`, txError);
+                if (Array.isArray(details.inscriptions) && details.inscriptions.length > 0) {
+                    return null;
+                }
+
+                return {
+                    txid,
+                    vout,
+                    value: details.value,
+                    scriptPubKey: details.script_pubkey,
+                } as Utxo;
+            } catch (e) {
+                console.warn(`[getAddressUtxos] Failed to fetch/process output ${out}:`, e);
                 return null;
             }
         });
 
-        const results = await Promise.all( enrichedUtxosPromises );
-        const utxos: Utxo[] = results.filter((utxo): utxo is Utxo => utxo !== null);
+        const results = await Promise.all(utxoPromises);
+        const utxos: Utxo[] = results.filter((u): u is Utxo => u !== null);
 
-        console.log(`[getAddressUtxos] Successfully enriched ${utxos.length} spendable (non-ordinal) UTXOs for address ${address} on ${network}.`);
+        console.log(`[getAddressUtxos] Prepared ${utxos.length} spendable (non-ordinal) UTXOs for address ${address}.`);
         return utxos;
 
     } catch (error) {

@@ -154,10 +154,14 @@ const CreateDidButton: React.FC<CreateDidButtonProps> = ({ className, onDidCreat
       // 1. Generate Ed25519 key pair
       const keyPair = generateEd25519KeyPair();
       
-      // 2. Calculate satoshi number based on selected UTXO or generate random one
+      // 2. Calculate satoshi number based on selected UTXO
       let satNumber: string;
-      if (state.utxoSelection && state.utxoSelection.length > 0) {
-        // Use the first selected UTXO to calculate the satoshi number
+      if (state.inscriptionUtxo) {
+        const utxo = state.inscriptionUtxo;
+        satNumber = await getSatNumberFromUtxo(utxo.txid, utxo.vout);
+        addToast(`Using satoshi number ${satNumber} from UTXO: ${utxo.txid}:${utxo.vout}`, 'info');
+      } else if (state.utxoSelection && state.utxoSelection.length > 0) {
+        // Fallback: support legacy selection array
         const utxo = state.utxoSelection[0];
         satNumber = await getSatNumberFromUtxo(utxo.txid, utxo.vout);
         addToast(`Using satoshi number ${satNumber} from UTXO: ${utxo.txid}:${utxo.vout}`, 'info');
@@ -196,7 +200,7 @@ const CreateDidButton: React.FC<CreateDidButtonProps> = ({ className, onDidCreat
       downloadPrivateKey(did, keyId, multibaseKey, keyPair.secretKey);
 
       // 8. Jump to the transaction step (step 3) - but if no UTXO selected, go to UTXO step first
-      if (state.utxoSelection && state.utxoSelection.length > 0) {
+      if (state.inscriptionUtxo || (state.utxoSelection && state.utxoSelection.length > 0)) {
         goToStep(3); // Skip to transaction step
       } else {
         goToStep(0); // Go to UTXO selection step first
