@@ -107,11 +107,9 @@ export class OrdNodeProvider implements ResourceProvider {
      * Fetch latest block info (if supported by the Ord server).
      */
     async getLatestBlock(): Promise<OrdNodeBlockResponse | null> {
-        console.log(`[getLatestBlock] Getting latest block...`);
         // 1. Try /blockheight to get numeric tip height
         try {
             const hr = await this.fetchApi<any>(`/blockheight`);
-            console.log(`[getLatestBlock] Block height:`, hr);
             let h: number | undefined;
             if (typeof hr === 'number') {
                 h = hr;
@@ -130,13 +128,11 @@ export class OrdNodeProvider implements ResourceProvider {
         // 2. Try /block/latest (newer versions)
         try {
             const resp = await this.fetchApi<OrdNodeBlockResponse>(`/block/latest`);
-            console.log(`[getLatestBlock] Block latest:`, resp);
             return resp as OrdNodeBlockResponse;
         } catch (_) {
             // 3. Fallback to generic /block for latest block
             try {
                 const resp = await this.fetchApi<OrdNodeBlockResponse>(`/block`);
-                console.log(`[getLatestBlock] Block:`, resp);
                 return resp as OrdNodeBlockResponse;
             } catch (error) {
                 console.warn('[OrdNodeProvider] Unable to fetch latest block via /blockheight, /block/latest or /block:', (error as any)?.message || error);
