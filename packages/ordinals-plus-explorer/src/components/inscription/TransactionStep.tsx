@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useResourceInscription } from './ResourceInscriptionWizard';
 import { useWallet, Utxo } from '../../context/WalletContext';
 import { useApi } from '../../context/ApiContext';
@@ -113,14 +113,7 @@ const TransactionStep: React.FC = () => {
   const [requiredAmount, setRequiredAmount] = useState<number>(0);
   const [manualSelectionMode, setManualSelectionMode] = useState<boolean>(false);
   
-  // Find the largest UTXO from the available UTXOs
-  const findLargestUtxo = (utxos: Utxo[]): Utxo | null => {
-    if (!utxos || utxos.length === 0) return null;
-    
-    return utxos.reduce((largest, current) => {
-      return current.value > largest.value ? current : largest;
-    }, utxos[0]);
-  };
+  // (unused) const findLargestUtxo = ... removed
   
   // Find UTXOs that together meet the required amount, starting with the largest ones
   const findUtxosForAmount = (utxos: Utxo[], requiredAmount: number): Utxo[] => {
@@ -218,183 +211,9 @@ const TransactionStep: React.FC = () => {
     }
   };
   
-  // When selecting funding UTXOs, use setFundingUtxos
-  const handleFundingUtxoSelectionChange = (utxo: Utxo, isSelected: boolean) => {
-    let newFundingUtxos = [...state.fundingUtxos];
-    if (isSelected) {
-      if (!newFundingUtxos.some(u => u.txid === utxo.txid && u.vout === utxo.vout)) {
-        newFundingUtxos.push(utxo);
-      }
-    } else {
-      newFundingUtxos = newFundingUtxos.filter(u => !(u.txid === utxo.txid && u.vout === utxo.vout));
-    }
-    setFundingUtxos(newFundingUtxos);
-    setUtxoError(null);
-  };
+  // (unused) handleFundingUtxoSelectionChange removed
   
-  // When preparing the commit transaction:
-  const handlePrepareAndSignCommit = async () => {
-    if (!walletConnected || !walletAddress) {
-      setErrorMessage('Wallet not connected');
-      return;
-    }
-    
-    // CRITICAL: Validate that a user-selected UTXO exists for inscription
-    if (!state.inscriptionUtxo) {
-      setErrorMessage('No UTXO selected for inscription. Please go back and select a UTXO containing the sat you want to inscribe on.');
-      return;
-    }
-    
-    // Get the user-selected UTXO (this will be inscribed on)
-    const selectedUtxo = state.inscriptionUtxo;
-    console.log(`[COMMIT] User selected UTXO for inscription: ${selectedUtxo.txid}:${selectedUtxo.vout} (${selectedUtxo.value} sats)`);
-    
-    setIsLoading(true);
-    setErrorMessage(null);
-    setStatusMessage('Preparing commit transaction...');
-    
-    try {
-      // Prepare the commit transaction
-      const inscriptionDataStr = localStorage.getItem('inscriptionData');
-      if (!inscriptionDataStr) {
-        throw new Error('Inscription data not found. Please restart the inscription process.');
-      }
-      const inscriptionData = JSON.parse(inscriptionDataStr);
-      
-      // Combine inscription UTXO with funding UTXOs (remove duplicates)
-      const allUtxos = [
-        state.inscriptionUtxo,
-        ...state.fundingUtxos.filter(
-          (u) => u.txid !== state.inscriptionUtxo!.txid || u.vout !== state.inscriptionUtxo!.vout
-        )
-      ];
-      
-      console.log(`[Commit Debug] Preparing commit transaction with fee rate: ${selectedFeeRate} sats/vB`);
-      console.log(`[Commit Debug] Total UTXOs: ${allUtxos.length}`);
-      
-      const commitResult = await ordinalsplus.prepareCommitTransaction({
-        inscription: {
-          commitAddress: {
-            address: inscriptionData.commitAddress,
-            script: new Uint8Array(Buffer.from(inscriptionData.commitScriptHex, 'hex')),
-            internalKey: new Uint8Array(32) // Required field with proper size
-          },
-          inscription: inscriptionData.inscription,
-          revealPublicKey: new Uint8Array(Buffer.from(inscriptionData.revealPublicKeyHex, 'hex'))
-        } as any,
-        utxos: allUtxos,
-        changeAddress: walletAddress,
-        feeRate: selectedFeeRate,
-        network: inscriptionData.network,
-        minimumCommitAmount: Number(inscriptionData.requiredCommitAmount),
-        selectedInscriptionUtxo: state.inscriptionUtxo // CRITICAL: Always pass the inscription UTXO
-      });
-      
-      console.log(`[Commit Debug] Commit transaction result:`, {
-        commitFee: commitResult.fees.commit,
-        selectedUtxos: commitResult.selectedUtxos.length,
-        requiredAmount: commitResult.requiredCommitAmount
-      });
-      
-      // Store the PSBT for signing
-      setUnsignedPsbt(commitResult.commitPsbtBase64);
-      
-      // Calculate estimated reveal transaction fee for the fee breakdown
-      const content = state.contentData.content || '';
-      const contentType = state.contentData.type || 'text/plain';
-      
-      let actualContentSizeBytes: number;
-      let metadataSize = 0;
-      
-      // Calculate metadata size from the metadata state
-      if (state.metadata.isVerifiableCredential && state.metadata.verifiableCredential.credential) {
-        metadataSize = Buffer.from(JSON.stringify(state.metadata.verifiableCredential.credential)).length;
-      } else if (Object.keys(state.metadata.standard).length > 0) {
-        metadataSize = Buffer.from(JSON.stringify(state.metadata.standard)).length;
-      }
-      
-      if (typeof content === 'string') {
-        if (content.startsWith('data:')) {
-          const matches = content.match(/^data:([^;]+);base64,(.+)$/);
-          if (matches && matches[2]) {
-            actualContentSizeBytes = Buffer.from(matches[2], 'base64').length;
-          } else {
-            actualContentSizeBytes = Buffer.from(content).length;
-          }
-        } else {
-          actualContentSizeBytes = Buffer.from(content).length;
-        }
-      } else {
-        actualContentSizeBytes = 0;
-      }
-      
-      let estimatedRevealVsize: number;
-      if (actualContentSizeBytes > 0) {
-        // Use the accurate inscription size calculation including protocol overhead
-        const inscriptionSize = calculateInscriptionSizeWithOverhead(
-          actualContentSizeBytes,
-          contentType,
-          metadataSize
-        );
-        // CRITICAL FIX: The previous formula was underestimating transaction size
-        // Based on error logs: allocated 1469 sats vs needed 2960 sats (roughly 2x)
-        // The issue is that inscription data goes in the witness, but there's also:
-        // - Transaction overhead (version, inputs, outputs, locktime)
-        // - Signature data in witness
-        // - Control block data
-        // - Script path spending overhead
-        // Conservative estimate: Base transaction (150 vB) + inscription with witness discount
-        estimatedRevealVsize = 150 + Math.ceil(inscriptionSize * 0.25); // More conservative witness discount
-        
-        // Add additional overhead for complex inscriptions
-        if (inscriptionSize > 1000) {
-          estimatedRevealVsize += Math.ceil(inscriptionSize * 0.1); // Additional 10% for large inscriptions
-        }
-        
-        console.log(`[Reveal Vsize Debug] Inscription size: ${inscriptionSize} bytes, Estimated reveal vsize: ${estimatedRevealVsize} vB`);
-      } else {
-        estimatedRevealVsize = 200; // Minimal reveal transaction
-      }
-      
-      console.log(`[Fee Debug] Selected fee rate: ${selectedFeeRate} sats/vB`);
-      console.log(`[Fee Debug] Estimated reveal vsize: ${estimatedRevealVsize} vB`);
-      
-      const estimatedRevealFee = Number(ordinalsplus.calculateFee(estimatedRevealVsize, selectedFeeRate));
-      
-      console.log(`[Fee Debug] Calculated reveal fee: ${estimatedRevealFee} sats`);
-      console.log(`[Fee Debug] Commit fee from result: ${commitResult.fees.commit} sats`);
-      console.log(`[Fee Debug] Expected commit fee rate: ${selectedFeeRate} sats/vB`);
-      console.log(`[Fee Debug] Actual commit fee rate: ${(commitResult.fees.commit / Math.ceil(commitResult.fees.commit / selectedFeeRate)).toFixed(2)} sats/vB`);
-      
-      // Update transaction status to include fee breakdown
-      setTransactionInfo({
-        status: 'preparing',
-        feeDetails: {
-          commitFeeRate: selectedFeeRate,
-          commitFee: commitResult.fees.commit,
-          commitVSize: Math.ceil(commitResult.fees.commit / selectedFeeRate),
-          revealFeeRate: selectedFeeRate,
-          revealFee: estimatedRevealFee,
-          revealVSize: estimatedRevealVsize,
-          totalFees: commitResult.fees.commit + estimatedRevealFee
-        }
-      });
-      
-      setStatusMessage('Fee breakdown ready. Please review before signing.');
-      // The user will proceed to sign using the Sign Transaction button in the fee breakdown UI
-      
-    } catch (error: any) {
-      console.error('Error preparing commit transaction:', error);
-      setErrorMessage(error.message || 'An error occurred while preparing the commit transaction');
-      // Update transaction status
-      setTransactionInfo({
-        status: 'failed',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // (unused) handlePrepareAndSignCommit removed
   
   // Create resource inscription using ordinalsplus package
   const createResourceInscription = async () => {
@@ -810,7 +629,105 @@ const TransactionStep: React.FC = () => {
       setIsLoading(false);
     }
   };
-  
+
+  // Single-step inscription using satpoint helper with wallet signing and API broadcast
+  const handleInscribeWithSatpoint = async () => {
+    if (!walletConnected || !walletAddress) {
+      setErrorMessage('Wallet not connected');
+      return;
+    }
+    if (!state.inscriptionUtxo) {
+      setErrorMessage('No inscription UTXO selected. Please select a UTXO first.');
+      return;
+    }
+    if (typeof signPsbt !== 'function') {
+      setErrorMessage('Wallet does not support PSBT signing. Please reconnect your wallet.');
+      return;
+    }
+    if (!apiService) {
+      setErrorMessage('API service not available');
+      return;
+    }
+
+    setIsLoading(true);
+    setStatusMessage('Creating inscription (commit + reveal)...');
+    setErrorMessage(null);
+
+    try {
+      // Build content and metadata (reuse existing logic)
+      const content = state.contentData.content || '';
+      const contentType = state.contentData.type || 'text/plain';
+
+      let processedContent: string | Buffer;
+      if (typeof content === 'string' && content.startsWith('data:')) {
+        const matches = content.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches && matches.length === 3 && contentType.startsWith('image/')) {
+          processedContent = Buffer.from(matches[2], 'base64');
+        } else if (matches && matches.length === 3) {
+          processedContent = content;
+        } else {
+          processedContent = content;
+        }
+      } else if (typeof content === 'string') {
+        processedContent = content;
+      } else {
+        processedContent = Buffer.from(String(content));
+      }
+
+      let metadataObj: Record<string, any> = {};
+      if (state.metadata.verifiableCredential && state.metadata.verifiableCredential.credential) {
+        metadataObj = { ...state.metadata.verifiableCredential.credential };
+      }
+      if (state.metadata.standard) {
+        metadataObj = { ...metadataObj, ...state.metadata.standard };
+      }
+
+      const walletNet = walletNetwork === 'mainnet' ? 'mainnet' : (walletNetwork === 'signet' ? 'signet' : 'testnet');
+      const satpoint = `${state.inscriptionUtxo.txid}:${state.inscriptionUtxo.vout}`;
+      const utxos = await getUtxos();
+
+      // Provide broadcast via backend API
+      const broadcast = async (txHex: string, _phase: 'commit' | 'reveal') => {
+        const resp = await apiService.broadcastTransaction(walletNet, txHex);
+        return resp.txid;
+      };
+
+      setTransactionInfo({ status: 'broadcasting' });
+      const result = await ordinalsplus.inscribeWithSatpoint({
+        content: processedContent,
+        contentType,
+        recipientAddress: walletAddress,
+        utxos: utxos as any,
+        feeRate: selectedFeeRate,
+        network: walletNet as any,
+        satpoint,
+        metadata: metadataObj,
+        signPsbt: async (psbtBase64: string) => {
+          return await signPsbt(psbtBase64);
+        },
+        broadcast
+      });
+
+      if (result.commitTxid) setCommitTxid(result.commitTxid);
+      if (result.revealTxid) setRevealTxid(result.revealTxid);
+      setTransactionInfo({
+        commitTx: result.commitTxid || null,
+        revealTx: result.revealTxid || null,
+        status: 'confirming'
+      });
+      setStatusMessage('Inscription broadcast. Waiting for confirmations...');
+      addToast('Your inscription was created and broadcast.');
+    } catch (e: any) {
+      console.error('Satpoint inscription failed:', e);
+      setErrorMessage(e?.message || 'Failed to create inscription');
+      setTransactionInfo({ status: 'failed', error: e?.message || 'Failed to create inscription' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Manual payment flow removed
+
   // Create and broadcast reveal transaction using real API calls
   const createAndBroadcastRevealTransaction = async (commitTxid: string) => {
     try {
@@ -881,8 +798,7 @@ const TransactionStep: React.FC = () => {
         destinationAddress: walletAddress
       });
       
-      // Extract transaction ID and hex
-      const revealTxid = revealTx.tx.id;
+      // Extract actual sizes and fees (txid handled from broadcast response below)
       const actualRevealVSize = revealTx.vsize; // Get actual vsize from the library
       const actualRevealFee = revealTx.fee; // Get actual fee from the library
       
@@ -1018,36 +934,13 @@ const TransactionStep: React.FC = () => {
     return new Uint8Array(hex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
   };
   
-  // Convert Uint8Array to hex string
-  const bytesToHex = (bytes: Uint8Array): string => {
-    return Array.from(bytes)
-      .map(byte => byte.toString(16).padStart(2, '0'))
-      .join('');
-  };
+  // bytesToHex removed (unused)
   
   // Parse metadata from string to JSON object
-  const parseMetadata = useCallback((metadataStr: string): Record<string, any> => {
-    try {
-      if (!metadataStr || metadataStr.trim() === '') return {};
-      return JSON.parse(metadataStr);
-    } catch (error) {
-      console.error('Error parsing metadata:', error);
-      setErrorMessage('Invalid metadata format. Please provide valid JSON.');
-      return {};
-    }
-  }, []);
+  // parseMetadata removed (unused)
   
   // Copy to clipboard
-  const copyToClipboardWithLabel = (text: string, label: string) => {
-    navigator.clipboard.writeText(text).then(
-      () => {
-        addToast(`${label} copied to clipboard`);
-      },
-      (err) => {
-        console.error('Could not copy text: ', err instanceof Error ? err.message : err);
-      }
-    );
-  };
+  // copyToClipboardWithLabel removed (unused)
   
   // Fee rate selector component
   const FeeRateSelector = () => {
@@ -1541,13 +1434,15 @@ const TransactionStep: React.FC = () => {
                   )}
                 </div>
                 <Button
-                  onClick={handlePrepareAndSignCommit}
+                  onClick={handleInscribeWithSatpoint}
                   disabled={!inscriptionUtxoSufficient && !hasEnoughFunds}
                   className="px-4 py-2"
                 >
                   Create Inscription
                 </Button>
               </div>
+
+              {/* Alternative payment flow removed */}
             </div>
           );
         }

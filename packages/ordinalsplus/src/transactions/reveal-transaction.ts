@@ -3,7 +3,7 @@ import { base64, hex } from '@scure/base';
 import * as ordinals from 'micro-ordinals';
 import * as bitcoin from 'bitcoinjs-lib';
 import { Utxo, BitcoinNetwork } from '../types';
-import { PreparedInscription } from '../inscription/scripts/ordinal-reveal';
+import { PreparedInscription, PreparedBatchInscription } from '../inscription/scripts/ordinal-reveal';
 import { calculateFee } from './fee-calculation';
 import { transactionTracker, TransactionStatus, TransactionType } from './transaction-status-tracker';
 import { ErrorCode, errorHandler, InscriptionError, ErrorCategory, ErrorSeverity } from '../utils/error-handler';
@@ -22,7 +22,7 @@ export interface RevealTransactionParams {
   /** The UTXO to use as the first input for the transaction */
   selectedUTXO: Utxo;
   /** Prepared inscription data with scripts and keys */
-  preparedInscription: PreparedInscription;
+  preparedInscription: PreparedInscription | PreparedBatchInscription;
   /** Fee rate in sats/vB */
   feeRate: number;
   /** Bitcoin network (mainnet/testnet/regtest) */
@@ -146,7 +146,9 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       });
 
       // Use the pre-calculated commit address and script details
-      if (!preparedInscription.commitAddress || !preparedInscription.commitAddress.script || !preparedInscription.inscription) {
+      const hasSingle = !!(preparedInscription as any).inscription;
+      const hasBatch = Array.isArray((preparedInscription as any).inscriptions) && (preparedInscription as any).inscriptions.length > 0;
+      if (!preparedInscription.commitAddress || !preparedInscription.commitAddress.script || !(hasSingle || hasBatch)) {
           throw errorHandler.createError(
             ErrorCode.INVALID_INPUT,
             { preparedInscription },
@@ -182,37 +184,24 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         console.error('[createRevealTransaction] ERROR: Control block is all zeros!');
       }
 
-      // Check the tapInternalKey before using it
+      // Always extract tapInternalKey from commit script to avoid mismatches
+      // P2TR scriptPubKey format: OP_1 OP_PUSHBYTES_32 <xonly-internal-key>
       let tapInternalKey = preparedInscription.commitAddress.internalKey;
-      
-      // Check if the internal key is all zeros
-      if (tapInternalKey.every(byte => byte === 0)) {
-        console.error('[createRevealTransaction] ERROR: tapInternalKey is all zeros!');
-        
-        // First, try to extract the key from the commit script
-        // P2TR script format: OP_1 OP_PUSHBYTES_32 <32-byte-key>
-        if (commitScript.length >= 34 && commitScript[0] === 0x51 && commitScript[1] === 0x20) {
-          const extractedKey = commitScript.slice(2, 34);
-          if (!extractedKey.every(byte => byte === 0)) {
-            console.log('[createRevealTransaction] Using internal key extracted from commit script');
-            tapInternalKey = extractedKey;
-          } else {
-            console.error('[createRevealTransaction] Extracted key is also zeros, falling back to reveal public key');
-            tapInternalKey = pubKey;
-          }
-        } else {
-          console.log('[createRevealTransaction] Using reveal public key as fallback for internal key');
-          tapInternalKey = pubKey;
+      if (commitScript.length >= 34 && commitScript[0] === 0x51 && commitScript[1] === 0x20) {
+        const extractedKey = commitScript.slice(2, 34);
+        const mismatch = !tapInternalKey || tapInternalKey.length !== extractedKey.length || !tapInternalKey.every((b, i) => b === extractedKey[i]);
+        if (mismatch) {
+          console.log('[createRevealTransaction] Overriding internal key from commit script to ensure exact match');
+          tapInternalKey = extractedKey;
         }
-        
-        // Final validation - should never happen with the steps above
-        if (tapInternalKey.every(byte => byte === 0)) {
-          throw new Error('Cannot find valid internal key for taproot script-path spend');
-        }
+      }
+      // Final validation
+      if (!tapInternalKey || tapInternalKey.length !== 32 || tapInternalKey.every(b => b === 0)) {
+        throw new Error('Invalid tapInternalKey for taproot script-path spend');
       }
       
       // Try to decode the control block - if it fails, we'll log an error
-      let decodedControlBlock;
+      let decodedControlBlock: ReturnType<typeof btc.TaprootControlBlock.decode> | undefined;
       try {
         decodedControlBlock = btc.TaprootControlBlock.decode(inscriptionScript.controlBlock);
         console.log(`[DEBUG-REVEAL] Successfully decoded control block`);
@@ -269,24 +258,39 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       // Estimate fee based on transaction size
       // CRITICAL FIX: The inscription content is embedded in the witness data
       // We need to calculate the actual transaction size including the full inscription
-      const inscriptionSize = preparedInscription.inscription.body?.length || 0;
+      // Support single or batch prepared inscription structures
+      const isBatch = Array.isArray((preparedInscription as any).inscriptions);
+      const singleBody = (preparedInscription as any).inscription?.body;
+      const bodies: any[] = isBatch
+        ? ((preparedInscription as any).inscriptions || []).map((i: any) => i?.body)
+        : [singleBody];
+
+      let inscriptionSize = 0;
+      for (const body of bodies) {
+        const len = body?.length ?? (typeof body === 'string' ? Buffer.from(body).length : 0);
+        inscriptionSize += len || 0;
+      }
       
       // DEBUG: Log inscription structure to understand why we're getting 0 size
       console.log('[Inscription Debug] Full inscription structure analysis:');
       console.log('- preparedInscription keys:', Object.keys(preparedInscription));
-      console.log('- preparedInscription.inscription keys:', Object.keys(preparedInscription.inscription));
-      console.log('- preparedInscription.inscription:', JSON.stringify(preparedInscription.inscription, null, 2));
-      console.log('- inscription.body type:', typeof preparedInscription.inscription.body);
-      console.log('- inscription.body length:', preparedInscription.inscription.body?.length);
-      console.log('- inscription.body constructor:', preparedInscription.inscription.body?.constructor?.name);
-      console.log('- inscription.body is Array:', Array.isArray(preparedInscription.inscription.body));
-      console.log('- inscription body preview:', preparedInscription.inscription.body ? 
-        Array.from(preparedInscription.inscription.body).slice(0, 50) : 'undefined');
+      if (!isBatch && (preparedInscription as any).inscription) {
+        const single = (preparedInscription as any).inscription;
+        console.log('- preparedInscription.inscription keys:', Object.keys(single));
+        try { console.log('- preparedInscription.inscription:', JSON.stringify(single, null, 2)); } catch {}
+        console.log('- inscription.body type:', typeof single.body);
+        console.log('- inscription.body length:', single.body?.length);
+        console.log('- inscription.body constructor:', single.body?.constructor?.name);
+        console.log('- inscription.body is Array:', Array.isArray(single.body));
+        console.log('- inscription body preview:', single.body ? Array.from(single.body).slice(0, 50) : 'undefined');
+      }
       
       // Check if there are any tags that might contain size information
-      if (preparedInscription.inscription.tags) {
-        console.log('- inscription.tags:', preparedInscription.inscription.tags);
-      }
+      try {
+        if (!isBatch && (preparedInscription as any).inscription?.tags) {
+          console.log('- inscription.tags:', (preparedInscription as any).inscription.tags);
+        }
+      } catch {}
       
       // CRITICAL FIX: Check multiple possible paths for content size
       let actualInscriptionSize = inscriptionSize;
@@ -294,18 +298,18 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         console.log('[Inscription Debug] Original size was 0, trying alternative paths...');
         
         // Try alternative paths to get content size
-        if (typeof preparedInscription.inscription.body === 'string') {
-          actualInscriptionSize = Buffer.from(preparedInscription.inscription.body).length;
+        if (!isBatch && typeof (preparedInscription as any).inscription?.body === 'string') {
+          actualInscriptionSize = Buffer.from((preparedInscription as any).inscription.body).length;
           console.log('[Inscription Debug] Body is string, calculated size:', actualInscriptionSize);
-        } else if (preparedInscription.inscription.body instanceof Buffer) {
-          actualInscriptionSize = preparedInscription.inscription.body.length;
+        } else if (!isBatch && (preparedInscription as any).inscription?.body instanceof Buffer) {
+          actualInscriptionSize = (preparedInscription as any).inscription.body.length;
           console.log('[Inscription Debug] Body is Buffer, size:', actualInscriptionSize);
-        } else if (preparedInscription.inscription.body instanceof Uint8Array) {
-          actualInscriptionSize = preparedInscription.inscription.body.length;
+        } else if (!isBatch && (preparedInscription as any).inscription?.body instanceof Uint8Array) {
+          actualInscriptionSize = (preparedInscription as any).inscription.body.length;
           console.log('[Inscription Debug] Body is Uint8Array, size:', actualInscriptionSize);
-        } else if (preparedInscription.inscription.body && typeof preparedInscription.inscription.body === 'object') {
+        } else if (!isBatch && (preparedInscription as any).inscription?.body && typeof (preparedInscription as any).inscription.body === 'object') {
           // CRITICAL FIX: Check for serialized Buffer format: { type: "Buffer", data: [...] }
-          const body = preparedInscription.inscription.body as any;
+          const body = (preparedInscription as any).inscription.body as any;
           if (body.type === 'Buffer' && Array.isArray(body.data)) {
             actualInscriptionSize = body.data.length;
             console.log('[Inscription Debug] Found serialized Buffer format, size:', actualInscriptionSize);
@@ -384,95 +388,119 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       const actualFeeAllocated = inputAmount - postageValue;
       const changeAmount = BigInt(0); // No change expected in a properly funded reveal transaction
 
-      // Add the inscription output (recipient)
-      // FIXED: Simply add the inscription output with postage value
-      // The remaining amount (inputAmount - postageValue) will automatically become the fee
-      tx.addOutputAddress(
-        outputAddress || '', 
-        postageValue,
-        network
-      );
-      
-      // Add progress event for adding inscription output
+      // Add outputs helper (inscriptions + optional change)
+      const isBatchReveal = Array.isArray((preparedInscription as any).inscriptions);
+      const revealOutputsCount = isBatchReveal ? ((preparedInscription as any).inscriptions || []).length : 1;
+      const postageTotal = Number(postageValue) * revealOutputsCount;
+
+      const assembleOutputs = (targetTx: btc.Transaction, changeAmount?: number) => {
+        if (isBatchReveal) {
+          for (let i = 0; i < revealOutputsCount; i++) {
+            targetTx.addOutputAddress(outputAddress || '', postageValue, network);
+          }
+        } else {
+          targetTx.addOutputAddress(outputAddress || '', postageValue, network);
+        }
+        if (typeof changeAmount === 'number' && changeAmount >= MIN_POSTAGE_VALUE) {
+          targetTx.addOutputAddress(outputAddress || '', BigInt(changeAmount), network);
+        }
+      };
+
+      // Helper to fully build, sign, finalize and measure vsize for a given change
+      const buildMeasure = (changeAmount?: number) => {
+        const tmp = new btc.Transaction({ allowUnknownOutputs: false, customScripts: ORDINAL_CUSTOM_SCRIPTS });
+        // re-add the same input
+        tmp.addInput({
+          txid: selectedUTXO.txid,
+          index: selectedUTXO.vout,
+          witnessUtxo: { script: commitScript, amount: inputAmount },
+          tapInternalKey: tapInternalKey,
+          tapLeafScript: [
+            [
+              decodedControlBlock || btc.TaprootControlBlock.decode(inscriptionScript.controlBlock),
+              btc.utils.concatBytes(
+                inscriptionScript.script,
+                new Uint8Array([inscriptionScript.leafVersion])
+              )
+            ]
+          ]
+        });
+        assembleOutputs(tmp, changeAmount);
+        if (privateKey) {
+          tmp.sign(privateKey);
+          tmp.finalize();
+        }
+        const txBytesLocal = tmp.extract();
+        let vsizeLocal: number;
+        try {
+          const parsedTxLocal = bitcoin.Transaction.fromBuffer(Buffer.from(txBytesLocal));
+          vsizeLocal = parsedTxLocal.virtualSize();
+        } catch {
+          vsizeLocal = Math.ceil(txBytesLocal.length * 0.75);
+        }
+        return { tmp, txBytesLocal, vsizeLocal };
+      };
+
+      // First pass: build without change, measure actual vsize
+      const pass1 = buildMeasure(undefined);
+      const allocatedTotal = Number(inputAmount) - postageTotal;
+      const desiredFee1 = Number(calculateFee(pass1.vsizeLocal, feeRate));
+      let changeCandidate = allocatedTotal - desiredFee1;
+
+      // Second pass: if we can return change, rebuild with it and re-measure
+      let finalTx = pass1.tmp;
+      let finalTxBytes = pass1.txBytesLocal;
+      let finalVsize = pass1.vsizeLocal;
+      let finalChange = 0;
+      if (changeCandidate >= MIN_POSTAGE_VALUE) {
+        const pass2 = buildMeasure(changeCandidate);
+        const desiredFee2 = Number(calculateFee(pass2.vsizeLocal, feeRate));
+        const adjustedChange = allocatedTotal - desiredFee2;
+        if (adjustedChange >= MIN_POSTAGE_VALUE) {
+          // Optionally one small correction pass if value changed materially
+          if (Math.abs(adjustedChange - changeCandidate) >= 2) {
+            const pass3 = buildMeasure(adjustedChange);
+            finalTx = pass3.tmp; finalTxBytes = pass3.txBytesLocal; finalVsize = pass3.vsizeLocal; finalChange = adjustedChange;
+          } else {
+            finalTx = pass2.tmp; finalTxBytes = pass2.txBytesLocal; finalVsize = pass2.vsizeLocal; finalChange = adjustedChange;
+          }
+          transactionTracker.addTransactionProgressEvent({
+            transactionId,
+            message: `Added change output returning ${finalChange} sats (targeting ${feeRate} sat/vB)`,
+            timestamp: new Date()
+          });
+        } else {
+          // Not enough to return as change; keep all as fee
+          finalChange = 0;
+        }
+      }
+
+      // Add progress event with fee targeting info
+      const feeAllocatedSats = allocatedTotal - finalChange;
       transactionTracker.addTransactionProgressEvent({
         transactionId,
-        message: `Added inscription output: ${outputAddress} (${postageValue} sats), fee allocated: ${actualFeeAllocated} sats`,
+        message: `Prepared outputs: ${revealOutputsCount} inscription(s) @ ${Number(postageValue)} sats, change: ${finalChange} sats, targeted fee ≈ ${feeAllocatedSats} sats`,
         timestamp: new Date()
       });
 
-      // Sign if private key is provided
-      if (privateKey) {
-        try {
-          // Simply sign with the provided private key directly
-          console.log('Signing reveal transaction with provided private key for script path spend...');
-          
-          // Simplify the sign call, relying on default sighash for Taproot
-          // and hoping the library correctly uses the tapLeafScript from the stored script info.
-          tx.sign(privateKey); 
-
-          tx.finalize(); // Finalize *after* signing
-          
-          // Add progress event for signing
-          transactionTracker.addTransactionProgressEvent({
-            transactionId,
-            message: 'Transaction signed successfully',
-            timestamp: new Date()
-          });
-        } catch (error: any) {
-          // Create a structured error
-          const signingError = errorHandler.createError(
-            ErrorCode.SIGNING_ERROR,
-            error,
-            `Failed to sign reveal transaction: ${error?.message || 'Unknown error'}`
-          );
-          
-          // Set error in transaction tracker
-          transactionTracker.setTransactionError(transactionId, {
-            name: signingError.name,
-            message: signingError.message,
-            code: signingError.code,
-            details: signingError.details,
-            category: ErrorCategory.WALLET,
-            severity: ErrorSeverity.ERROR,
-            timestamp: new Date(),
-            recoverable: false
-          });
-          
-          throw signingError;
-        }
+      // Extract finalized raw transaction bytes from the final pass
+      if (!privateKey) {
+        throw errorHandler.createError(
+          ErrorCode.INVALID_TRANSACTION,
+          { reason: 'missing_private_key' },
+          'Cannot extract raw transaction without private key; external signing not supported in this path'
+        );
       }
-      
-      // We need the finalized raw transaction bytes, not the PSBT bytes
-      let txBytes: Uint8Array;
+
+      let txBytesToUse: Uint8Array;
       try {
-        // Ensure the transaction is finalized before extracting
-        // The finalize call is already within the signing block, 
-        // but if no privateKey was provided, it might not have been called.
-        // We should ensure finalize() runs if signing occurred.
-        // If no signing happens (e.g., returning unsigned tx), 
-        // toPSBT() might be correct, but for broadcasting a signed tx, 
-        // we need the extracted raw tx.
-        
-        // If a private key was provided, signing and finalization happened above.
-        if (privateKey) {
-           txBytes = tx.extract(); // Extract finalized raw transaction bytes
-        } else {
-           // If no private key, maybe we *do* want the PSBT for external signing?
-           // For now, let's assume if we reach here without a key, it's an error
-           // or we should return the PSBT. Let's stick to the signed case.
-           // Throw an error if trying to extract without signing/finalizing.
-           throw new Error("Cannot extract raw transaction; transaction not finalized (likely missing private key).");
-        } 
-        
+        txBytesToUse = finalTx.extract();
       } catch (error: any) {
-        // Handle extraction errors
         const extractionError = errorHandler.createError(
           ErrorCode.INVALID_TRANSACTION,
           error,
           `Failed to extract finalized transaction: ${error?.message || 'Unknown error'}`
         );
-        
-        // Set error in transaction tracker
         transactionTracker.setTransactionError(transactionId, {
           name: extractionError.name,
           message: extractionError.message,
@@ -483,25 +511,24 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
           timestamp: new Date(),
           recoverable: false
         });
-        
         throw extractionError;
       }
-      
-      // Get transaction hex and base64 for clients that need it
-      const txHex = hex.encode(txBytes);
-      const txBase64 = base64.encode(txBytes);
+
+      const txToUse = finalTx;
+      const txHex = hex.encode(txBytesToUse);
+      const txBase64 = base64.encode(txBytesToUse);
       
       // Calculate the actual vsize from the finalized transaction
       // Use bitcoinjs-lib to parse the raw transaction and get accurate virtual size
       let actualVsize: number;
       try {
         // Parse the raw transaction bytes
-        const parsedTx = bitcoin.Transaction.fromBuffer(Buffer.from(txBytes));
+      const parsedTx = bitcoin.Transaction.fromBuffer(Buffer.from(txBytesToUse));
         
         // Get the accurate virtual size directly from bitcoinjs-lib
         actualVsize = parsedTx.virtualSize();
         
-        console.log(`[Vsize Debug] Total size: ${txBytes.length}, Virtual size: ${actualVsize} vB`);
+        console.log(`[Vsize Debug] Total size: ${txBytesToUse.length}, Virtual size: ${actualVsize} vB`);
         console.log(`[Vsize Debug] Estimated vs Actual: estimated=${estimatedVsize}, actual=${actualVsize}, difference=${estimatedVsize - actualVsize} vB`);
         console.log(`[Vsize Debug] Fee rate check: fee=${Number(fee)}, vsize=${actualVsize}, rate=${(Number(fee) / actualVsize).toFixed(2)} sat/vB`);
         
@@ -509,11 +536,12 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
         console.warn('[Vsize Calculation] Failed to parse transaction with bitcoinjs-lib, using approximation:', error);
         // Fallback: for SegWit transactions, vsize is typically about 75% of total size
         // This is a rough approximation when parsing fails
-        actualVsize = Math.ceil(txBytes.length * 0.75);
+        actualVsize = Math.ceil(txBytesToUse.length * 0.75);
       }
       
       // Log the comparison between estimated and actual size for debugging
-      const actualAllocatedFee = Number(actualFeeAllocated); // Use the actual allocated fee
+      const allocated = Number(inputAmount) - Number(postageValue) * revealOutputsCount;
+      const actualAllocatedFee = allocated - finalChange;
       const actualEffectiveRate = (actualAllocatedFee / actualVsize).toFixed(2);
       
       console.log(`[Fee Comparison] Estimated vsize: ${estimatedVsize} vB, Actual vsize: ${actualVsize} vB`);
@@ -557,9 +585,9 @@ export async function createRevealTransaction(params: RevealTransactionParams): 
       
       // Return the result with actual vsize and actual allocated fee
       return {
-        tx,
-        fee: actualAllocatedFee, // Use the fee that was actually allocated in the transaction
-        vsize: actualVsize, // Return actual vsize for accurate reporting
+        tx: txToUse,
+        fee: actualAllocatedFee,
+        vsize: actualVsize,
         hex: txHex,
         base64: txBase64,
         transactionId,

@@ -12,6 +12,10 @@
     "start": "bun run src/index.ts",
     "cli": "bun run src/cli.ts",
     "dev": "bun run src/index.ts",
+    "start:reverse": "REVERSE_REINDEX=true BLOCK_TAIL_MODE=false bun run src/index.ts",
+    "start:forward": "REVERSE_REINDEX=false BLOCK_TAIL_MODE=false START_INSCRIPTION=0 bun run src/index.ts",
+    "start:tail": "REVERSE_REINDEX=false BLOCK_TAIL_MODE=true bun run src/index.ts",
+    "reset:index": "bun run src/reset-index.ts",
     "test": "bun test",
     "clean": "rm -rf dist"
   },

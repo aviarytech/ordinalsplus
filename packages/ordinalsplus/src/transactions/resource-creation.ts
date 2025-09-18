@@ -55,10 +55,18 @@ export async function prepareResourceInscription(
     const network = getScureNetwork(networkType);
 
     // 3. Prepare Resource Metadata
-    const resourceMetadata = {
-        ...metadata,
-        type: resourceType
-    };
+    // If caller provided a Verifiable Credential or any explicit type, do not override it.
+    // Otherwise, annotate with the resourceType for basic resources.
+    let resourceMetadata: Record<string, any> = { ...metadata };
+    const hasExplicitType = resourceMetadata && typeof resourceMetadata === 'object' && 'type' in resourceMetadata;
+    const isVC = resourceMetadata && (
+        (Array.isArray(resourceMetadata.type) && resourceMetadata.type.includes('VerifiableCredential')) ||
+        resourceMetadata.type === 'VerifiableCredential' ||
+        resourceMetadata['@context'] // heuristic hint for VC
+    );
+    if (!hasExplicitType || (!isVC && resourceType && resourceMetadata.type !== resourceType)) {
+        resourceMetadata = { ...resourceMetadata, type: resourceType };
+    }
 
     try {
         // 4. Prepare the content with the proper content type

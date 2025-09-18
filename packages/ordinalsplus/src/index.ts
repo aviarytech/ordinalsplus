@@ -87,7 +87,11 @@ export {
     prepareCommitTransaction,
     createRevealTransaction,
     transactionTracker,
-    prepareBatchCommitTransaction
+    prepareBatchCommitTransaction,
+    inscribeWithSatpoint,
+    createRevealForSatpointCommit,
+    prepareMultiInscriptionCommitTransaction,
+    estimateRequiredCommitAmountForBatch
 } from './transactions';
 
 export type { 
@@ -98,7 +102,9 @@ export type {
     RevealTransactionResult,
     BatchCommitTransactionParams,
     BatchCommitTransactionResult,
-    BatchCommitOutputInfo
+    BatchCommitOutputInfo,
+    InscribeWithSatpointParams,
+    InscribeWithSatpointResult
 } from './transactions';
 
 // --- Transaction Status Tracking Exports ---
@@ -115,13 +121,14 @@ export type {
 } from './transactions/transaction-status-tracker';
 
 // --- Component Exports ---
-export * from './components';
+// Note: components are not part of the published API here
 
 // --- Inscription Exports ---
 export {
     createInscription,
     createTextInscription,
-    createJsonInscription
+    createJsonInscription,
+    prepareBatchInscription
 } from './inscription';
 
 // --- Indexer Exports ---

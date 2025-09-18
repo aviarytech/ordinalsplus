@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
-import { getAddressUtxos, ResourceProvider } from 'ordinalsplus';
 import { getProvider } from '../services/providerService';
-import type { NetworkType, Utxo } from '../types';
+import type { NetworkType } from '../types';
+import { getAddressUtxos, type ResourceProvider } from 'ordinalsplus';
 
 export const utxoRouter = new Elysia({ prefix: '/api' })
     // --- UTXO Route ---
@@ -16,21 +16,20 @@ export const utxoRouter = new Elysia({ prefix: '/api' })
         console.log(`[API] Received GET /api/addresses/${address}/utxos request for network ${network}`);
 
         try {
-            const provider = getProvider();
+            // Get the correct network type from the query param
+            const networkForLib: NetworkType = network === 'signet' ? 'signet'
+                                         : network === 'testnet' ? 'testnet'
+                                         : 'mainnet';
+            const provider = getProvider(networkForLib);
             if (!provider) {
                 throw new Error('Resource provider not available or configured.');
             }
             
             console.log(`[API] Using provider: ${provider.constructor?.name || 'Unknown Provider'}`);
 
-            // Get the correct network type from the query param
-            const networkForLib: NetworkType = network === 'signet' ? 'signet'
-                                         : network === 'testnet' ? 'testnet'
-                                         : 'mainnet';
-            
             console.log(`[API] Calling getAddressUtxos for network: ${networkForLib}`);
             // Cast provider to ResourceProvider to bypass type error
-            const utxos: Utxo[] = await getAddressUtxos(address, provider as ResourceProvider, networkForLib);
+            const utxos = await getAddressUtxos(address, provider as ResourceProvider, networkForLib);
             
             console.log(`[API] Found ${utxos.length} UTXOs for address ${address}.`);
             return { data: utxos };
@@ -57,13 +56,72 @@ export const utxoRouter = new Elysia({ prefix: '/api' })
                     txid: t.String(),
                     vout: t.Number(),
                     value: t.Number(),
-                    scriptPubKey: t.String()
+                    scriptPubKey: t.Optional(t.String())
                 }))
             }),
         },
         detail: {
             summary: 'Get UTXOs for an Address',
             description: 'Retrieves the unspent transaction outputs (UTXOs) for a given Bitcoin address.',
+            tags: ['Address Information']
+        }
+    })
+    // --- Address Inscriptions Route ---
+    .get('/addresses/:address/inscriptions', async ({ params, query, set }) => {
+        const { address } = params;
+        const network = query.network || 'mainnet';
+
+        if (!address) {
+            set.status = 400;
+            throw new Error('Address parameter is required.');
+        }
+        console.log(`[API] Received GET /api/addresses/${address}/inscriptions request for network ${network}`);
+
+        try {
+            const networkForLib: NetworkType = network === 'signet' ? 'signet'
+                                         : network === 'testnet' ? 'testnet'
+                                         : 'mainnet';
+            const provider = getProvider(networkForLib);
+            if (!provider) {
+                throw new Error('Resource provider not available or configured.');
+            }
+            console.log(`[API] Using provider: ${provider.constructor?.name || 'Unknown Provider'}`);
+
+            if (!('getInscriptionLocationsByAddress' in provider) || typeof (provider as any).getInscriptionLocationsByAddress !== 'function') {
+                throw new Error('Provider does not support getInscriptionLocationsByAddress method.');
+            }
+
+            const locations = await (provider as any).getInscriptionLocationsByAddress(address) as Array<{ id: string; location: string }>;
+            const data = locations.map(l => ({ id: l.id, owner_output: l.location }));
+            console.log(`[API] Found ${data.length} inscriptions for address ${address}.`);
+            return { data };
+        } catch (error) {
+            console.error(`[API] Error fetching inscriptions for ${address}:`, error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching inscriptions';
+            throw new Error(errorMessage);
+        }
+    }, {
+        params: t.Object({
+            address: t.String({ description: 'Bitcoin address' })
+        }),
+        query: t.Object({
+            network: t.Optional(t.Union([
+                t.Literal('mainnet'),
+                t.Literal('signet'),
+                t.Literal('testnet')
+            ], { default: 'mainnet' }))
+        }),
+        response: {
+            200: t.Object({
+                data: t.Array(t.Object({
+                    id: t.String(),
+                    owner_output: t.String()
+                }))
+            })
+        },
+        detail: {
+            summary: 'Get inscriptions for an address',
+            description: 'Returns inscriptions owned by the address, with their current owner_output outpoint.',
             tags: ['Address Information']
         }
     })
@@ -76,7 +134,9 @@ export const utxoRouter = new Elysia({ prefix: '/api' })
             set.status = 400;
             throw new Error('UTXO parameter is required.');
         }
-        console.log(`[API] Received GET /api/utxo/${utxo}/sat-number request for network ${network}`);
+        // Decode URL-encoded UTXO (e.g., txid%3Avout → txid:vout)
+        const decodedUtxo = (() => { try { return decodeURIComponent(utxo); } catch { return utxo; } })();
+        console.log(`[API] Received GET /api/utxo/${decodedUtxo}/sat-number request for network ${network}`);
 
         try {
             const provider = getProvider(network);
@@ -91,12 +151,12 @@ export const utxoRouter = new Elysia({ prefix: '/api' })
                 throw new Error('Provider does not support getSatNumber method.');
             }
 
-            const satNumber = await provider.getSatNumber(utxo);
+            const satNumber = await provider.getSatNumber(decodedUtxo);
             
-            console.log(`[API] Found sat number ${satNumber} for UTXO ${utxo}.`);
+            console.log(`[API] Found sat number ${satNumber} for UTXO ${decodedUtxo}.`);
             return { data: { satNumber } };
         } catch (error) {
-            console.error(`[API] Error fetching sat number for UTXO ${utxo}:`, error);
+            console.error(`[API] Error fetching sat number for UTXO ${decodedUtxo}:`, error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error fetching sat number';
             throw new Error(errorMessage);
         }

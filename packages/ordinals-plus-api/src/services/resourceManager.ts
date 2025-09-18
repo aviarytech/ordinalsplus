@@ -68,37 +68,57 @@ class ResourceManagerService {
     
     return {
       inscriptionId: data.inscriptionId,
-      inscriptionNumber: parseInt(data.inscriptionNumber),
+      inscriptionNumber: parseInt(data.inscriptionNumber || '0'),
       resourceId: data.resourceId,
       ordinalsType: data.ordinalsType,
       contentType: data.contentType,
-      indexedAt: parseInt(data.indexedAt),
+      indexedAt: parseInt(data.indexedAt || '0'),
       indexedBy: data.indexedBy,
-      network: data.network
+      network: data.network,
+      // Optional mined data (if stored by indexer)
+      blockHeight: data.blockHeight ? parseInt(data.blockHeight) : undefined,
+      blockTimestamp: data.blockTimestamp ? parseInt(data.blockTimestamp) : undefined
     };
   }
 
   /**
-   * Get Ordinals Plus inscriptions with complete resource data in reverse order (newest first)
+   * Get Ordinals Plus inscriptions with complete resource data.
+   * Direction controls chronological order based on list indexing (newest at index 0).
+   *
+   * @param offset - page offset (0-based)
+   * @param limit - number of items to return
+   * @param direction - 'desc' (newest first) or 'asc' (oldest first)
    */
-  async getOrdinalsWithData(start: number = 0, end: number = -1): Promise<any[]> {
+  async getOrdinalsWithData(offset: number = 0, limit: number = 50, direction: 'desc' | 'asc' = 'desc'): Promise<any[]> {
     if (!this.connected) await this.connect();
     
     // Get total count first
     const totalCount = await this.getOrdinalsCount();
     if (totalCount === 0) return [];
-    
-    // For reverse order (newest first), we want to read from the beginning of the list
-    // since lPush adds newest items to the front (index 0)
-    const actualStart = start;
-    const actualEnd = end === -1 ? start + 49 : end; // Default limit if end is -1
-    
-    // Get resource IDs in reverse order (newest first is already at front of list)
-    const resourceIds = await this.redis.lRange(
-      this.ORDINALS_PLUS_LIST, 
-      actualStart, 
-      actualEnd
-    );
+
+    // Compute lRange indices based on direction
+    let startIndex: number;
+    let endIndex: number;
+    if (direction === 'desc') {
+      // Newest first — head of list
+      startIndex = Math.max(0, offset);
+      endIndex = Math.min(totalCount - 1, offset + limit - 1);
+    } else {
+      // Oldest first — tail of list
+      // Convert offset from tail perspective
+      // Example: offset 0 => oldest (index totalCount-1)
+      const tailStart = Math.max(0, totalCount - offset - limit);
+      const tailEnd = Math.min(totalCount - 1, totalCount - offset - 1);
+      startIndex = tailStart;
+      endIndex = tailEnd;
+    }
+
+    // Get resource IDs
+    let resourceIds = await this.redis.lRange(this.ORDINALS_PLUS_LIST, startIndex, endIndex);
+    if (direction === 'asc') {
+      // Reverse to present oldest→newest within this slice
+      resourceIds = resourceIds.reverse();
+    }
     
     // Get detailed information from stored hashes
     const resources = await Promise.all(
@@ -108,19 +128,6 @@ class ResourceManagerService {
         if (resourceData) {
           return resourceData;
         }
-        
-        // If no stored data found, this shouldn't happen with new indexer, but fallback
-        console.warn('Resource data not found for:', resourceId);
-        return {
-          inscriptionId: 'unknown',
-          inscriptionNumber: 0,
-          resourceId,
-          ordinalsType: 'unknown',
-          contentType: 'unknown',
-          indexedAt: Date.now(),
-          indexedBy: 'fallback',
-          network: resourceId.includes(':sig:') ? 'signet' : 'mainnet'
-        };
       })
     );
     
@@ -141,13 +148,15 @@ class ResourceManagerService {
         // Convert numeric fields back to proper types
         return {
           inscriptionId: resourceData.inscriptionId,
-          inscriptionNumber: parseInt(resourceData.inscriptionNumber) || 0,
+          inscriptionNumber: parseInt(resourceData.inscriptionNumber || '0') || 0,
           resourceId: resourceData.resourceId,
           ordinalsType: resourceData.ordinalsType,
           contentType: resourceData.contentType,
-          indexedAt: parseInt(resourceData.indexedAt) || Date.now(),
+          indexedAt: parseInt(resourceData.indexedAt || '0') || Date.now(),
           indexedBy: resourceData.indexedBy || 'indexer',
-          network: resourceData.network || 'unknown'
+          network: resourceData.network || 'unknown',
+          blockHeight: resourceData.blockHeight ? parseInt(resourceData.blockHeight) : undefined,
+          blockTimestamp: resourceData.blockTimestamp ? parseInt(resourceData.blockTimestamp) : undefined
         };
       }
     }
@@ -158,7 +167,7 @@ class ResourceManagerService {
   /**
    * Get current stats
    */
-  async getStats(): Promise<{ totalProcessed: number; ordinalsFound: number; errors: number; lastUpdated: number } | null> {
+  async getStats(): Promise<{ totalProcessed: number; ordinalsFound: number; errors: number; lastUpdated: number; cursor?: number } | null> {
     if (!this.connected) await this.connect();
     
     try {
@@ -182,7 +191,8 @@ class ResourceManagerService {
         totalProcessed,
         ordinalsFound: ordinalsCount,
         errors: parseInt(errorCount || '0'),
-        lastUpdated: Date.now() // Use current time as we don't store this separately
+        lastUpdated: Date.now(),
+        cursor: parseInt(cursor || '0')
       };
     } catch (error) {
       console.error('Error fetching stats:', error);

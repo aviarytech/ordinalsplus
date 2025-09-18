@@ -1,0 +1,216 @@
+[
+  {
+    "title": "Overview",
+    "description": "A high-level introduction to the Ordinals Plus library, explaining its purpose for managing BTCO DIDs and DID Linked Resources on Bitcoin, and outlining its main components for developers.",
+    "path": "/overview",
+    "parentId": null,
+    "sourceIds": [
+      "README.md",
+      "SUMMARY.md",
+      "package.json",
+      "src/index.ts"
+    ]
+  },
+  {
+    "title": "Getting Started",
+    "description": "Provides a step-by-step guide to installing the library and running a basic code example to create and resolve DIDs and resources, enabling developers to quickly start building.",
+    "path": "/getting-started",
+    "parentId": null,
+    "sourceIds": [
+      "README.md",
+      "SUMMARY.md",
+      "package.json"
+    ]
+  },
+  {
+    "title": "Core Concepts",
+    "description": "Explains the fundamental principles behind the Ordinals Plus library, including BTCO DIDs, Linked Resources, the transaction lifecycle, and the provider system.",
+    "path": "/core-concepts",
+    "parentId": null,
+    "sourceIds": [
+      "SUMMARY.md",
+      "src/did/index.ts",
+      "src/resources/index.ts",
+      "src/transactions/index.ts",
+      "src/vc/index.ts"
+    ]
+  },
+  {
+    "title": "BTCO DIDs",
+    "description": "Details the structure and functionality of the `BtcoDid` class for creating, validating, and resolving BTCO Decentralized Identifiers on the Bitcoin blockchain.",
+    "path": "/core-concepts/btco-dids",
+    "parentId": "/core-concepts",
+    "sourceIds": [
+      "SUMMARY.md",
+      "src/did/btco-did-resolver.ts",
+      "src/did/did-document.ts",
+      "src/did/did-utils.ts",
+      "src/utils/validators.ts"
+    ]
+  },
+  {
+    "title": "Linked Resources",
+    "description": "Covers how to work with DID Linked Resources using the `ResourceResolver`, including resolving content, collections, and handling different data providers like Ordiscan.",
+    "path": "/core-concepts/linked-resources",
+    "parentId": "/core-concepts",
+    "sourceIds": [
+      "SUMMARY.md",
+      "src/resources/resource-resolver.ts",
+      "src/resources/linked-resource.ts",
+      "src/resources/resource-utils.ts",
+      "src/types/resource.ts"
+    ]
+  },
+  {
+    "title": "Transaction Lifecycle",
+    "description": "Explains the two-phase commit/reveal transaction process for creating inscriptions, covering fee calculation, UTXO selection, signing, and broadcasting.",
+    "path": "/core-concepts/transaction-lifecycle",
+    "parentId": "/core-concepts",
+    "sourceIds": [
+      "src/transactions/index.ts",
+      "src/transactions/commit-transaction.ts",
+      "src/transactions/reveal-transaction.ts",
+      "src/transactions/transaction-status-tracker.ts",
+      "src/transactions/fee-calculation.ts"
+    ]
+  },
+  {
+    "title": "Verifiable Credentials (VCs)",
+    "description": "Introduces the `VCService` for issuing and verifying W3C Verifiable Credentials for inscriptions, integrating with an external VC API.",
+    "path": "/core-concepts/verifiable-credentials",
+    "parentId": "/core-concepts",
+    "sourceIds": [
+      "src/vc/index.ts",
+      "src/vc/service.ts",
+      "src/vc/types.ts",
+      "src/vc/api-client.ts",
+      "src/vc/validators.ts",
+      "src/vc/formatters.ts"
+    ]
+  },
+  {
+    "title": "API Reference",
+    "description": "A comprehensive reference of all public classes, functions, and types exported by the Ordinals Plus library, organized by module.",
+    "path": "/api-reference",
+    "parentId": null,
+    "sourceIds": [
+      "src/index.ts"
+    ]
+  },
+  {
+    "title": "DIDs",
+    "description": "API documentation for DID-related functionalities, including the `BtcoDidResolver` and utility functions for creating and validating DIDs.",
+    "path": "/api-reference/dids",
+    "parentId": "/api-reference",
+    "sourceIds": [
+      "src/did/index.ts",
+      "src/did/btco-did-resolver.ts",
+      "src/did/did-document.ts",
+      "src/did/did-utils.ts"
+    ]
+  },
+  {
+    "title": "Resources",
+    "description": "API documentation for the `ResourceResolver`, providers, and utility functions for working with DID Linked Resources.",
+    "path": "/api-reference/resources",
+    "parentId": "/api-reference",
+    "sourceIds": [
+      "src/resources/index.ts",
+      "src/resources/resource-resolver.ts",
+      "src/resources/providers/index.ts",
+      "src/resources/providers/types.ts",
+      "src/resources/providers/ordiscan-provider.ts",
+      "src/resources/providers/ord-node-provider.ts"
+    ]
+  },
+  {
+    "title": "Transactions",
+    "description": "API documentation for creating, signing, and broadcasting commit and reveal transactions, including fee calculation and UTXO selection.",
+    "path": "/api-reference/transactions",
+    "parentId": "/api-reference",
+    "sourceIds": [
+      "src/transactions/index.ts",
+      "src/transactions/commit-transaction.ts",
+      "src/transactions/reveal-transaction.ts",
+      "src/transactions/resource-creation.ts",
+      "src/transactions/utxo-selection.ts",
+      "src/transactions/transaction-signing.ts",
+      "src/transactions/transaction-broadcasting.ts",
+      "src/transactions/transaction-confirmation.ts"
+    ]
+  },
+  {
+    "title": "Key Management",
+    "description": "API documentation for the `KeyManager` and related classes for generating, storing, and managing cryptographic keys.",
+    "path": "/api-reference/key-management",
+    "parentId": "/api-reference",
+    "sourceIds": [
+      "src/key-management/index.ts",
+      "src/key-management/key-manager.ts",
+      "src/key-management/key-pair-generator.ts",
+      "src/key-management/key-storage.ts"
+    ]
+  },
+  {
+    "title": "Verifiable Credentials",
+    "description": "API documentation for the `VCService`, types, and formatters for creating and verifying W3C Verifiable Credentials.",
+    "path": "/api-reference/verifiable-credentials",
+    "parentId": "/api-reference",
+    "sourceIds": [
+      "src/vc/index.ts",
+      "src/vc/service.ts",
+      "src/vc/types.ts",
+      "src/vc/api-client.ts",
+      "src/vc/formatters.ts",
+      "src/vc/validators.ts"
+    ]
+  },
+  {
+    "title": "Indexer",
+    "description": "API documentation for the `OrdinalsIndexer` client, used for querying inscription data from an indexer service.",
+    "path": "/api-reference/indexer",
+    "parentId": "/api-reference",
+    "sourceIds": [
+      "src/indexer/index.ts",
+      "src/indexer/ordinals-indexer.ts",
+      "src/indexer/memory-db.ts",
+      "src/types/indexer.ts"
+    ]
+  },
+  {
+    "title": "Utilities",
+    "description": "API documentation for various utility functions, including address handling, CBOR, PSBT manipulation, and error handling.",
+    "path": "/api-reference/utilities",
+    "parentId": "/api-reference",
+    "sourceIds": [
+      "src/utils/index.ts",
+      "src/utils/address-utils.ts",
+      "src/utils/cbor-utils.ts",
+      "src/utils/psbt-utils.ts",
+      "src/utils/validators.ts",
+      "src/utils/error-handler.ts",
+      "src/utils/recovery.ts"
+    ]
+  },
+  {
+    "title": "Development & Contribution",
+    "description": "A guide for developers who want to contribute to the Ordinals Plus library, covering setup, building, running tests, and linting.",
+    "path": "/development",
+    "parentId": null,
+    "sourceIds": [
+      "package.json",
+      "tsconfig.json",
+      "eslint.config.js",
+      "SUMMARY.md"
+    ]
+  },
+  {
+    "title": "Changelog",
+    "description": "A detailed history of all notable changes, feature additions, and bug fixes for each version of the Ordinals Plus library.",
+    "path": "/changelog",
+    "parentId": null,
+    "sourceIds": [
+      "CHANGELOG.md"
+    ]
+  }
+]

@@ -4,7 +4,7 @@
  * This controller handles API endpoints for verifying inscriptions and credentials.
  */
 import { VerificationService } from '../services/verificationService';
-import { VerificationStatus, VerificationCheck } from '../types/verification';
+import { VerificationStatus, type VerificationCheck } from '../types/verification';
 import { logger } from '../utils/logger';
 
 /**

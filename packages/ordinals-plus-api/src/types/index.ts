@@ -36,7 +36,7 @@ export interface Utxo {
   txid: string;
   vout: number;
   value: number;
-  scriptPubKey: string; // Added based on usage in index.ts
+  scriptPubKey?: string | undefined;
 }
 
 export interface ApiConfig {

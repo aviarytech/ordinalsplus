@@ -192,6 +192,8 @@ export const NetworkProvider: React.FC<{children: ReactNode}> = ({ children }) =
             try {
                 localStorage.setItem(LOCAL_STORAGE_NETWORK_KEY, network.id);
                 console.log(`[NetworkContext] Saved network ID '${network.id}' to localStorage.`);
+                // Also persist legacy key used by ApiService fallback
+                localStorage.setItem('currentNetwork', network.id);
             } catch (e) {
                 console.error("[NetworkContext] Error saving to localStorage:", e);
             }
@@ -199,6 +201,7 @@ export const NetworkProvider: React.FC<{children: ReactNode}> = ({ children }) =
              // Handle case where selection is cleared (e.g., remove from storage?)
              try {
                  localStorage.removeItem(LOCAL_STORAGE_NETWORK_KEY);
+                 localStorage.removeItem('currentNetwork');
                  console.log('[NetworkContext] Cleared network selection from localStorage.');
              } catch (e) {
                  console.error("[NetworkContext] Error removing from localStorage:", e);

@@ -188,6 +188,8 @@ interface OrdinalsInscription {
   contentUrl: string;
   inscriptionUrl: string;
   metadataUrl: string;
+  blockHeight?: number | null;
+  blockTime?: string | null;
 }
 
 interface IndexerStats {
@@ -250,6 +252,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     hasPrev: false
   });
   const [ordinalsLoading, setOrdinalsLoading] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [ordinalsError, setOrdinalsError] = useState<string | null>(null);
   const [currentOrdinalsPage, setCurrentOrdinalsPage] = useState(1);
   const [showOrdinalsSection, setShowOrdinalsSection] = useState(true);
@@ -270,7 +273,8 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     setOrdinalsError(null);
     
     try {
-      const response = await fetch(`${env.VITE_BACKEND_URL}/api/indexer/ordinals-plus?page=${page}&limit=${limit}`);
+      const netParam = network?.type ? `&network=${encodeURIComponent(network.type)}` : '';
+      const response = await fetch(`${env.VITE_BACKEND_URL}/api/indexer/ordinals-plus?page=${page}&limit=${limit}&sort=${sortOrder}${netParam}`);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -305,7 +309,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     if (showOrdinalsSection) {
       loadOrdinalsInscriptions();
     }
-  }, [currentOrdinalsPage, apiService, showOrdinalsSection]);
+  }, [currentOrdinalsPage, apiService, showOrdinalsSection, sortOrder, network?.type]);
 
   const formatTimestamp = (timestamp: string | null) => {
     if (!timestamp) return 'Unknown';
@@ -333,34 +337,34 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     if (isImage) {
       console.log(`[ContentPreview] Rendering as image: ${inscription.inscriptionId}`);
       return (
-        <div className="relative">
-                      <img
+        <div className="relative flex justify-center">
+          <div className="relative w-24 h-24 border border-gray-300 dark:border-gray-500 rounded bg-gray-50 dark:bg-gray-800">
+            <img
               src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
               alt={`Inscription ${inscription.inscriptionId}`}
-              className="w-full h-24 object-contain border border-gray-300 dark:border-gray-500 rounded bg-gray-50 dark:bg-gray-800"
-            onLoad={() => {
-              console.log(`✅ Image loaded successfully: ${inscription.inscriptionId}`);
-            }}
-            onError={(e) => {
-              console.error(`❌ Image failed to load: ${inscription.inscriptionId}`);
-              // Fallback to iframe if image fails
-              const target = e.target as HTMLImageElement;
-              const container = target.parentElement;
-              if (container) {
-                container.innerHTML = `
-                  <iframe
-                    src="http://127.0.0.1:80/content/${inscription.inscriptionId}"
-                    class="w-full h-24 border border-gray-300 dark:border-gray-500 rounded text-xs"
-                    sandbox="allow-same-origin"
-                    title="Content of ${inscription.inscriptionId}"
-                  ></iframe>
-                `;
-              }
-            }}
-          />
-          {/* Show content type for debugging */}
-          <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 rounded">
-            {inscription.contentType || 'unknown'}
+              className="absolute inset-0 w-full h-full object-contain"
+              onLoad={() => {
+                console.log(`✅ Image loaded successfully: ${inscription.inscriptionId}`);
+              }}
+              onError={(e) => {
+                console.error(`❌ Image failed to load: ${inscription.inscriptionId}`);
+                const target = e.target as HTMLImageElement;
+                const container = target.parentElement;
+                if (container) {
+                  container.innerHTML = `
+                    <iframe
+                      src=\"http://127.0.0.1:80/content/${inscription.inscriptionId}\"
+                      class=\"absolute inset-0 w-full h-full border-0 rounded\"
+                      sandbox=\"allow-same-origin\"
+                      title=\"Content of ${inscription.inscriptionId}\"
+                    ></iframe>
+                  `;
+                }
+              }}
+            />
+            <div className="absolute bottom-1 right-1 bg-black bg-opacity-75 text-white text-xs px-1 rounded">
+              {inscription.contentType || 'unknown'}
+            </div>
           </div>
         </div>
       );
@@ -369,12 +373,16 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
     // For non-images, use iframe
     console.log(`[ContentPreview] Rendering as iframe: ${inscription.inscriptionId}`);
     return (
-      <iframe
-        src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
-        className="w-full h-24 border border-gray-300 dark:border-gray-500 rounded text-xs"
-        sandbox="allow-same-origin"
-        title={`Content of ${inscription.inscriptionId}`}
-      />
+      <div className="relative flex justify-center">
+        <div className="relative w-24 h-24 border border-gray-300 dark:border-gray-500 rounded bg-white dark:bg-gray-700">
+          <iframe
+            src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+            className="absolute inset-0 w-full h-full rounded"
+            sandbox="allow-scripts allow-same-origin"
+            title={`Content of ${inscription.inscriptionId}`}
+          />
+        </div>
+      </div>
     );
   };
 
@@ -1035,12 +1043,23 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
               Recent Ordinals Plus Resources
             </h3>
           </div>
-          <button
-            onClick={() => setShowOrdinalsSection(false)}
-            className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <XCircle className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder((e.target.value as 'asc' | 'desc') || 'desc')}
+              className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200"
+              aria-label="Sort order"
+            >
+              <option value="desc">Newest first</option>
+              <option value="asc">Oldest first</option>
+            </select>
+            <button
+              onClick={() => setShowOrdinalsSection(false)}
+              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -1177,9 +1196,13 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
                           </p>
                         </div>
                         <div>
-                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Indexed:</span>
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Mined:</span>
                           <p className="text-sm text-gray-600 dark:text-gray-300">
-                            {formatTimestamp(inscription.indexedAt ? new Date(inscription.indexedAt).toISOString() : null)}
+                            {inscription.blockTime
+                              ? formatTimestamp(inscription.blockTime)
+                              : (typeof inscription.blockHeight === 'number' && inscription.blockHeight > 0
+                                  ? `Block ${new Intl.NumberFormat(undefined).format(inscription.blockHeight)}`
+                                  : 'Unknown')}
                           </p>
                         </div>
                       </div>
