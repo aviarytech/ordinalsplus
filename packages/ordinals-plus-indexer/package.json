@@ -20,7 +20,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "ordinalsplus": "^1.2.1",
+    "ordinalsplus": "1.4.0",
     "redis": "^4.6.13"
   },
   "devDependencies": {

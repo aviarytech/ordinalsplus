@@ -972,6 +972,12 @@ class ScalableIndexerWorker {
   // Tail loop for BLOCK_TAIL_MODE
   private async runTailLoop(): Promise<void> {
     const BLOCK_LOOKBACK = Number(process.env.BLOCK_LOOKBACK ?? '5');
+    console.log(`[runTailLoop] Getting latest block...`);
+    console.log(`[runTailLoop] Provider:`, this.provider);
+    console.log(`[runTailLoop] Provider type:`, typeof this.provider);
+    console.log(`[runTailLoop] Provider method:`, (this.provider as any).getLatestBlock);
+    console.log(`[runTailLoop] Provider method type:`, typeof (this.provider as any).getLatestBlock);
+    console.log(`[runTailLoop] Provider method result:`, await (this.provider as any).getLatestBlock?.());
     let latestBlock = await (this.provider as any).getLatestBlock?.();
     console.log(`[runTailLoop] Latest block:`, latestBlock);
     console.log(`[runTailLoop] Latest block height:`, latestBlock?.height);
