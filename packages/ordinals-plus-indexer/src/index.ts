@@ -974,7 +974,6 @@ class ScalableIndexerWorker {
     const BLOCK_LOOKBACK = Number(process.env.BLOCK_LOOKBACK ?? '5');
     let latestBlock = await (this.provider as any).getLatestBlock?.();
     console.log(`[runTailLoop] Latest block:`, latestBlock);
-    console.log(`[runTailLoop] Latest block:`, Object.keys(latestBlock));
     console.log(`[runTailLoop] Latest block height:`, latestBlock?.height);
     if (!latestBlock || typeof latestBlock.height !== 'number') {
       console.error('❌ Provider does not support latest block endpoint – cannot run tail mode');
