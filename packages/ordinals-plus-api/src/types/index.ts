@@ -27,9 +27,6 @@ export type {
 } from "ordinalsplus";
 */
 
-// Keep specific re-exports if needed elsewhere, or remove if duplicates
-// export type { LinkedResource, ResourceProvider, Utxo } from 'ordinalsplus';
-
 // --- Define Utxo locally if import fails ---
 // Minimal Utxo definition needed for request types
 export interface Utxo {

@@ -10,6 +10,7 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
    */
   .get('/ordinals-plus', async ({ query }) => {
     try {
+      const contentNodeUrl = process.env.CONTENT_ORD_NODE_URL ? process.env.CONTENT_ORD_NODE_URL : ORD_SERVER_URL;
       const page = parseInt(query.page as string) || 1;
       const limit = Math.min(parseInt(query.limit as string) || 50, 100); // Max 100 per page
       const sort = (query.sort as string) === 'asc' ? 'asc' : 'desc';
@@ -22,6 +23,7 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
       const allInscriptionData = await resourceManager.getOrdinalsWithData(0, totalCount, sort as any);
       
       // Transform to API response format expected by the UI
+      console.log(`contentNodeUrl ${contentNodeUrl}`);
       const baseInscriptions = allInscriptionData.map((resource: any) => ({
         inscriptionId: resource.inscriptionId,
         inscriptionNumber: resource.inscriptionNumber,
@@ -33,9 +35,9 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
         indexedBy: resource.indexedBy,
         blockHeight: resource.blockHeight,
         blockTimestamp: resource.blockTimestamp,
-        contentUrl: `${ORD_SERVER_URL}/content/${resource.inscriptionId}`,
-        inscriptionUrl: `${ORD_SERVER_URL}/inscription/${resource.inscriptionId}`,
-        metadataUrl: `${ORD_SERVER_URL}/r/metadata/${resource.inscriptionId}`
+        contentUrl: `${contentNodeUrl}/content/${resource.inscriptionId}`,
+        inscriptionUrl: `${contentNodeUrl}/inscription/${resource.inscriptionId}`,
+        metadataUrl: `${contentNodeUrl}/r/metadata/${resource.inscriptionId}`
       }));
 
       // Final ordering strictly by mined block height (global)
@@ -170,6 +172,7 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
   .get('/inscription/:id', async ({ params }) => {
     try {
       const { id } = params;
+      const contentNodeUrl = process.env.CONTENT_ORD_NODE_URL ? process.env.CONTENT_ORD_NODE_URL : ORD_SERVER_URL;
       
       // Get resource data from our cache
       const resourceData = await resourceManager.getResourceData(id);
@@ -222,9 +225,9 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
             ordServerData: inscriptionData,
             metadata,
             urls: {
-              content: `${ORD_SERVER_URL}/content/${id}`,
-              inscription: `${ORD_SERVER_URL}/inscription/${id}`,
-              metadata: `${ORD_SERVER_URL}/r/metadata/${id}`
+              content: `${contentNodeUrl}/content/${id}`,
+              inscription: `${contentNodeUrl}/inscription/${id}`,
+              metadata: `${contentNodeUrl}/r/metadata/${id}`
             }
           }
         };

@@ -4,6 +4,7 @@ import * as v from 'valibot';
 const EnvSchema = v.object({
   ORDISCAN_API_KEY: v.optional(v.string()),
   ORD_NODE_URL: v.string(),
+  CONTENT_ORD_NODE_URL: v.optional(v.string()),
   PORT: v.number(),
   HOST: v.optional(v.string()),
   API_BASE_URL: v.optional(v.string()),
@@ -21,6 +22,7 @@ export function loadEnv(): EnvConfig {
     const raw = {
       ORDISCAN_API_KEY: process.env.ORDISCAN_API_KEY,
       ORD_NODE_URL: process.env.ORD_NODE_URL,
+      CONTENT_ORD_NODE_URL: process.env.CONTENT_ORD_NODE_URL,
       PORT: Number(process.env.PORT ?? '3001'),
       HOST: process.env.HOST ?? '0.0.0.0',
       API_BASE_URL: process.env.API_BASE_URL,

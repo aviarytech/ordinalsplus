@@ -529,7 +529,7 @@ export class ResourceInscriptionService {
         size: params.content.content instanceof Buffer ? params.content.content.length : Buffer.from(params.content.content as string).length,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        content_url: `https://ordinals.plus/content/${revealTxid}`,
+        content_url: `${(env.CONTENT_ORD_NODE_URL || 'https://ordinals.plus')}/content/${revealTxid}`,
         sat: 0, // This would be set to the actual satoshi number in a real implementation
         
         // Additional properties

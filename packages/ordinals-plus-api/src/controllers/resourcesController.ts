@@ -1,10 +1,11 @@
 import type { 
-  ApiResponse,
-  LinkedResource
+  ApiResponse
   // DID,
   // Inscription
 } from '../types';
 import { getProvider } from '../services/providerService';
+import type { LinkedResource } from 'ordinalsplus';
+import { env } from '../config/envConfig';
 // Import the resource creation types and functions from ordinalsplus
 
 // Cache expiration time in milliseconds (5 minutes)
@@ -85,9 +86,17 @@ export const getAllResources = async (options: GetAllResourcesOptions): Promise<
 
     console.log(`Fetched page ${page} for network ${network} with ${resources.length} resources, total items estimate: ${totalItems}`);
 
+    // Apply content URL override if configured
+    const overrideBase = env.CONTENT_ORD_NODE_URL || undefined;
+    const mapped = overrideBase
+      ? resources.map((r) => r.content_url
+        ? { ...r, content_url: r.content_url.replace(/^(https?:\/\/[^/]+)(?=\/content\/)/, overrideBase) }
+        : r)
+      : resources;
+
     // Return only the fields defined in the non-generic ApiResponse type
     return {
-      linkedResources: resources,
+      linkedResources: mapped,
       page: page, // Correctly return the numeric page
       totalItems: totalItems, // Note: Accuracy depends on provider and filtering
       itemsPerPage: limit,
@@ -113,8 +122,12 @@ export const getResourceById = async (id: string): Promise<ApiResponse> => {
     const resource = await provider.resolve(id);
 
     // Return success structure (no error field)
+    const overrideBase = env.CONTENT_ORD_NODE_URL || undefined;
+    const resourceWithOverride = overrideBase && resource?.content_url
+      ? { ...resource, content_url: resource.content_url.replace(/^(https?:\/\/[^/]+)(?=\/content\/)/, overrideBase) }
+      : resource;
     return {
-      linkedResources: [resource],
+      linkedResources: [resourceWithOverride],
       page: 1, // Or appropriate values if single resource has page context?
       totalItems: 1,
       itemsPerPage: 1,
@@ -137,13 +150,19 @@ export const getResourcesByDid = async (didId: string): Promise<ApiResponse> => 
       throw new Error(`Resource provider not available or configured for network: mainnet`);
     }
     const resources = await provider.resolveCollection(didId, {});
+    const overrideBase = env.CONTENT_ORD_NODE_URL || undefined;
+    const mapped = overrideBase
+      ? resources.map((r) => r.content_url
+        ? { ...r, content_url: r.content_url.replace(/^(https?:\/\/[^/]+)(?=\/content\/)/, overrideBase) }
+        : r)
+      : resources;
 
     // Return success structure (no error field)
     return {
-      linkedResources: resources,
+      linkedResources: mapped,
       page: 1, // Assuming resolveCollection doesn't paginate?
-      totalItems: resources.length,
-      itemsPerPage: resources.length, 
+      totalItems: mapped.length,
+      itemsPerPage: mapped.length, 
     };
   } catch (error) {
     console.error(`Error fetching resources for DID ${didId}:`, error);

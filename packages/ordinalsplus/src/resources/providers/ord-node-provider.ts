@@ -379,6 +379,7 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     private async fetchResourceBatch(cursor: number, size: number): Promise<ResourceBatch> {
+        console.log(`[OrdNodeProvider] Fetching resource batch from ${cursor} to ${cursor + size}`);
         const page = Math.floor(cursor / size);
         const listResponse = await this.fetchApi<OrdNodeInscriptionListResponse>(`/inscriptions/${page}`);
         const resources = await Promise.all(

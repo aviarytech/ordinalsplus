@@ -6,6 +6,7 @@ import {
 import { extractCborMetadata } from 'ordinalsplus';
 import { getProvider } from '../services/providerService';
 import { prepareInscriptionForFunding } from '../controllers/inscriptionsController';
+import { env } from '../config/envConfig';
 
 import type { 
     CreatePsbtsRequest,
@@ -80,8 +81,12 @@ export const inscriptionRouter = new Elysia({ prefix: '/api' })
             // and parse it for CBOR metadata since the basic API doesn't include metadata
             try {
                 // Fetch the raw inscription content to look for CBOR metadata
-                console.log(`[inscriptionRouter] Fetching inscription content for ${inscriptionId} from ${inscription.content_url}`);
-                const contentResponse = await fetch(inscription.content_url);
+                const overrideBase = env.CONTENT_ORD_NODE_URL || undefined;
+                const contentUrl = overrideBase && inscription.content_url
+                  ? inscription.content_url.replace(/^(https?:\/\/[^/]+)(?=\/content\/)/, overrideBase)
+                  : inscription.content_url;
+                console.log(`[inscriptionRouter] Fetching inscription content for ${inscriptionId} from ${contentUrl}`);
+                const contentResponse = await fetch(contentUrl);
                 if (!contentResponse.ok) {
                     throw new Error(`Failed to fetch inscription content: ${contentResponse.status}`);
                 }
