@@ -416,6 +416,7 @@ export class OrdNodeProvider implements ResourceProvider {
                 const content_type = response.content_type || response.contentType || 'application/octet-stream';
                 return {
                     id,
+                    number: response.number,
                     sat,
                     content_type,
                     content_url: `${this.nodeUrl}/content/${inscriptionId}`

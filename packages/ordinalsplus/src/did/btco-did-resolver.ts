@@ -3,6 +3,7 @@ import { ResourceProvider } from '../resources/providers/types';
 import { ProviderFactory, ProviderType } from '../resources/providers/provider-factory';
 import { extractCborMetadata } from '../utils/cbor-utils';
 import { DidDocument } from '../types/did';
+import { OrdNodeProvider } from '../resources/providers';
 
 /**
  * Individual inscription data for BTCO DID resources
@@ -138,7 +139,10 @@ export class BtcoDidResolver {
         bitcoinNetwork = 'mainnet';
         const apiKey = process.env.ORDISCAN_API_KEY;
         if (!apiKey) {
-          throw new Error('Ordiscan API key is required. Please provide a configured provider via options.provider or set the ORDISCAN_API_KEY environment variable.');
+          return new OrdNodeProvider({
+            nodeUrl: process.env.MAINNET_ORD_NODE_URL!,
+            network: bitcoinNetwork
+          });
         }
         const providerConfig = {
           type: ProviderType.ORDISCAN,

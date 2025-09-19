@@ -129,7 +129,6 @@ class OptimizedResourceAnalyzer {
     try {
       // Generate the proper resource ID format
       const resourceId = await this.generateResourceIdOptimized(inscriptionId, inscriptionNumber, preloadedInscription);
-
       let ordinalsResource: OrdinalsResource | null = null;
       let nonOrdinalsResource: NonOrdinalsResource | null = null;
 
@@ -1071,6 +1070,7 @@ class ScalableIndexerWorker {
     for (const insId of inscriptionIds) {
       try {
         const inscription = await this.provider.getInscription(insId);
+        console.log(`[DEBUG] Inscription: ${insId}`, inscription);
         const metadata = await this.provider.getMetadata(insId);
         const { ordinalsResource, nonOrdinalsResource, error } = await this.analyzer.analyzeInscription(
           insId,
