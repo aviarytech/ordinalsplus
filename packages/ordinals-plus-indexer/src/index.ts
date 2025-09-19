@@ -1065,6 +1065,9 @@ class ScalableIndexerWorker {
     if (this.debugBlock === height) {
       console.log(`[DEBUG] Resolved inscription IDs (first 5): ${inscriptionIds.slice(0, 5).join(', ')}`);
     }
+    let ordinalsCount = 0;
+    let nonOrdinalsCount = 0;
+    let errorCount = 0;
     for (const insId of inscriptionIds) {
       try {
         const inscription = await this.provider.getInscription(insId);
@@ -1077,15 +1080,7 @@ class ScalableIndexerWorker {
           this.workerId,
           inscription
         );
-        if (this.debugBlock === height) {
-          console.log('[DEBUG]', {
-            insId,
-            contentType: inscription.content_type,
-            hasMetadata: !!metadata,
-            classification: ordinalsResource ? 'ordinals-plus' : nonOrdinalsResource ? 'non-ordinals' : 'error',
-            error: error?.error
-          });
-        }
+        // Avoid per-inscription logs to reduce noise
         if (ordinalsResource) {
           if (this.debugBlock === height) {
             console.log(`📝 [DEBUG] Storing Ordinals Plus resource in Redis:`, {
@@ -1097,9 +1092,7 @@ class ScalableIndexerWorker {
             });
           }
           await this.storage.storeOrdinalsResource(ordinalsResource);
-          if (this.debugBlock === height) {
-            console.log(`✅ [DEBUG] Stored Ordinals Plus resource: ${ordinalsResource.resourceId}`);
-          }
+          ordinalsCount++;
         } else if (nonOrdinalsResource) {
           if (this.debugBlock === height) {
             console.log(`📝 [DEBUG] Storing Non-Ordinals resource in Redis:`, {
@@ -1108,21 +1101,20 @@ class ScalableIndexerWorker {
             });
           }
           await this.storage.storeNonOrdinalsResource(nonOrdinalsResource);
-          if (this.debugBlock === height) {
-            console.log(`✅ [DEBUG] Stored Non-Ordinals resource: ${nonOrdinalsResource.inscriptionId}`);
-          }
+          nonOrdinalsCount++;
         } else if (error) {
           await this.storage.storeInscriptionError(error);
-          if (this.debugBlock === height) {
-            console.log(`[DEBUG] Stored error for ${insId}: ${error.error}`);
-          }
+          errorCount++;
         }
       } catch (e) {
-        if (this.debugBlock === height) {
-          console.warn(`[DEBUG] Failed inscription ${insId}:`, (e as any)?.message || e);
+        if (this.debugBlock !== height) {
+          console.warn(`⚠️ Failed to process inscription in block ${height}:`, (e as any)?.message || e);
         }
-        console.warn(`⚠️ Failed to process inscription in block ${height}:`, (e as any)?.message || e);
+        errorCount++;
       }
+    }
+    if (this.debugBlock === height) {
+      console.log(`[DEBUG] Block ${height} summary: ordinals=${ordinalsCount}, nonOrdinals=${nonOrdinalsCount}, errors=${errorCount}`);
     }
   }
 
