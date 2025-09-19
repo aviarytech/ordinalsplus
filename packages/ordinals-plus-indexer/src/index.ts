@@ -1045,14 +1045,7 @@ class ScalableIndexerWorker {
   private async processBlock(block: any, height: number): Promise<void> {
     let inscriptionIds: string[] = [];
     if (block && Array.isArray(block.inscriptions)) {
-      // Some ord servers return objects { id, number }, others plain strings
-      if (typeof block.inscriptions[0] === 'string') {
-        inscriptionIds = block.inscriptions as string[];
-      } else {
-        inscriptionIds = (block.inscriptions as any[])
-          .map((i: any) => i?.id)
-          .filter((id: any) => typeof id === 'string');
-      }
+      inscriptionIds = block.inscriptions;
     } else if (block && typeof block.inscriptions === 'number') {
       inscriptionIds = await (this.provider as any).getBlockInscriptions?.(height) ?? [];
     } else {

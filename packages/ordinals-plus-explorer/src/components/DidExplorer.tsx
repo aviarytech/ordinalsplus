@@ -340,7 +340,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
         <div className="relative flex justify-center">
           <div className="relative w-24 h-24 border border-gray-300 dark:border-gray-500 rounded bg-gray-50 dark:bg-gray-800">
             <img
-              src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+              src={`${env.VITE_ORD_NODE_URL || env.VITE_BACKEND_URL}/content/${inscription.inscriptionId}`}
               alt={`Inscription ${inscription.inscriptionId}`}
               className="absolute inset-0 w-full h-full object-contain"
               onLoad={() => {
@@ -353,7 +353,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
                 if (container) {
                   container.innerHTML = `
                     <iframe
-                      src=\"http://127.0.0.1:80/content/${inscription.inscriptionId}\"
+                      src=\"${env.VITE_ORD_NODE_URL || env.VITE_BACKEND_URL}/content/${inscription.inscriptionId}\"
                       class=\"absolute inset-0 w-full h-full border-0 rounded\"
                       sandbox=\"allow-same-origin\"
                       title=\"Content of ${inscription.inscriptionId}\"
@@ -376,7 +376,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
       <div className="relative flex justify-center">
         <div className="relative w-24 h-24 border border-gray-300 dark:border-gray-500 rounded bg-white dark:bg-gray-700">
           <iframe
-            src={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+            src={`${env.VITE_ORD_NODE_URL || env.VITE_BACKEND_URL}/content/${inscription.inscriptionId}`}
             className="absolute inset-0 w-full h-full rounded"
             sandbox="allow-scripts allow-same-origin"
             title={`Content of ${inscription.inscriptionId}`}
@@ -1209,7 +1209,7 @@ const DidExplorer: React.FC<DidExplorerProps> = ({ onResourceSelect }: DidExplor
 
                       <div className="flex gap-2">
                         <a
-                          href={`http://127.0.0.1:80/content/${inscription.inscriptionId}`}
+                          href={`${env.VITE_ORD_NODE_URL || env.VITE_BACKEND_URL}/content/${inscription.inscriptionId}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-500 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-600 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
