@@ -39,7 +39,6 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
       }));
 
       // Final ordering strictly by mined block height (global)
-      console.log(`baseInscriptions ${JSON.stringify(baseInscriptions)}`);
       const inscriptions = baseInscriptions.sort((a: any, b: any) => {
         const ha = typeof a.blockHeight === 'number' ? a.blockHeight : null;
         const hb = typeof b.blockHeight === 'number' ? b.blockHeight : null;

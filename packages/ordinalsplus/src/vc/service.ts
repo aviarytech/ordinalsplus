@@ -361,7 +361,6 @@ export class VCService {
       return false;
     }
     
-    // Skip remote API verification: di-wings verification is sufficient
     return true;
   }
 
