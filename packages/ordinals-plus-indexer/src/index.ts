@@ -1094,12 +1094,6 @@ class ScalableIndexerWorker {
           await this.storage.storeOrdinalsResource(ordinalsResource);
           ordinalsCount++;
         } else if (nonOrdinalsResource) {
-          if (this.debugBlock === height) {
-            console.log(`📝 [DEBUG] Storing Non-Ordinals resource in Redis:`, {
-              inscriptionId: nonOrdinalsResource.inscriptionId,
-              contentType: nonOrdinalsResource.contentType
-            });
-          }
           await this.storage.storeNonOrdinalsResource(nonOrdinalsResource);
           nonOrdinalsCount++;
         } else if (error) {
