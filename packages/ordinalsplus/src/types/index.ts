@@ -20,6 +20,7 @@ export interface Inscription {
     content_type?: string;      // MIME type of the content
     content_url: string;        // URL to fetch the content
     timestamp?: number;         // Timestamp of when the inscription was created
+    height?: number;            // Block height of the inscription
     metadata?: Uint8Array;      // CBOR encoded metadata
 }
 

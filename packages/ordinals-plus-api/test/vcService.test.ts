@@ -14,7 +14,7 @@ class MockDIDService extends DIDService {
     this.publicKeyMultibase = publicKeyMultibase;
   }
   
-  async resolveDID(did: string): Promise<{ didDocument?: any; error?: string }> {
+  async resolve(did: string, _opts?: any): Promise<{ didDocument?: any; error?: string }> {
     return {
       didDocument: {
         id: did,

@@ -16,12 +16,11 @@ import {
 import DidDocumentViewer from '../components/DidDocumentViewer';
 import LinkedResourceList from '../components/LinkedResourceList';
 import VerifiableMetadataViewer from '../components/VerifiableMetadataViewer';
-import CredentialDetails from '../components/verification/CredentialDetails';
 import { DidDocument, LinkedResource } from 'ordinalsplus';
 import { useNetwork } from '../context/NetworkContext';
 import { useApi } from '../context/ApiContext';
 import { useToast } from '../contexts/ToastContext';
-import { VerificationResult, VerificationStatus } from '../types/verification';
+import { VerificationResult } from '../types/verification';
 
 interface ResolutionMetadata {
   inscriptionId?: string;

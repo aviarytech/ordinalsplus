@@ -251,13 +251,10 @@ export class BtcoDidResolver {
             inscriptionDataList.push(inscriptionData);
             continue;
           }
-
-          console.log(`[BtcoDidResolver] Inscription ${inscriptionId}: ${inscriptionData.content}`);
           
           // Extract CBOR metadata
           try {
             inscriptionData.metadata = await provider.getMetadata(inscriptionId);
-            console.log(`[BtcoDidResolver] Metadata for ${inscriptionId}: ${JSON.stringify(inscriptionData.metadata)}`);
           } catch (error) {
             console.warn(`Failed to decode CBOR metadata for ${inscriptionId}:`, error);
             inscriptionData.metadata = null;

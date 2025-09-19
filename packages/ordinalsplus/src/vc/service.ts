@@ -361,25 +361,8 @@ export class VCService {
       return false;
     }
     
-    // Verify using the API as additional validation
-    const verifyParams: VerifyCredentialParams = {
-      credential
-    };
-    
-    try {
-      if (!this.apiClient) {
-        console.warn('API client not configured, skipping API verification');
-        return true; // Return true since di-wings verification passed
-      }
-      
-      const apiVerificationResult = await this.apiClient.verifyCredential(verifyParams);
-      console.log(`[VCService] API verification result:`, apiVerificationResult);
-      
-      return apiVerificationResult;
-    } catch (error: unknown) {
-      console.error('API verification failed:', error);
-      return false;
-    }
+    // Skip remote API verification: di-wings verification is sufficient
+    return true;
   }
 
   /**

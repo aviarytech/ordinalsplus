@@ -118,7 +118,7 @@ Features:
   ✅ Chronological ordering - both resource types sorted by inscription number
 
 Redis Keys Created:
-  📋 ordinals-plus-resources     - Single list of Ordinals Plus resource IDs
+  📋 ordinals-plus-resources     - Set of Ordinals Plus resource IDs (unique)
   📋 non-ordinals-resources      - Single list of Non-Ordinals Plus resource IDs
   ❌ indexer:errors              - List of inscription IDs that failed processing
   📍 indexer:cursor              - Current highest processed inscription number

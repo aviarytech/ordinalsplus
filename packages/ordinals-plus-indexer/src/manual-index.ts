@@ -211,7 +211,7 @@ class ManualIndexer {
 
   private async storeOrdinalsResource(resource: OrdinalsResource): Promise<void> {
     // Store in list for chronological ordering
-    await this.redis.lPush('ordinals-plus-resources', resource.resourceId);
+    await this.redis.sAdd('ordinals-plus-resources', resource.resourceId);
     
     // Store detailed resource data in a hash
     const resourceKey = `ordinals_plus:resource:${resource.inscriptionId}`;

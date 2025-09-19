@@ -52,7 +52,7 @@ class ResourceManagerService {
   async getOrdinalsCount(): Promise<number> {
     if (!this.connected) await this.connect();
     
-    return await this.redis.lLen(this.ORDINALS_PLUS_LIST);
+    return await this.redis.sCard(this.ORDINALS_PLUS_LIST);
   }
 
   /**
@@ -113,12 +113,22 @@ class ResourceManagerService {
       endIndex = tailEnd;
     }
 
-    // Get resource IDs
-    let resourceIds = await this.redis.lRange(this.ORDINALS_PLUS_LIST, startIndex, endIndex);
-    if (direction === 'asc') {
-      // Reverse to present oldest→newest within this slice
-      resourceIds = resourceIds.reverse();
-    }
+    // Source is a set; collect all and page in-memory
+    const allIds = await this.redis.sMembers(this.ORDINALS_PLUS_LIST);
+    // Sets are unordered; sort by indexedAt via resource data for stable pagination
+    const allWithData = await Promise.all(
+      allIds.map(async (resourceId) => ({
+        resourceId,
+        data: await this.findResourceByResourceId(resourceId)
+      }))
+    );
+    const filtered = allWithData.filter(x => x.data);
+    filtered.sort((a, b) => {
+      const ai = a.data!.indexedAt || 0;
+      const bi = b.data!.indexedAt || 0;
+      return direction === 'asc' ? ai - bi : bi - ai;
+    });
+    const resourceIds = filtered.slice(startIndex, endIndex + 1).map(x => x.resourceId);
     
     // Get detailed information from stored hashes
     const resources = await Promise.all(

@@ -23,200 +23,107 @@ export class DIDService {
   }
 
   /**
-   * Resolves a DID to any content type (auto-detection) - primary resolution method
+   * Unified DID resolution method
    * 
    * @param did - The DID to resolve
+   * @param options.expectedContent - Desired content type: 'any' | 'did-document' | 'credential'
    * @returns The resolved content and metadata
    */
-  async resolveDID(did: string): Promise<{ didDocument?: any; content?: any; contentType?: string; error?: string }> {
+  async resolve(
+    did: string,
+    options: { expectedContent?: 'any' | 'did-document' | 'credential' } = { expectedContent: 'any' }
+  ): Promise<{ didDocument?: any; content?: any; contentType?: string; error?: string }> {
+    const { expectedContent = 'any' } = options;
     try {
-      console.log(`[DIDService] Resolving DID (auto-detection): ${did}`);
+      console.log(`[DIDService] Resolving DID (${expectedContent}) for: ${did}`);
       
       if (!isValidDid(did)) {
         return { error: `Invalid DID format: ${did}` };
       }
       
-      // Use auto-detection as the primary resolution method
-      const result = await this.resolver.resolveAnyContent(did, {
-        acceptUntrusted: true,
-        enableAudit: false
-      });
+      // Use core resolver to fetch inscriptions and an optional DID Document
+      const resolution = await this.resolver.resolve(did);
       
-      if (result.didResolutionMetadata.error) {
-        return { 
-          error: `Failed to resolve DID: ${result.didResolutionMetadata.message || 'Unknown error'}` 
-        };
+      if (resolution.resolutionMetadata?.error) {
+        return { error: `Failed to resolve DID: ${resolution.resolutionMetadata.message || resolution.resolutionMetadata.error}` };
       }
       
-      const contentType = result.didResolutionMetadata.resolvedContentType;
+      // Helper to attempt extracting a Verifiable Credential from inscriptions
+      const tryExtractCredential = (): any | null => {
+        const inscriptions = resolution.inscriptions || [];
+        for (const ins of inscriptions) {
+          const text = ins.content;
+          if (!text) continue;
+          try {
+            const parsed = JSON.parse(text);
+            const hasVcContext = Array.isArray(parsed['@context'])
+              ? parsed['@context'].some((c: string) => typeof c === 'string' && c.includes('credentials'))
+              : typeof parsed['@context'] === 'string' && parsed['@context'].includes('credentials');
+            const isVcType = Array.isArray(parsed.type)
+              ? parsed.type.includes('VerifiableCredential')
+              : parsed.type === 'VerifiableCredential';
+            if (hasVcContext || isVcType) {
+              return parsed;
+            }
+          } catch (_) {
+            // not JSON or not a VC; continue
+          }
+        }
+        return null;
+      };
       
-      if (contentType === 'did-document' && result.didDocument) {
-        console.log(`[DIDService] Successfully resolved DID Document for: ${did}`);
-        return {
-          didDocument: result.didDocument,
-          content: result.content,
-          contentType: 'did-document'
-        };
-      } else if (result.content) {
-        console.log(`[DIDService] Successfully resolved ${contentType} content for: ${did}`);
-        return {
-          content: result.content,
-          contentType: contentType || 'unknown'
-        };
+      // 1) If DID Document is requested or available and acceptable
+      if (expectedContent === 'did-document') {
+        if (resolution.didDocument) {
+          return { didDocument: resolution.didDocument, contentType: 'did-document' };
+        }
+        // Report what else we found
+        const vc = tryExtractCredential();
+        if (vc) {
+          return { error: 'DID contains a verifiable credential, not a DID Document. Use expectedContent: \u2018credential\u2019 or \u2018any\u2019.' };
+        }
+        const first = (resolution.inscriptions || [])[0];
+        const foundType = first?.contentType || 'unknown';
+        return { error: `DID does not contain a DID Document. Found content type: ${foundType}` };
+      }
+      
+      // 2) If credential requested
+      if (expectedContent === 'credential') {
+        const vc = tryExtractCredential();
+        if (vc) {
+          return { content: vc, contentType: 'credential' };
+        }
+        if (resolution.didDocument) {
+          return { error: 'DID contains a DID Document, not a verifiable credential. Use expectedContent: \u2018did-document\u2019 or \u2018any\u2019.' };
+        }
+        const first = (resolution.inscriptions || [])[0];
+        const foundType = first?.contentType || 'unknown';
+        return { error: `No verifiable credential found. Found content type: ${foundType}` };
+      }
+      
+      // 3) Auto-detect: prefer DID Document, then Credential, else first inscription
+      if (resolution.didDocument) {
+        return { didDocument: resolution.didDocument, contentType: 'did-document' };
+      }
+      const vc = tryExtractCredential();
+      if (vc) {
+        return { content: vc, contentType: 'credential' };
+      }
+      const first = (resolution.inscriptions || [])[0];
+      if (first && first.content) {
+        return { content: first.content, contentType: first.contentType || 'unknown' };
       }
       
       return { error: 'No content found in DID' };
       
     } catch (error) {
       console.error(`[DIDService] Error resolving DID ${did}:`, error);
-      return { 
-        error: error instanceof Error ? error.message : 'Unknown error during DID resolution' 
-      };
-    }
-  }
-
-  /**
-   * Resolves a DID specifically as a DID Document (for verification purposes)
-   * 
-   * @param did - The DID to resolve
-   * @returns The resolved DID document or error
-   */
-  async resolveDidDocument(did: string): Promise<{ didDocument?: any; error?: string }> {
-    try {
-      console.log(`[DIDService] Resolving as DID Document: ${did}`);
-      
-      if (!isValidDid(did)) {
-        return { error: `Invalid DID format: ${did}` };
-      }
-      
-      // Try to resolve as a DID Document explicitly
-      const result = await this.resolver.resolve(did, {
-        contentType: 'did-document',
-        acceptUntrusted: true,
-        enableAudit: false
-      });
-      
-      if (result.resolutionMetadata.error || !result.didDocument) {
-        // If it doesn't contain a DID Document, try to auto-detect content type
-        console.log(`[DIDService] DID does not contain DID Document, trying auto-detection for: ${did}`);
-        
-        const anyContentResult = await this.resolver.resolveAnyContent(did, {
-          acceptUntrusted: true,
-          enableAudit: false
-        });
-        
-        if (anyContentResult.didResolutionMetadata.error) {
-          return { 
-            error: `Failed to resolve DID: ${anyContentResult.didResolutionMetadata.message || 'Unknown error'}` 
-          };
-        }
-        
-        // Inform caller about what type of content was found
-        const contentType = anyContentResult.didResolutionMetadata.resolvedContentType || 'unknown';
-        return { 
-          error: `DID contains ${contentType} content, not a DID Document. Use resolveDID() for auto-detection.` 
-        };
-      }
-      
-      console.log(`[DIDService] Successfully resolved DID Document for: ${did}`);
       return {
-        didDocument: result.didDocument
-      };
-      
-    } catch (error) {
-      console.error(`[DIDService] Error resolving DID Document ${did}:`, error);
-      return { 
-        error: error instanceof Error ? error.message : 'Unknown error during DID Document resolution' 
+        error: error instanceof Error ? error.message : 'Unknown error during DID resolution'
       };
     }
   }
 
-  /**
-   * Resolves a DID to any content type (auto-detection)
-   * 
-   * @param did - The DID to resolve
-   * @returns The resolved content and metadata
-   */
-  async resolveAnyContent(did: string): Promise<{ content?: any; contentType?: string; error?: string }> {
-    try {
-      console.log(`[DIDService] Resolving any content for DID: ${did}`);
-      
-      if (!isValidDid(did)) {
-        return { error: `Invalid DID format: ${did}` };
-      }
-      
-      const result = await this.resolver.resolveAnyContent(did, {
-        acceptUntrusted: true,
-        enableAudit: false
-      });
-      
-      if (result.didResolutionMetadata.error) {
-        return { 
-          error: `Failed to resolve DID: ${result.didResolutionMetadata.message || 'Unknown error'}` 
-        };
-      }
-      
-      const contentType = result.didResolutionMetadata.resolvedContentType;
-      
-      if (contentType === 'did-document' && result.didDocument) {
-        return {
-          content: result.didDocument,
-          contentType: 'did-document'
-        };
-      } else if (result.content) {
-        return {
-          content: result.content,
-          contentType: contentType || 'unknown'
-        };
-      }
-      
-      return { error: 'No content found in DID' };
-      
-    } catch (error) {
-      console.error(`[DIDService] Error resolving content for DID ${did}:`, error);
-      return { 
-        error: error instanceof Error ? error.message : 'Unknown error during content resolution' 
-      };
-    }
-  }
-
-  /**
-   * Resolves a DID to a Verifiable Credential
-   * 
-   * @param did - The DID to resolve
-   * @returns The resolved credential or error
-   */
-  async resolveCredential(did: string): Promise<{ credential?: any; error?: string }> {
-    try {
-      console.log(`[DIDService] Resolving credential for DID: ${did}`);
-      
-      if (!isValidDid(did)) {
-        return { error: `Invalid DID format: ${did}` };
-      }
-      
-      const result = await this.resolver.resolveCredential(did, {
-        acceptUntrusted: true,
-        enableAudit: false
-      });
-      
-      if (result.didResolutionMetadata.error || !result.content) {
-        return { 
-          error: `Failed to resolve credential: ${result.didResolutionMetadata.message || 'DID does not contain a verifiable credential'}` 
-        };
-      }
-      
-      console.log(`[DIDService] Successfully resolved credential for: ${did}`);
-      return {
-        credential: result.content
-      };
-      
-    } catch (error) {
-      console.error(`[DIDService] Error resolving credential for DID ${did}:`, error);
-      return { 
-        error: error instanceof Error ? error.message : 'Unknown error during credential resolution' 
-      };
-    }
-  }
 }
 
 /**

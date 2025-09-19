@@ -34,16 +34,7 @@ import type {
   CredentialMetadata
 } from '../repositories/credentialRepository';
 import { InMemoryCredentialRepository } from '../repositories/credentialRepository';
-import canonicalize from 'canonicalize';
-import * as jose from 'jose';
-import { verify as ed25519Verify } from '@noble/ed25519';
-import { base64 } from 'multiformats/bases/base64';
-import { base16 } from 'multiformats/bases/base16';
-import { base58btc } from 'multiformats/bases/base58'; // For base58btc ('z' prefix)
-import { sha256 } from '@noble/hashes/sha256';
-import { Signature as Secp256k1Signature, verify as secp256k1Verify } from '@noble/secp256k1';
-// import { multibase } from 'multiformats/bases/multibase'; // Temporarily removed
-// import { Codec, decode as multibaseDecode } from 'multiformats/bases/multibase'; // Temporarily removed
+// Verification cryptography is delegated to the ordinalsplus VCService
 
 // Interface for DID resolution result
 interface DIDResolutionResult {
@@ -86,6 +77,7 @@ export interface VCServiceConfig {
 
 // Import the VC API provider configuration
 import { getDefaultVCApiProvider, getVCApiProviderById } from '../config/vcApiConfig';
+import { VCService as OrdinalsPlusVCService } from 'ordinalsplus';
 
 /**
  * Default configuration values
@@ -144,7 +136,6 @@ function findVerificationMethod(didDocument: any, verificationMethodId: string):
 
   return null;
 }
-
 /**
  * Verify the signature of a credential using cryptographic methods
  * 
@@ -176,10 +167,10 @@ async function verifySignature(credential: VerifiableCredential, verificationMet
     // Handle different proof types
     switch (proof.type) {
       case ProofType.DATA_INTEGRITY: {
-        return verifyDataIntegrityProof(credential, proof.proofValue, verificationMethod);
+        return false; // delegated
       }
       case ProofType.JWT: {
-        return await verifyJwtProof(credential, proof.proofValue, verificationMethod);
+        return false; // delegated
       }
       case ProofType.BBS: {
         // BBS+ signatures are not implemented yet
@@ -195,252 +186,6 @@ async function verifySignature(credential: VerifiableCredential, verificationMet
     console.error('Error during signature verification:', error);
     return false;
   }
-}
-
-/**
- * Verify a DataIntegrityProof signature
- * 
- * @param credential - The credential to verify
- * @param proofValue - The base64-encoded signature
- * @param verificationMethod - The verification method from DID document
- * @returns Whether the signature is valid
- */
-function verifyDataIntegrityProof(
-  credential: VerifiableCredential,
-  proofValue: string,
-  verificationMethod: any
-): boolean {
-  // This is a simplified implementation - in a production environment,
-  // the verification would depend on the specific key type and signing algorithm
-  
-  try {
-    // Get the key type and format from verification method
-    const keyType = verificationMethod.type;
-    
-    // Create a canonical representation of the credential without the proof value
-    // This should match what was originally signed
-    const credentialCopy = JSON.parse(JSON.stringify(credential));
-    // Remove the proof value to get the same document that was signed
-    if (Array.isArray(credentialCopy.proof)) {
-      credentialCopy.proof.forEach((p: any) => delete p.proofValue);
-    } else if (credentialCopy.proof) {
-      delete credentialCopy.proof.proofValue;
-    }
-    
-    // Canonicalize the document for consistent verification
-    const canonicalDocument = canonicalizeCredential(credentialCopy);
-    
-    // Convert the canonical document to bytes
-    const messageBytes = Buffer.from(JSON.stringify(canonicalDocument));
-    
-    // Convert the proof value from base64 to binary
-    const signatureBytes = Buffer.from(proofValue, 'base64');
-    
-    // Verify based on key type
-    if (keyType.includes('Ed25519')) {
-      // Ed25519 verification
-      return verifyEd25519Signature(messageBytes, signatureBytes, verificationMethod);
-    } else if (keyType.includes('secp256k1') || keyType.includes('Secp256k1')) {
-      // secp256k1 verification
-      return verifySecp256k1Signature(messageBytes, signatureBytes, verificationMethod);
-    } else {
-      console.error(`Unsupported key type for verification: ${keyType}`);
-      return false;
-    }
-  } catch (error) {
-    console.error('Error verifying DataIntegrityProof:', error);
-    return false;
-  }
-}
-
-/**
- * Verify a JWT proof
- * 
- * @param credential - The credential to verify
- * @param proofValue - The JWT token
- * @param verificationMethod - The verification method from DID document
- * @returns Whether the JWT is valid
- */
-async function verifyJwtProof(
-  credential: VerifiableCredential,
-  proofValue: string,
-  verificationMethod: any
-): Promise<boolean> {
-  try {
-    if (!verificationMethod.publicKeyJwk) {
-      console.error('publicKeyJwk not found in verificationMethod for JWT proof');
-      return false;
-    }
-
-    // Import the public key
-    const publicKey = await jose.importJWK(verificationMethod.publicKeyJwk);
-
-    // Verify the JWT
-    // We need to know the expected issuer. Assuming it's the credential.issuer.id
-    // Algorithms should be restricted for security. For now, let jose infer from JWK or allow common ones.
-    // Consider making algorithms more specific based on verificationMethod.type or a predefined list.
-    const { payload } = await jose.jwtVerify(proofValue, publicKey, {
-      issuer: credential.issuer.id, // Validate that the JWT issuer matches the credential issuer
-      // audience: 'expectedAudience', // If applicable
-      // clockTolerance: '2 minutes', // If needed
-    });
-
-    // Additional payload validations can be done here if necessary,
-    // e.g., ensuring JWT specific claims match credential content if not covered by issuer/subject/etc.
-    // For example, if the JWT contains a nonce or specific subject claim related to the credential.
-    console.log('JWT verified successfully, payload:', payload);
-    return true;
-
-  } catch (error) {
-    console.error('Error verifying JWT proof:', error);
-    return false;
-  }
-}
-
-/**
- * Verify an Ed25519 signature
- * 
- * @param message - The message that was signed
- * @param signature - The signature bytes
- * @param verificationMethod - The verification method containing the public key
- * @returns Whether the signature is valid
- */
-function verifyEd25519Signature(
-  message: Buffer, 
-  signature: Buffer, 
-  verificationMethod: any
-): boolean {
-  try {
-    let publicKeyBytes: Uint8Array;
-
-    if (verificationMethod.publicKeyMultibase) {
-      const multibaseKey: string = verificationMethod.publicKeyMultibase;
-      const prefix = multibaseKey.charAt(0);
-      const encodedKey = multibaseKey.substring(1);
-
-      if (prefix === 'z') { // base58btc
-        publicKeyBytes = base58btc.decoder.decode(encodedKey);
-      } else if (prefix === 'm') { // base64 (standard, no padding)
-        // Ensure base64.decoder.decode returns Uint8Array
-        // The multiformats base decoders typically return Uint8Array.
-        publicKeyBytes = base64.decoder.decode(encodedKey);
-      } else {
-        console.error(`Unsupported multibase prefix '${prefix}' for Ed25519 public key`);
-        return false;
-      }
-    } else if (verificationMethod.publicKeyBase64) {
-      publicKeyBytes = Buffer.from(verificationMethod.publicKeyBase64, 'base64');
-    } else if (verificationMethod.publicKeyHex) {
-      publicKeyBytes = Buffer.from(verificationMethod.publicKeyHex, 'hex');
-    } else {
-      console.error('No supported public key format found in verificationMethod for Ed25519');
-      return false;
-    }
-
-    // This check is now after the multibase block, so it's fine.
-    if (!publicKeyBytes || publicKeyBytes.length === 0) {
-        console.error('Failed to derive public key bytes for Ed25519 verification');
-        return false;
-    }
-
-    return ed25519Verify(signature, message, publicKeyBytes);
-
-  } catch (error) {
-    console.error('Error verifying Ed25519 signature:', error);
-    return false;
-  }
-}
-
-/**
- * Verify a secp256k1 signature
- * 
- * @param message - The message that was signed
- * @param signature - The signature bytes
- * @param verificationMethod - The verification method containing the public key
- * @returns Whether the signature is valid
- */
-function verifySecp256k1Signature(
-  message: Buffer,       // This is the data that was signed (e.g., canonicalized credential)
-  signature: Buffer,     // The DER-encoded signature bytes, or potentially raw r,s
-  verificationMethod: any
-): boolean {
-  try {
-    let publicKeyBytes: Uint8Array;
-
-    // Public Key Extraction Priority: JWK, Multibase, Hex, Base64
-    if (verificationMethod.publicKeyJwk) {
-      const jwk = verificationMethod.publicKeyJwk;
-      if (jwk.kty === 'EC' && jwk.crv === 'P-256K' && jwk.x && jwk.y) {
-        // This is a common secp256k1 JWK format.
-        // We need the uncompressed public key: 0x04 + x + y
-        const x = Buffer.from(jwk.x, 'base64url'); // JWK uses base64url
-        const y = Buffer.from(jwk.y, 'base64url');
-        publicKeyBytes = Buffer.concat([Buffer.from([0x04]), x, y]);
-      } else {
-        console.error('Unsupported JWK format for secp256k1. Expected EC P-256K with x and y.');
-        return false;
-      }
-    } else if (verificationMethod.publicKeyMultibase) {
-      const multibaseKey: string = verificationMethod.publicKeyMultibase;
-      const prefix = multibaseKey.charAt(0);
-      const encodedKey = multibaseKey.substring(1);
-      if (prefix === 'z') { // base58btc is common for secp256k1 public keys too
-        publicKeyBytes = base58btc.decoder.decode(encodedKey);
-      } else {
-        console.error(`Unsupported multibase prefix '${prefix}' for secp256k1 public key.`);
-        return false;
-      }
-    } else if (verificationMethod.publicKeyHex) {
-      publicKeyBytes = Buffer.from(verificationMethod.publicKeyHex, 'hex');
-    } else if (verificationMethod.publicKeyBase64) {
-      publicKeyBytes = Buffer.from(verificationMethod.publicKeyBase64, 'base64');
-    } else {
-      console.error('No supported public key format found for secp256k1');
-      return false;
-    }
-
-    if (!publicKeyBytes || publicKeyBytes.length === 0) {
-      console.error('Failed to derive public key bytes for secp256k1 verification');
-      return false;
-    }
-
-    // Secp256k1 typically signs the hash of the message.
-    // The `message` param is the canonicalized document.
-    const messageHash = sha256(message);
-
-    // Attempt to parse signature as DER, then normalize S value.
-    // @noble/secp256k1's verify function can take a Signature instance or raw (r,s) bytes.
-    let sigToVerify: Secp256k1Signature | Uint8Array;
-    try {
-      sigToVerify = Secp256k1Signature.fromDER(signature).normalizeS();
-    } catch (derError) {
-      // If not DER, assume it might be 64-byte r+s format if applicable.
-      // For now, we strictly expect DER or rely on verify to handle raw if it can.
-      // If signature is 64 bytes, noble/secp256k1 verify might handle it directly.
-      if (signature.length === 64) {
-        sigToVerify = signature; 
-      } else {
-        console.error('Secp256k1 signature is not valid DER and not 64 bytes raw format:', derError);
-        return false;
-      }
-    }
-    
-    return secp256k1Verify(sigToVerify, messageHash, publicKeyBytes);
-
-  } catch (error) {
-    console.error('Error verifying secp256k1 signature:', error);
-    return false;
-  }
-}
-
-/**
- * Create a canonicalized version of a credential for consistent verification
- * 
- * @param credential - The credential to canonicalize
- * @returns A canonicalized representation for verification
- */
-function canonicalizeCredential(credential: any): any {
-  return canonicalize(credential);
 }
 
 /**
@@ -473,6 +218,7 @@ export class VCService {
   private circuitBreaker: CircuitBreaker;
   private credentialRepository: CredentialRepository;
   private resourceCache: Map<string, { data: any; timestamp: number }> = new Map();
+  private ordinalsPlusVc?: OrdinalsPlusVCService;
   
   /**
    * Fetches a JSON resource from a given URL with caching.
@@ -507,6 +253,25 @@ export class VCService {
     }
     
     return data;
+  }
+
+  /**
+   * Lazily create the ordinalsplus VCService to avoid duplicating verification logic here.
+   */
+  private getOrCreateOrdinalsPlusVc(): OrdinalsPlusVCService {
+    if (this.ordinalsPlusVc) return this.ordinalsPlusVc;
+    const provider = this.config.providerId
+      ? getVCApiProviderById(this.config.providerId)
+      : getDefaultVCApiProvider();
+    this.ordinalsPlusVc = new OrdinalsPlusVCService({
+      acesApiUrl: provider.url,
+      acesApiKey: provider.authToken,
+      timeout: this.config.timeout,
+      enableRetry: !!this.config.maxRetries,
+      maxRetries: this.config.maxRetries,
+      retryDelay: 0
+    });
+    return this.ordinalsPlusVc;
   }
   
   /**
@@ -742,12 +507,20 @@ export class VCService {
       return false;
     }
 
+    // Prefer shared ordinalsplus verification path to avoid duplicating logic here
+    try {
+      const sharedVc = this.getOrCreateOrdinalsPlusVc();
+      return await sharedVc.verifyCredential(credential as any);
+    } catch (e) {
+      console.warn('ordinalsplus VCService verification failed, falling back to local verification logic:', e);
+    }
+
     try {
       // Extract issuer DID
       const issuerDid = typeof credential.issuer === 'string' ? credential.issuer : credential.issuer.id;
       
       // First try auto-detection to see what the issuer DID contains
-      let didResolution = await this.didService.resolveDID(issuerDid);
+      let didResolution = await this.didService.resolve(issuerDid, { expectedContent: 'any' });
       
       if (didResolution.error) {
         console.error(`Failed to resolve issuer DID ${issuerDid}: ${didResolution.error}`);
@@ -761,7 +534,7 @@ export class VCService {
         console.log(`[VCService] Issuer DID contains ${didResolution.contentType} content, not a DID Document.`);
         
         // Try to resolve specifically as a DID Document
-        const didDocResult = await this.didService.resolveDidDocument(issuerDid);
+        const didDocResult = await this.didService.resolve(issuerDid, { expectedContent: 'did-document' });
         
         if (didDocResult.error || !didDocResult.didDocument) {
           console.error(`[VCService] Cannot verify credential: issuer DID does not contain a DID Document needed for verification. Contains: ${didResolution.contentType}`);

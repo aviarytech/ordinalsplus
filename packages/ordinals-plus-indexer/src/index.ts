@@ -459,8 +459,8 @@ class ResourceStorage {
     const resourceKey = `ordinals_plus:resource:${resource.inscriptionId}`;
     const network = this.extractNetworkFromResourceId(resource.resourceId);
     await this.client.multi()
-      // keep chronological list of resource IDs
-      .lPush('ordinals-plus-resources', resource.resourceId)
+      // use a set of resource IDs to avoid duplicates
+      .sAdd('ordinals-plus-resources', resource.resourceId)
       // detailed resource hash for API lookup
       .hSet(resourceKey, {
         inscriptionId: resource.inscriptionId,
@@ -519,8 +519,9 @@ class ResourceStorage {
   }
 
   async getOrdinalsResources(limit: number = 50, offset: number = 0): Promise<string[]> {
-    const resourceIds = await this.client.lRange('ordinals-plus-resources', offset, offset + limit - 1);
-    return resourceIds;
+    // Sets are unordered; fetch members and page in-memory
+    const all = await this.client.sMembers('ordinals-plus-resources');
+    return all.slice(offset, offset + limit);
   }
 
   async getNonOrdinalsResources(limit: number = 50, offset: number = 0): Promise<string[]> {
@@ -1047,7 +1048,24 @@ class ScalableIndexerWorker {
       if (this.debugBlock === height) {
         console.log(`[DEBUG] Raw block.inscriptions sample:`, Array.isArray(block.inscriptions) ? block.inscriptions.slice(0, 5) : block.inscriptions);
       }
-      inscriptionIds = block.inscriptions;
+      // Normalize possible shapes: [string] or [{ id, number }]
+      const first = block.inscriptions[0];
+      if (typeof first === 'string') {
+        inscriptionIds = block.inscriptions as string[];
+      } else if (first && typeof first === 'object' && typeof first.id === 'string') {
+        inscriptionIds = (block.inscriptions as any[])
+          .map((i: any) => i?.id)
+          .filter((id: any) => typeof id === 'string');
+      } else {
+        // Fallback to helper if unknown shape
+        inscriptionIds = await (this.provider as any).getBlockInscriptions?.(height) ?? [];
+      }
+      // Deduplicate just in case
+      const before = inscriptionIds.length;
+      inscriptionIds = Array.from(new Set(inscriptionIds));
+      if (this.debugBlock === height && before !== inscriptionIds.length) {
+        console.log(`[DEBUG] Deduped inscription IDs: ${before} -> ${inscriptionIds.length}`);
+      }
     } else if (block && typeof block.inscriptions === 'number') {
       inscriptionIds = await (this.provider as any).getBlockInscriptions?.(height) ?? [];
     } else {
@@ -1064,13 +1082,22 @@ class ScalableIndexerWorker {
     if (this.debugBlock === height) {
       console.log(`[DEBUG] Resolved inscription IDs (first 5): ${inscriptionIds.slice(0, 5).join(', ')}`);
     }
+    const seenInscriptionIds = new Set<string>();
     let ordinalsCount = 0;
     let nonOrdinalsCount = 0;
     let errorCount = 0;
+    let duplicateCount = 0;
     for (const insId of inscriptionIds) {
+      if (seenInscriptionIds.has(insId)) {
+        duplicateCount++;
+        if (this.debugBlock === height) {
+          console.log(`[DEBUG] Skipping duplicate inscription ID in block ${height}: ${insId}`);
+        }
+        continue;
+      }
+      seenInscriptionIds.add(insId);
       try {
         const inscription = await this.provider.getInscription(insId);
-        console.log(`[DEBUG] Inscription: ${insId}`, inscription);
         const metadata = await this.provider.getMetadata(insId);
         const { ordinalsResource, nonOrdinalsResource, error } = await this.analyzer.analyzeInscription(
           insId,
@@ -1108,7 +1135,7 @@ class ScalableIndexerWorker {
       }
     }
     if (this.debugBlock === height) {
-      console.log(`[DEBUG] Block ${height} summary: ordinals=${ordinalsCount}, nonOrdinals=${nonOrdinalsCount}, errors=${errorCount}`);
+      console.log(`[DEBUG] Block ${height} summary: ordinals=${ordinalsCount}, nonOrdinals=${nonOrdinalsCount}, errors=${errorCount}, duplicatesSkipped=${duplicateCount}`);
     }
   }
 

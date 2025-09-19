@@ -75,8 +75,8 @@ echo "   ❌ Processing errors: $ERROR_COUNT"
 echo ""
 
 # Show recent resources (first 5 from each list)
-echo "🔍 Recent Ordinals Plus resources:"
-redis-cli -h $REDIS_HOST -p $REDIS_PORT lrange "ordinals-plus-resources" 0 4 2>/dev/null | head -5 | sed 's/^/   ✅ /'
+echo "🔍 Recent Ordinals Plus resources (sample):"
+redis-cli -h $REDIS_HOST -p $REDIS_PORT smembers "ordinals-plus-resources" 2>/dev/null | head -5 | sed 's/^/   ✅ /'
 
 if [ "$ERROR_COUNT" -gt "0" ]; then
     echo ""

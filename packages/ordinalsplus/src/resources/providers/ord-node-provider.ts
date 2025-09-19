@@ -419,7 +419,9 @@ export class OrdNodeProvider implements ResourceProvider {
                     number: response.number,
                     sat,
                     content_type,
-                    content_url: `${this.nodeUrl}/content/${inscriptionId}`
+                    content_url: `${this.nodeUrl}/content/${inscriptionId}`,
+                    height: response.height,
+                    timestamp: response.timestamp,
                 };
             } catch (e) {
                 lastError = e;

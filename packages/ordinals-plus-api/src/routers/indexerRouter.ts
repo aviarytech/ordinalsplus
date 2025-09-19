@@ -31,33 +31,16 @@ export const indexerRouter = new Elysia({ prefix: '/api/indexer' })
         network: resource.network,
         indexedAt: resource.indexedAt,
         indexedBy: resource.indexedBy,
+        blockHeight: resource.blockHeight,
+        blockTimestamp: resource.blockTimestamp,
         contentUrl: `${ORD_SERVER_URL}/content/${resource.inscriptionId}`,
         inscriptionUrl: `${ORD_SERVER_URL}/inscription/${resource.inscriptionId}`,
         metadataUrl: `${ORD_SERVER_URL}/r/metadata/${resource.inscriptionId}`
       }));
 
-      // Enrich with block info (height/time) for mined data (use mined timestamp for ordering correctness)
-      let inscriptions = await Promise.all(
-        baseInscriptions.map(async (item) => {
-          try {
-            const resp = await fetch(`${ORD_SERVER_URL}/inscription/${item.inscriptionId}`, {
-              headers: { 'Accept': 'application/json' }
-            });
-            if (!resp.ok) throw new Error(`ord server returned ${resp.status}`);
-            const info: any = await resp.json();
-            // Prefer mined info
-            const height = (info && typeof info.height === 'number' ? info.height : (typeof info?.genesis_height === 'number' ? info.genesis_height : undefined)) as number | undefined;
-            const tsSec = (info && typeof info.timestamp === 'number' ? info.timestamp : (typeof info?.genesis_timestamp === 'number' ? info.genesis_timestamp : undefined)) as number | undefined;
-            const iso = typeof tsSec === 'number' ? new Date(tsSec * 1000).toISOString() : null;
-            return { ...item, blockHeight: typeof height === 'number' ? height : null, blockTime: iso, blockTimestampSec: tsSec } as any;
-          } catch {
-            return { ...item, blockHeight: null, blockTime: null, blockTimestampSec: undefined } as any;
-          }
-        })
-      );
-
       // Final ordering strictly by mined block height (global)
-      inscriptions = inscriptions.sort((a: any, b: any) => {
+      console.log(`baseInscriptions ${JSON.stringify(baseInscriptions)}`);
+      const inscriptions = baseInscriptions.sort((a: any, b: any) => {
         const ha = typeof a.blockHeight === 'number' ? a.blockHeight : null;
         const hb = typeof b.blockHeight === 'number' ? b.blockHeight : null;
         if (ha !== null && hb !== null) {
