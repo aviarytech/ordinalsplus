@@ -1095,6 +1095,20 @@ class ScalableIndexerWorker {
       }
     }
   }
+
+  // Public: index a specific block height once and exit
+  async indexBlock(height: number): Promise<void> {
+    // Connect storage for read/write
+    await this.storage.connect();
+    try {
+      const block = await (this.provider as any).getBlockByHeight?.(height);
+      await this.processBlock(block, height);
+    } finally {
+      // Cleanup resources
+      this.analyzer.destroy();
+      await this.storage.disconnect();
+    }
+  }
 }
 
 // Main execution

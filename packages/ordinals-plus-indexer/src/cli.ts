@@ -16,6 +16,20 @@ async function main() {
       await worker.start();
       break;
 
+    case 'index-block': {
+      const heightArg = args[1];
+      if (!heightArg || isNaN(parseInt(heightArg))) {
+        console.error('Usage: bun run cli index-block <height>');
+        process.exit(1);
+      }
+      const height = parseInt(heightArg);
+      console.log(`📦 Indexing block ${height}...`);
+      const workerOnce = new ScalableIndexerWorker();
+      await workerOnce.indexBlock(height);
+      console.log(`✅ Block ${height} processed.`);
+      break;
+    }
+
     case 'stats':
       console.log('📊 Getting indexer statistics...');
       const storage = new ResourceStorage(REDIS_URL);
@@ -78,6 +92,7 @@ Usage:
 
 Commands:
   start     Start an indexer worker (default)
+  index-block <height>  Index a specific block height once
   stats     Show indexer statistics
   errors    Show recent processing errors (optional: limit count)
   help      Show this help message
