@@ -1045,6 +1045,9 @@ class ScalableIndexerWorker {
   private async processBlock(block: any, height: number): Promise<void> {
     let inscriptionIds: string[] = [];
     if (block && Array.isArray(block.inscriptions)) {
+      if (this.debugBlock === height) {
+        console.log(`[DEBUG] Raw block.inscriptions sample:`, Array.isArray(block.inscriptions) ? block.inscriptions.slice(0, 5) : block.inscriptions);
+      }
       inscriptionIds = block.inscriptions;
     } else if (block && typeof block.inscriptions === 'number') {
       inscriptionIds = await (this.provider as any).getBlockInscriptions?.(height) ?? [];
@@ -1059,6 +1062,9 @@ class ScalableIndexerWorker {
       return;
     }
     console.log(`🔍 Processing block ${height} with ${inscriptionIds.length} inscriptions`);
+    if (this.debugBlock === height) {
+      console.log(`[DEBUG] Resolved inscription IDs (first 5): ${inscriptionIds.slice(0, 5).join(', ')}`);
+    }
     for (const insId of inscriptionIds) {
       try {
         const inscription = await this.provider.getInscription(insId);
@@ -1081,11 +1087,35 @@ class ScalableIndexerWorker {
           });
         }
         if (ordinalsResource) {
+          if (this.debugBlock === height) {
+            console.log(`📝 [DEBUG] Storing Ordinals Plus resource in Redis:`, {
+              resourceId: ordinalsResource.resourceId,
+              inscriptionId: ordinalsResource.inscriptionId,
+              ordinalsType: ordinalsResource.ordinalsType,
+              blockHeight: ordinalsResource.blockHeight,
+              blockTimestamp: ordinalsResource.blockTimestamp
+            });
+          }
           await this.storage.storeOrdinalsResource(ordinalsResource);
+          if (this.debugBlock === height) {
+            console.log(`✅ [DEBUG] Stored Ordinals Plus resource: ${ordinalsResource.resourceId}`);
+          }
         } else if (nonOrdinalsResource) {
+          if (this.debugBlock === height) {
+            console.log(`📝 [DEBUG] Storing Non-Ordinals resource in Redis:`, {
+              inscriptionId: nonOrdinalsResource.inscriptionId,
+              contentType: nonOrdinalsResource.contentType
+            });
+          }
           await this.storage.storeNonOrdinalsResource(nonOrdinalsResource);
+          if (this.debugBlock === height) {
+            console.log(`✅ [DEBUG] Stored Non-Ordinals resource: ${nonOrdinalsResource.inscriptionId}`);
+          }
         } else if (error) {
           await this.storage.storeInscriptionError(error);
+          if (this.debugBlock === height) {
+            console.log(`[DEBUG] Stored error for ${insId}: ${error.error}`);
+          }
         }
       } catch (e) {
         if (this.debugBlock === height) {
@@ -1101,8 +1131,18 @@ class ScalableIndexerWorker {
     // Connect storage for read/write
     await this.storage.connect();
     try {
+      console.log(`📦 [index-block] Fetching block ${height} from provider...`);
       const block = await (this.provider as any).getBlockByHeight?.(height);
+      if (!block) {
+        console.warn(`⚠️ [index-block] No block returned for height ${height}`);
+        return;
+      }
+      const hasInscriptions = Array.isArray((block as any).inscriptions);
+      console.log(`📦 [index-block] Block ${height} fetched. hasInscriptions=${hasInscriptions}${hasInscriptions ? ` count=${(block as any).inscriptions.length}` : ''}`);
+      // Enable detailed debug for this block
+      this.debugBlock = height;
       await this.processBlock(block, height);
+      console.log(`✅ [index-block] Finished processing block ${height}`);
     } finally {
       // Cleanup resources
       this.analyzer.destroy();
