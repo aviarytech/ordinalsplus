@@ -12,8 +12,7 @@ import {
   IVerificationService,
   VerifiableCredential 
 } from '../types/verification';
-import { VCService } from 'ordinalsplus'
-import { StaticDataProvider } from 'ordinalsplus'
+// Removed direct VCService/StaticDataProvider usage to avoid frontend CORS when resolving ord content
 
 /**
  * Cache entry for verification results
@@ -244,67 +243,33 @@ export class VerificationService implements IVerificationService {
           credential
         };
       }
-      
-      // Extract the sat number from the credential subject to validate against
-      let satNumber: string | undefined;
-      const subjectId = Array.isArray(credential.credentialSubject) 
-        ? credential.credentialSubject[0]?.id 
-        : credential.credentialSubject.id;
-      
-      if (subjectId && subjectId.startsWith('did:btco')) {
-        const extractedSatNumber = this.extractSatNumberFromDid(subjectId);
-        if (!extractedSatNumber) {
-          return {
-            status: VerificationStatus.ERROR,
-            message: 'Failed to extract sat number from credential subject DID',
-            credential
-          };
-        }
-        satNumber = extractedSatNumber;
-        this.logDebug(`Extracted sat number ${satNumber} from credential subject: ${subjectId}`);
-      }
-      
-      // Create a static data provider with known DIDs that need to be resolved
-      const staticDataProvider = await this.createStaticDataProvider([typeof credential.issuer === 'string' ? credential.issuer : credential.issuer.id]);
-      const service = new VCService({ resourceProvider: staticDataProvider });
 
-      const result = await service.verifyCredential(credential as any, satNumber) ? {
-        status: VerificationStatus.VALID,
-        message: 'Credential structure valid and issuer DID resolved successfully',
-        credential,
-        issuer: typeof credential.issuer === 'string' 
-          ? { did: credential.issuer } as IssuerInfo
-          : { did: credential.issuer.id, ...credential.issuer } as IssuerInfo,
-        verifiedAt: new Date()
-      } : {
-        status: VerificationStatus.ERROR,
-        message: 'Credential verification failed',
-        credential
-      };
-      
-      if (result.status === 'error') {
-        return {
-          status: VerificationStatus.ERROR,
-          message: result.message || 'Backend verification failed',
-          credential
-        };
-      }
-      
-      if (result.status === 'valid') {
+      // Delegate verification to backend to avoid any frontend CORS to ord node
+      const apiResult = await this.apiService.verifyCredential(credential as any);
+
+      if (apiResult.status === 'valid') {
         return {
           status: VerificationStatus.VALID,
-          message: 'Credential structure valid and issuer DID resolved successfully',
+          message: apiResult.message || 'Credential verified',
           credential,
-          issuer: result.issuer,
-          verifiedAt: result.verifiedAt ? new Date(result.verifiedAt) : new Date()
+          issuer: apiResult.issuer as IssuerInfo,
+          verifiedAt: apiResult.verifiedAt ? new Date(apiResult.verifiedAt) : new Date()
         };
-      } else {
+      }
+
+      if (apiResult.status === 'invalid') {
         return {
           status: VerificationStatus.INVALID,
-          message: result.message || 'Credential verification failed',
+          message: apiResult.message || 'Credential invalid',
           credential
         };
       }
+
+      return {
+        status: VerificationStatus.ERROR,
+        message: apiResult.message || 'Backend verification failed',
+        credential
+      };
     } catch (error) {
       return {
         status: VerificationStatus.ERROR,
@@ -522,71 +487,5 @@ export class VerificationService implements IVerificationService {
     return this.verifyCredential(metadata);
   }
 
-  /**
-   * Create a static data provider with known DIDs that need to be resolved
-   * This pre-loads DID data for common DIDs to avoid API calls during verification
-   */
-  private async createStaticDataProvider(dids: string[]): Promise<StaticDataProvider> {
-    // Start with an empty provider
-    const provider = new StaticDataProvider([]);
-    
-    // Loop through each DID and resolve it
-    for (const did of dids) {
-      try {
-        this.logDebug(`Resolving DID: ${did}`);
-        
-        // Parse the DID to extract sat number (e.g., "did:btco:123456789" -> "123456789")
-        const satNumber = this.extractSatNumberFromDid(did);
-        if (!satNumber) {
-          this.logDebug(`Invalid DID format: ${did}`);
-          continue;
-        }
-        
-        // Use the proper DID resolution API that actually resolves the DID
-        const result = await this.apiService.resolveDid(did);
-        
-        if (result.didDocument && result.inscriptions && result.inscriptions.length > 0) {
-          // Convert the API response inscriptions to StaticSatData format
-          const staticSat = {
-            satNumber,
-            inscriptions: result.inscriptions.map(inscription => ({
-              inscriptionId: inscription.inscriptionId,
-              content: inscription.content,
-              metadata: inscription.metadata,
-              contentUrl: inscription.contentUrl
-            }))
-          };
-          
-          provider.addSatData(staticSat);
-          this.logDebug(`Successfully loaded DID data for ${did} with ${result.inscriptions.length} inscriptions`);
-        } else {
-          this.logDebug(`No DID document or inscriptions found for ${did}`);
-        }
-        
-      } catch (error) {
-        this.logDebug(`Failed to resolve DID ${did}: ${error}`);
-        // Continue with other DIDs even if one fails
-        continue;
-      }
-    }
-    
-    return provider;
-  }
-
-  /**
-   * Extract sat number from a BTCO DID
-   * @param did - The DID (e.g., "did:btco:123456789")
-   * @returns The sat number as string or null if invalid
-   */
-  private extractSatNumberFromDid(did: string): string | null {
-    // BTCO DID format: did:btco[:[network]]:<sat-number>[/<path>]
-    const regex = /^did:btco(?::(test|sig))?:([0-9]+)(?:\/(.+))?$/;
-    const match = did.match(regex);
-    
-    if (!match) {
-      return null;
-    }
-    
-    return match[2]; // The sat number
-  }
+  // Removed StaticDataProvider creation and DID sat-number extraction; backend handles resolution
 }
