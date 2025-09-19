@@ -252,18 +252,29 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async resolveInscription(inscriptionId: string): Promise<Inscription> {
-        const response = await this.fetchApi<any>(`/r/inscription/${inscriptionId}`);
-        
-        let id = response.id || inscriptionId;
-        let sat = response.sat || 0;
-        let content_type = response.content_type || 'application/octet-stream';
-        
-        return {
-            id: id,
-            sat: sat,
-            content_type: content_type,
-            content_url: `${this.nodeUrl}/content/${inscriptionId}`
-        };
+        const candidatePaths = [
+            `/r/inscription/${inscriptionId}`,
+            `/inscription/${inscriptionId}`
+        ];
+        let lastError: unknown = null;
+        for (const path of candidatePaths) {
+            try {
+                const response = await this.fetchApi<any>(path);
+                const id = response.id || response.inscription_id || inscriptionId;
+                const sat = typeof response.sat === 'number' ? response.sat : 0;
+                const content_type = response.content_type || response.contentType || 'application/octet-stream';
+                return {
+                    id,
+                    sat,
+                    content_type,
+                    content_url: `${this.nodeUrl}/content/${inscriptionId}`
+                };
+            } catch (e) {
+                lastError = e;
+                continue;
+            }
+        }
+        throw (lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown error resolving inscription')));
     }
 
     async resolveInfo(inscriptionId: string): Promise<ResourceInfo> {
@@ -392,13 +403,29 @@ export class OrdNodeProvider implements ResourceProvider {
     }
 
     async getInscription(inscriptionId: string): Promise<Inscription> {
-        const response = await this.fetchApi<any>(`/r/inscription/${inscriptionId}`);
-        return {
-            id: response.id,
-            sat: response.sat,
-            content_type: response.content_type,
-            content_url: `${this.nodeUrl}/content/${inscriptionId}`
-        };
+        const candidatePaths = [
+            `/r/inscription/${inscriptionId}`,
+            `/inscription/${inscriptionId}`
+        ];
+        let lastError: unknown = null;
+        for (const path of candidatePaths) {
+            try {
+                const response = await this.fetchApi<any>(path);
+                const id = response.id || response.inscription_id || inscriptionId;
+                const sat = typeof response.sat === 'number' ? response.sat : 0;
+                const content_type = response.content_type || response.contentType || 'application/octet-stream';
+                return {
+                    id,
+                    sat,
+                    content_type,
+                    content_url: `${this.nodeUrl}/content/${inscriptionId}`
+                };
+            } catch (e) {
+                lastError = e;
+                continue;
+            }
+        }
+        throw (lastError instanceof Error ? lastError : new Error(String(lastError || 'Unknown error fetching inscription')));
     }
 
     async getInscriptionsByAddress(address: string): Promise<Inscription[]> {
